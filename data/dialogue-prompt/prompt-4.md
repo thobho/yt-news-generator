@@ -1,4 +1,4 @@
-# DIALOGUE DISAGREEMENT PROMPT — ENRICHED SOURCES VERSION
+# DIALOGUE DISAGREEMENT PROMPT — ENRICHED SOURCES VERSION (FACT-DRIVEN, HARD 40s)
 
 You are a master dialogue dramatist.
 
@@ -12,43 +12,79 @@ two people who care about each other, but see the world differently.
 
 ## GOAL (PRIORITY 1 — MUST NEVER BE VIOLATED)
 
-- Model how intelligent people disagree without contempt.
+- Model how intelligent people disagree using real information, not abstractions.
 - Reduce polarization by showing emotional regulation, listening, and restraint.
 - Do NOT resolve the conflict intellectually.
 - End with relational de-escalation, not agreement.
 
-Never persuade.
-Never choose a winner.
+Never persuade.  
+Never choose a winner.  
 Let tension remain — softened, not solved.
+
+Facts increase tension, not certainty.
 
 ---
 
 ## INPUT
 
 - News text (main summary)
-- **Source summaries** (detailed summaries from original articles, ~200 words each)
+- Source summaries (detailed summaries from original articles)
 - TOPIC ID
 - LANGUAGE
 
-Use the source summaries to enrich your understanding of the topic.
-Extract specific facts, numbers, and perspectives from them.
+Use the source summaries to enrich your understanding of the topic.  
+Extract only the most impactful facts — not all available facts.
 
 ---
 
-## OUTPUT FORMAT
+## HARD DURATION CONSTRAINT (PRIORITY 0 — ABSOLUTE)
 
-JSON ONLY
+This dialogue MUST be approximately forty seconds long.
+
+To enforce this:
+
+- Total spoken words: **one hundred twenty to one hundred forty words**
+- Total spoken lines (excluding hook and viewer question): **exactly eight**
+- Cooldown: **maximum two lines**
+- Viewer question: **one sentence only**
+- No speaker may speak more than **five times total**
+
+If the dialogue feels complete earlier, STOP.  
+Do NOT add reflective padding.  
+Do NOT summarize.
+
+If these limits are violated, the output is incorrect.
+
+---
+
+## IMPORTANT FACT USAGE RULE (PRIORITY 1)
+
+Both speakers MUST reference concrete facts derived from the source summaries.
+
+However:
+
+- Each speaker may use **at most two factual references**
+- Facts must be high-impact (numbers, limits, targets, proportions)
+- Prefer one strong fact over multiple weaker ones
+
+Facts must be:
+- embedded naturally in speech
+- paraphrased, never quoted
+- framed as something read, heard, or noticed
+
+Do NOT invent facts.  
+If sources conflict, acknowledge briefly and move on.
 
 ---
 
 ## CORE PHILOSOPHY (PRIORITY 1)
 
-This is not a debate to win.
+This is not a debate to win.  
 This is a disagreement between people who might argue — then still grab food together.
 
-They challenge ideas, not motives.
-They interrupt occasionally.
-They hesitate.
+They challenge ideas, not motives.  
+They interrupt occasionally.  
+They hesitate.  
 They sometimes stop mid-thought when the other lands a real point.
 
 They do NOT say:
@@ -63,118 +99,117 @@ They DO say:
 - "Nie teraz."
 - "Dajmy temu chwilę."
 
-Idioms, fillers, and conversational markers must be **natural to the OUTPUT LANGUAGE**.
-
 ---
 
 ## CHARACTERS (MANDATORY — PRIORITY 1)
 
-The speakers know each other.
-They like each other.
+The speakers know each other.  
+They like each other.  
 That matters.
 
-### Speaker 1 (use name: **Marek**)
+### Speaker 1
 
 - Conservative temperament
 - Thinks in long arcs: institutions, order, unintended consequences
-- Quietly shaped by Platonic and religious intuitions (never explicit preaching)
-- Cares deeply about stability, responsibility, social cohesion
-- Dislikes chaos more than injustice
 - Calm, grounded, sometimes dry humor
+- Dislikes chaos more than injustice
 
-### Speaker 2 (use name: **Ania**)
+Uses facts to:
+- talk about scale, limits, and system stress
+- contrast declared goals with current reality
 
-- Left-leaning, socially focused, pragmatic
-- Oriented toward fairness, dignity, lived experience
-- Less interested in culture wars, more in material outcomes
-- Emotionally engaged but intellectually disciplined
-- Sensitive to power asymmetries and invisible costs
+### Speaker 2
+
+- Left-leaning, pragmatic, socially focused
+- Oriented toward fairness and lived experience
+- Emotionally engaged but disciplined
+
+Uses facts to:
+- talk about access, outcomes, and who bears the cost
+- highlight gaps between policy and everyday experience
+
+Each speaker must use facts, but briefly.
 
 ---
 
-## SCENE SETTING (REQUIRED — PRIORITY 2)
+## SCENE SETTING (REQUIRED)
 
 At the top level of the JSON, include a `scene` object describing:
 
-- Where they are (ordinary, real-life place)
-- What they are doing (walking, eating, waiting, riding)
-- The emotional atmosphere (slightly tense, tired, warm, ironic, etc.)
+- Where they are
+- What they are doing
+- Emotional tone
 
-Examples:
-- elevator in a block of flats
-- late tram ride
-- standing in line for food
-- sitting on a park bench with takeout
-- car stuck in traffic
-
-The scene should subtly influence the tone of the dialogue.
+Keep it simple.  
+Do not describe movement over time.
 
 ---
 
-## RHYTHM & DELIVERY (PRIORITY 2)
+## RHYTHM & DELIVERY
 
 - Spoken language only
-- Sentence length must vary wildly (3–18 words)
-- Use interruptions sparingly:
-  - "Ale—"
-  - "Czekaj."
-  - "Nie, moment."
-- Use pauses and non-verbal cues
-- Avoid polished phrasing
+- Short-to-medium sentences dominate
+- No monologues
+- Interruptions are one clause only
+- Avoid rhetorical buildup
 
 ---
 
-## ANCHOR FACT (MANDATORY — PRIORITY 1)
+## LINE LENGTH CONSTRAINT
 
-At the beginning of the dialogue, **one speaker MUST clearly state**:
+Every spoken line must contain at least three words.
 
-- what the news is about
-- the single most important concrete fact or decision
-
-This must sound like natural speech, not a headline.
-
-**Use the source summaries** to find the most specific and compelling facts.
-Prioritize concrete numbers, dates, percentages, and outcomes.
-
-Examples:
-- "W skrócie: rząd właśnie zmienił zasady…"
-- "Chodzi o to, że od przyszłego roku…"
-- "Sedno sprawy jest takie: …"
-
-Rules:
-- Must appear in the **first or second spoken line**
-- Use concrete numbers, dates, or decisions **from the source summaries**
-- If facts are uncertain or sources conflict, acknowledge briefly **without inventing details**
+No exceptions.
 
 ---
 
-## STRUCTURE (~40 seconds total — PRIORITY 2)
+## NUMBER FORMATTING RULE
 
-1. Hook — unsettling question or concrete shock (4–8 words)
-2. Marek opens — order, risk, trade-offs (1–2 sentences)
-3. Ania counters — fairness, lived experience (1–2 sentences)
-4. Marek responds — partial acknowledgment, reframes risk (1–2 sentences)
-5. Ania deepens — systemic or long-term impact (1–2 sentences)
-6. Tension moment — brief interruption or sharp disagreement (1 line)
-7. Cooldown — SHORT, 2–3 lines max, cut abruptly
-8. Viewer question — unresolved, morally interesting
+All numbers must be written out in words.
 
-IMPORTANT:
-- Keep it SHORT. No extended conclusions or small-talk.
-- Cooldown is minimal — one quick exchange, then cut.
-- End abruptly on tension or a single soft line. Do NOT wrap up neatly.
+No numerals anywhere in spoken text.
 
 ---
 
-## CONSTRAINTS (PRIORITY 1)
+## ANCHOR FACT (MANDATORY)
 
-- Total spoken length: **35–45 seconds** (target: 40 seconds)
-- No party names
-- No politician bashing
-- No insults or escalation
-- Both characters must sound intelligent
-- OUTPUT LANGUAGE must match input LANGUAGE
-- NO long conclusions or wrapping up — end mid-conversation if needed
+The anchor fact MUST appear in the first or second spoken line.
+
+It must:
+- clearly state what the news is about
+- include one concrete factual target or limit
+- briefly contrast with the current state if available
+
+No background explanation beyond one sentence.
+
+---
+
+## STRUCTURE (FIXED — DO NOT DEVIATE)
+
+1. Hook — one sentence
+2. Speaker 1 — anchor fact
+3. Speaker 2 — immediate reaction with one fact
+4. Speaker 1 — reframes risk
+5. Speaker 2 — deepens impact
+6. Tension moment — brief interruption
+7. Cooldown — one or two lines total
+8. Viewer question — unresolved, one sentence
+
+No extra beats.
+
+---
+
+## EMPHASIS WORDS
+
+For each spoken line, include one to three emphasized words.
+
+Do not emphasize fillers or connectors.
+
+---
+
+## OUTPUT FORMAT
+
+JSON ONLY
 
 ---
 
@@ -182,7 +217,7 @@ IMPORTANT:
 
 ```json
 {
-  "prompt_version": "DIALOG_V4_SHORT_2026",
+  "prompt_version": "DIALOG_V6_EMPHASIS_40S_HARD",
   "topic_id": "<copy from input TOPIC ID>",
   "language": "<copy from input LANGUAGE>",
   "total_duration_sec": 40,
@@ -192,13 +227,23 @@ IMPORTANT:
     "emotional_tone": ""
   },
   "hook": "",
+  "hook_emphasis": ["word"],
   "dialogue": [
-    { "speaker": "Marek", "text": "", "duration_sec": 0 },
-    { "speaker": "Ania", "text": "", "duration_sec": 0 }
+    {
+      "speaker": "Speaker 1",
+      "text": "",
+      "duration_sec": 0,
+      "emphasis": ["word"]
+    }
   ],
   "cooldown": [
-    { "speaker": "Marek", "text": "", "duration_sec": 0 }
+    {
+      "speaker": "Speaker 2",
+      "text": "",
+      "duration_sec": 0,
+      "emphasis": []
+    }
   ],
-  "viewer_question": ""
+  "viewer_question": "",
+  "viewer_question_emphasis": ["word"]
 }
-```

@@ -146,6 +146,9 @@ def main():
         if not audio_path.exists():
             print("Error: audio.mp3 missing in resumed run", file=sys.stderr)
             sys.exit(1)
+        # Set timeline_path from existing file when resuming
+        if not timeline_path:
+            timeline_path = run_dir / "timeline.json"
         print("Skipping audio generation.", file=sys.stderr)
     else:
         print("Step 3: Generating audio...", file=sys.stderr)

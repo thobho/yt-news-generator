@@ -19,6 +19,7 @@ interface Segment {
   end_ms: number;
   chunk?: boolean;
   type?: "pause";
+  emphasis?: string[];
 }
 
 interface ImageInfo {
@@ -35,6 +36,58 @@ export interface SubtitleVideoProps {
   segments: Segment[];
   images: ImageInfo[];
 }
+
+/* =========================
+   EMPHASIZED TEXT RENDERER
+========================= */
+
+interface EmphasisTextProps {
+  text: string;
+  emphasis?: string[];
+  isCurrentChunk?: boolean;
+}
+
+const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis, isCurrentChunk }) => {
+  if (!emphasis || emphasis.length === 0) {
+    return <>{text}</>;
+  }
+
+  // Create regex to match emphasis words (case insensitive, word boundaries)
+  const emphasisLower = emphasis.map(w => w.toLowerCase());
+
+  // Split text into words while preserving spaces and punctuation
+  const parts = text.split(/(\s+)/);
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        // Check if this word (without punctuation) should be emphasized
+        const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
+        const isEmphasized = emphasisLower.some(e =>
+          cleanWord === e.toLowerCase() ||
+          cleanWord.includes(e.toLowerCase())
+        );
+
+        if (isEmphasized && part.trim()) {
+          return (
+            <span
+              key={i}
+              style={{
+                color: "#FFD700",
+                fontWeight: 900,
+                fontSize: isCurrentChunk ? "1.1em" : "1em",
+                textShadow: "0 0 20px rgba(255, 215, 0, 0.5)",
+              }}
+            >
+              {part}
+            </span>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+};
 
 /* =========================
    EQUALIZER (SUBTLE)
@@ -81,6 +134,10 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   const { fps } = useVideoConfig();
   const currentTimeMs = (frame / fps) * 1000;
 
+  // Text appears 500ms earlier than audio
+  const TEXT_OFFSET_MS = 500;
+  const textTimeMs = currentTimeMs + TEXT_OFFSET_MS;
+
   /* =========================
      CHUNK LOGIC
   ========================= */
@@ -91,8 +148,8 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 
   const currentChunkIndex = chunkSegments.findIndex(
     (s) =>
-      currentTimeMs >= s.start_ms &&
-      currentTimeMs <= s.end_ms
+      textTimeMs >= s.start_ms &&
+      textTimeMs <= s.end_ms
   );
 
   const currentChunk =
@@ -107,7 +164,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 
   const fadeIn = (startMs: number) =>
     interpolate(
-      currentTimeMs,
+      textTimeMs,
       [startMs, startMs + 200],
       [0, 1],
       { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
@@ -246,7 +303,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
             textAlign: "center",
           }}
         >
-          {/* Previous chunk */}
+          {/* Previous chunk - no emphasis, plain text */}
           {previousChunk && (
             <div
               style={{
@@ -273,7 +330,11 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
                   "0 10px 40px rgba(0,0,0,0.9)",
               }}
             >
-              {currentChunk.text}
+              <EmphasisText
+                text={currentChunk.text}
+                emphasis={currentChunk.emphasis}
+                isCurrentChunk={true}
+              />
             </div>
           )}
         </div>

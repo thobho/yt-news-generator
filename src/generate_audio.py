@@ -80,6 +80,7 @@ def chunk_segment(segment: dict) -> list[dict]:
     start = segment["start_ms"]
     end = segment["end_ms"]
     duration = end - start
+    emphasis = segment.get("emphasis", [])
 
     lengths = [len(c.split()) for c in chunks]
     total_words = sum(lengths)
@@ -89,13 +90,19 @@ def chunk_segment(segment: dict) -> list[dict]:
 
     for chunk, words in zip(chunks, lengths):
         part = int(duration * (words / total_words))
-        result.append({
+        chunk_data = {
             "speaker": segment["speaker"],
             "text": chunk,
             "start_ms": current_time,
             "end_ms": current_time + part,
             "chunk": True
-        })
+        }
+        # Add emphasis words that appear in this chunk
+        if emphasis:
+            chunk_emphasis = [w for w in emphasis if w.lower() in chunk.lower()]
+            if chunk_emphasis:
+                chunk_data["emphasis"] = chunk_emphasis
+        result.append(chunk_data)
         current_time += part
 
     if result:
@@ -180,6 +187,10 @@ def load_dialogue(path: Path) -> dict:
 
 
 def extract_segments(data: dict):
+    """Extract segments with emphasis data.
+
+    Returns list of (speaker, text, emphasis) tuples and list of speakers.
+    """
     segments = []
     speakers = []
 
@@ -189,16 +200,23 @@ def extract_segments(data: dict):
         return s
 
     if hook := data.get("hook"):
-        segments.append(("__NARRATOR__", hook))
+        hook_emphasis = data.get("hook_emphasis", [])
+        segments.append(("__NARRATOR__", hook, hook_emphasis))
 
     for d in data.get("dialogue", []):
-        segments.append((track(d["speaker"]), d["text"]))
+        emphasis = d.get("emphasis", [])
+        segments.append((track(d["speaker"]), d["text"], emphasis))
+
+    for d in data.get("cooldown", []):
+        emphasis = d.get("emphasis", [])
+        segments.append((track(d["speaker"]), d["text"], emphasis))
 
     if q := data.get("viewer_question"):
-        segments.append(("__NARRATOR__", q))
+        q_emphasis = data.get("viewer_question_emphasis", [])
+        segments.append(("__NARRATOR__", q, q_emphasis))
 
     first = speakers[0] if speakers else "A"
-    return [(first if s == "__NARRATOR__" else s, t) for s, t in segments], speakers
+    return [(first if s == "__NARRATOR__" else s, t, e) for s, t, e in segments], speakers
 
 
 def voice_id(name: str) -> str:
@@ -225,7 +243,7 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
         audio_files = []
         durations = []
 
-        for i, (speaker, text) in enumerate(segments):
+        for i, (speaker, text, _emphasis) in enumerate(segments):
             out = tmp / f"seg_{i:03}.mp3"
             dur = generate_audio_segment(client, text, voice_map[speaker], out)
             audio_files.append(out)
@@ -236,12 +254,13 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
     timeline_segments = []
     t = 0
 
-    for i, ((speaker, text), dur) in enumerate(zip(segments, durations)):
+    for i, ((speaker, text, emphasis), dur) in enumerate(zip(segments, durations)):
         base = {
             "speaker": speaker,
             "text": text,
             "start_ms": t,
-            "end_ms": t + dur
+            "end_ms": t + dur,
+            "emphasis": emphasis
         }
 
         timeline_segments.extend(chunk_segment(base))
