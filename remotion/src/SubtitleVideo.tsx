@@ -114,35 +114,66 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     );
 
   /* =========================
-     IMAGE LOGIC
+     IMAGE LOGIC (always show an image, never black screen)
   ========================= */
 
   const effectiveSegmentIndex = segments.findIndex(
     (s) => currentTimeMs < s.end_ms
   );
 
-  const getCurrentImage = (): ImageInfo | null => {
+  // Clamp to valid range
+  const safeSegmentIndex = effectiveSegmentIndex >= 0
+    ? effectiveSegmentIndex
+    : segments.length - 1;
+
+  const getCurrentImage = (): ImageInfo => {
+    // First try exact match
     for (const img of images) {
-      if (img.segment_index === effectiveSegmentIndex) {
+      if (img.segment_index === safeSegmentIndex) {
         return img;
       }
-      if (img.segment_indices?.includes(effectiveSegmentIndex)) {
+      if (img.segment_indices?.includes(safeSegmentIndex)) {
         return img;
       }
     }
-    return images[0] ?? null;
+
+    // Find closest previous image
+    let bestImage = images[0];
+    for (const img of images) {
+      const imgSegIdx = img.segment_index ?? img.segment_indices?.[0] ?? 0;
+      const bestSegIdx = bestImage.segment_index ?? bestImage.segment_indices?.[0] ?? 0;
+      if (imgSegIdx <= safeSegmentIndex && imgSegIdx > bestSegIdx) {
+        bestImage = img;
+      }
+    }
+
+    // Always return something - never null
+    return bestImage ?? images[0];
   };
 
-  const currentImage = getCurrentImage();
+  const currentImage = images.length > 0 ? getCurrentImage() : null;
 
   /* =========================
-     BACKGROUND MOTION
+     BACKGROUND MOTION (subtle per-image zoom)
   ========================= */
 
+  // Find when current image started
+  const imageStartFrame = (() => {
+    if (!currentImage) return 0;
+    const segIdx = currentImage.segment_index ?? currentImage.segment_indices?.[0] ?? 0;
+    const clampedIdx = Math.max(0, Math.min(segIdx, segments.length - 1));
+    const seg = segments[clampedIdx];
+    if (!seg) return 0;
+    return Math.floor((seg.start_ms / 1000) * fps);
+  })();
+
+  const framesIntoImage = frame - imageStartFrame;
+  const zoomDuration = fps * 4; // 4 seconds for full zoom cycle
+
   const scale = interpolate(
-    frame,
-    [0, fps * 60],
-    [1, 1.06],
+    framesIntoImage,
+    [0, zoomDuration],
+    [1.0, 1.06], // Subtle but noticeable: 6% zoom over 4 seconds
     { extrapolateRight: "clamp" }
   );
 
@@ -184,30 +215,28 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
       {/* Audio */}
       <Audio src={staticFile(audioFile)} />
 
-      {/* Equalizer */}
+      {/* Subtitles + Equalizer (centered layout) */}
       <AbsoluteFill
         style={{
           display: "flex",
+          flexDirection: "column",
           justifyContent: "center",
-          alignItems: "flex-end",
-          paddingBottom: 140,
-          pointerEvents: "none",
-        }}
-      >
-        <Equalizer />
-      </AbsoluteFill>
-
-      {/* Subtitles */}
-      <AbsoluteFill
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
           alignItems: "center",
-          paddingBottom: 260,
           paddingLeft: 48,
           paddingRight: 48,
         }}
       >
+        {/* Equalizer above text */}
+        <div
+          style={{
+            marginBottom: 32,
+            pointerEvents: "none",
+          }}
+        >
+          <Equalizer />
+        </div>
+
+        {/* Subtitles container */}
         <div
           style={{
             maxWidth: "90%",

@@ -27,12 +27,40 @@ def load_prompt(prompt_path: Path) -> str:
 
 
 def build_user_message(news: dict) -> str:
-    """Build the user message with news data."""
-    sources_text = "\n".join(
-        f"- {s['name']}: {s['url']}" for s in news.get("sources", [])
-    )
+    """Build the user message with news data.
 
-    return f"""NEWS TEXT:
+    Supports both formats:
+    - Original: sources with name/url
+    - Enriched: source_summaries with name/url/summary
+    """
+    # Check if this is enriched format (from fetch_sources.py)
+    if "source_summaries" in news:
+        summaries_text = ""
+        for i, s in enumerate(news.get("source_summaries", []), 1):
+            summaries_text += f"\n### Source {i}: {s['name']}\n{s['summary']}\n"
+
+        failed_info = ""
+        if news.get("failed_sources"):
+            failed_names = [f['name'] for f in news['failed_sources']]
+            failed_info = f"\n(Note: {len(failed_names)} sources could not be fetched: {', '.join(failed_names)})"
+
+        return f"""NEWS TEXT:
+{news.get('news_text', '')}
+
+SOURCE SUMMARIES:
+{summaries_text}
+{failed_info}
+
+LANGUAGE: {news.get('language', 'en')}
+TOPIC ID: {news.get('topic_id', 'unknown')}
+"""
+    else:
+        # Original format - just URLs
+        sources_text = "\n".join(
+            f"- {s['name']}: {s['url']}" for s in news.get("sources", [])
+        )
+
+        return f"""NEWS TEXT:
 {news.get('news_text', '')}
 
 SOURCES:

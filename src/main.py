@@ -17,11 +17,17 @@ from pathlib import Path
 from generate_dialogue import generate_dialogue
 from generate_audio import generate_audio, DEFAULT_VOICE_A, DEFAULT_VOICE_B
 from generate_images import generate_image_prompts, generate_all_images
+from fetch_sources import (
+    load_prompt as load_summarizer_prompt,
+    process_sources,
+    build_enriched_news,
+)
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
 IMAGE_PROMPT_PATH = PROJECT_ROOT / "data" / "image_prompt.md"
+SUMMARIZER_PROMPT_PATH = PROJECT_ROOT / "data" / "fetch_sources_summariser_prompt.md"
 
 
 # =========================
@@ -51,8 +57,11 @@ def main():
     parser.add_argument("--reuse-images", action="store_true")
 
     parser.add_argument("-m", "--model", default="gpt-4o")
+    parser.add_argument("--summarizer-model", default="gpt-4o-mini")
     parser.add_argument("--voice-a", default=DEFAULT_VOICE_A)
     parser.add_argument("--voice-b", default=DEFAULT_VOICE_B)
+    parser.add_argument("--skip-enrichment", action="store_true",
+                        help="Skip source fetching/summarization")
 
     args = parser.parse_args()
 
@@ -74,13 +83,46 @@ def main():
     video_path = run_dir / args.video if args.video else None
     timeline_path = run_dir / args.timeline if args.timeline else None
     dialogue_path = run_dir / (args.keep_dialogue or "dialogue.json")
+    enriched_path = run_dir / "enriched_news.json"
 
     images_dir = run_dir / "images"
     images_json = images_dir / "images.json"
     images_data = []
 
     # =========================
-    # STEP 1: DIALOGUE
+    # STEP 1: ENRICH SOURCES
+    # =========================
+
+    if args.resume_run:
+        if enriched_path.exists():
+            print("Using existing enriched_news.json", file=sys.stderr)
+        else:
+            print("No enriched_news.json found, will use original news file", file=sys.stderr)
+    elif args.skip_enrichment:
+        print("Skipping source enrichment (--skip-enrichment)", file=sys.stderr)
+        # Copy original news to enriched path for consistency
+        with open(args.news, "r", encoding="utf-8") as f:
+            news_data = json.load(f)
+        with open(enriched_path, "w", encoding="utf-8") as f:
+            json.dump(news_data, f, ensure_ascii=False, indent=2)
+    else:
+        print("Step 1: Enriching sources (fetching & summarizing)...", file=sys.stderr)
+
+        with open(args.news, "r", encoding="utf-8") as f:
+            news_data = json.load(f)
+
+        summarizer_prompt = load_summarizer_prompt(SUMMARIZER_PROMPT_PATH)
+        results = process_sources(news_data, summarizer_prompt, args.summarizer_model)
+        enriched_data = build_enriched_news(news_data, results)
+
+        with open(enriched_path, "w", encoding="utf-8") as f:
+            json.dump(enriched_data, f, ensure_ascii=False, indent=2)
+
+        stats = enriched_data["fetch_stats"]
+        print(f"         {stats['successful']}/{stats['total']} sources enriched", file=sys.stderr)
+
+    # =========================
+    # STEP 2: DIALOGUE
     # =========================
 
     if args.resume_run:
@@ -89,13 +131,15 @@ def main():
             sys.exit(1)
         print("Skipping dialogue generation.", file=sys.stderr)
     else:
-        print("Step 1: Generating dialogue...", file=sys.stderr)
-        dialogue_data = generate_dialogue(args.news, args.prompt, args.model)
+        print("Step 2: Generating dialogue...", file=sys.stderr)
+        # Use enriched news if available
+        news_input = enriched_path if enriched_path.exists() else args.news
+        dialogue_data = generate_dialogue(news_input, args.prompt, args.model)
         with open(dialogue_path, "w", encoding="utf-8") as f:
             json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
 
     # =========================
-    # STEP 2: AUDIO
+    # STEP 3: AUDIO
     # =========================
 
     if args.resume_run:
@@ -104,7 +148,7 @@ def main():
             sys.exit(1)
         print("Skipping audio generation.", file=sys.stderr)
     else:
-        print("Step 2: Generating audio...", file=sys.stderr)
+        print("Step 3: Generating audio...", file=sys.stderr)
 
         temp_timeline = False
         if args.video and not timeline_path:
@@ -126,7 +170,7 @@ def main():
             timeline_path = run_dir / "timeline.json"
 
     # =========================
-    # STEP 3: IMAGES
+    # STEP 4: IMAGES
     # =========================
 
     if args.resume_run and args.reuse_images:
@@ -136,7 +180,7 @@ def main():
         images_data = json.load(open(images_json)).get("images", [])
         print("Reusing existing images.", file=sys.stderr)
     else:
-        print("Step 3: Generating images...", file=sys.stderr)
+        print("Step 4: Generating images...", file=sys.stderr)
         images_dir.mkdir(parents=True, exist_ok=True)
 
         prompts_data = generate_image_prompts(
@@ -153,11 +197,11 @@ def main():
     print("\nDone.", file=sys.stderr)
 
     # =========================
-    # STEP 4: VIDEO
+    # STEP 5: VIDEO
     # =========================
 
     if video_path:
-        print("Step 4: Rendering video...", file=sys.stderr)
+        print("Step 5: Rendering video...", file=sys.stderr)
 
         subprocess.run(
             [
