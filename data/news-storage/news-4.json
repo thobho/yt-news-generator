@@ -6,32 +6,32 @@
     {
       "name": "PAP",
       "url": "https://www.pap.pl/aktualnosci/nowacka-ograniczenie-dostepu-do-platform-spolecznosciowych-wzorowane-na-regulacjach",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "Gazeta Prawna",
       "url": "https://www.gazetaprawna.pl/wiadomosci/kraj/artykuly/10622516,social-media-od-15-roku-zycia-ko-szuka-poparcia-dla-zakazu.html",
-      "political_lean": "center-left"
+      "political_inclination": "center-left"
     },
     {
       "name": "cyberdefence24.pl",
       "url": "https://cyberdefence24.pl/cyberbezpieczenstwo/giertych-z-nowacka-chca-zakazu-mediow-spolecznosciowych-dla-dzieci-prace-ruszyly",
-      "political_lean": "left"
+      "political_inclination": "left"
     },
     {
       "name": "Forsal",
       "url": "https://forsal.pl/kraj/aktualnosci/artykuly/10620997,zakaz-korzystania-z-mediow-spolecznosciowych-do-15-roku-zycia-projekt-ustaw",
-      "political_lean": "center-left"
+      "political_inclination": "center-left"
     },
     {
       "name": "TVN24",
       "url": "https://tvn24.pl/biznes/tech/zakaz-mediow-spolecznosciowych-w-polsce-rozwiazanie-bedzie-gotowe-z-koncem-roku-st8862339",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "isportal.pl",
       "url": "https://isportal.pl/social-media-nie-dla-dzieci-w-australii-czy-polska-pojdzie-tym-sladem/",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "WP Wiadomości (opinie Gawkowskiego)",
@@ -41,42 +41,42 @@
     {
       "name": "Do Rzeczy",
       "url": "https://dorzeczy.pl/opinie/833963/zakaz-mediow-spolecznosciowych-gawkowski-troche-populizm.html",
-      "political_lean": "right"
+      "political_inclination": "right"
     },
     {
       "name": "Tygodnik Powszechny",
       "url": "https://www.tygodnikpowszechny.pl/zakaz-social-mediow-dla-dzieci-koalicja-obywatelska-zapowiada-wlasny-projekt-192660",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "Polsat News",
       "url": "https://www.polsatnews.pl/wiadomosc/2026-01-15/zakaz-mediow-spolecznosciowych-dla-dzieci-trwaja-prace-nad-projektem/",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "Business Insider Polska",
       "url": "https://businessinsider.com.pl/prawo/jak-dziala-zakaz-mediow-spolecznosciowych-w-australii-meta-zablokowala-500-tys-kont/5q4lhf2",
-      "political_lean": "center"
+      "political_inclination": "center"
     },
     {
       "name": "Rzeczpospolita (analiza o zakazie)",
       "url": "https://cyfrowa.rp.pl/globalne-interesy/art43618491-australia-zakazala-social-mediow-dla-nastolatkow-widac-juz-skutki",
-      "political_lean": "center-right"
+      "political_inclination": "center-right"
     },
     {
       "name": "Wirtualne Media",
       "url": "https://www.wirtualnemedia.pl/social-media-polska-dzieci-prawo,7230673534880672a",
-      "political_lean": "center-left"
+      "political_inclination": "center-left"
     },
     {
       "name": "INN Poland",
       "url": "https://innpoland.pl/219178,nowacka-i-giertych-z-projektem-ustawy-pieklo-zamarzlo-dla-dobra-naszych-dzieci",
-      "political_lean": "center-right"
+      "political_inclination": "center-right"
     },
     {
       "name": "Euronews",
       "url": "https://pl.euronews.com/next/2026/01/15/australia-zakaz-mediow-spolecznosciowych-dla-osob-ponizej-16-lat-jak-dziala-po-miesiacu",
-      "political_lean": "center"
+      "political_inclination": "center"
     }
   ]
 }

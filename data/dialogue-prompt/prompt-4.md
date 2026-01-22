@@ -247,3 +247,11 @@ JSON ONLY
   "viewer_question": "",
   "viewer_question_emphasis": ["word"]
 }
+```
+
+## INPUT DATA (User provides this)
+Topic/News Summary: [INSERT NEWS HERE]
+
+Detailed Source Facts: [INSERT SOURCE SUMMARIES HERE]
+
+Language: Polish
