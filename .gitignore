@@ -13,7 +13,6 @@ remotion/node_modules/
 
 # Output files (generated content)
 output/
-timeline.json
 
 # Remotion build artifacts
 remotion/public/images/

@@ -1,30 +1,41 @@
-import { Composition } from "remotion";
+import { Composition, getInputProps } from "remotion";
 import { SubtitleVideo } from "./SubtitleVideo";
-import timeline from "../../timeline.json";
-import images from "../../output/images/images.json";
+import type { SubtitleVideoProps } from "./SubtitleVideo";
 
-// Calculate total duration from timeline
-const lastSegment = timeline.segments[timeline.segments.length - 1];
-const totalDurationMs = lastSegment.end_ms + 500; // Add 500ms padding at the end
 const FPS = 30;
-const durationInFrames = Math.ceil((totalDurationMs / 1000) * FPS);
+
+type Timeline = {
+  audio_file: string;
+  segments: SubtitleVideoProps["segments"];
+};
 
 export const RemotionRoot: React.FC = () => {
+  const { timeline, images } = getInputProps() as {
+    timeline: Timeline;
+    images: SubtitleVideoProps["images"];
+  };
+
+  if (!timeline || !timeline.segments || timeline.segments.length === 0) {
+    throw new Error("Invalid or empty timeline passed to Remotion");
+  }
+
+  const lastSegment = timeline.segments[timeline.segments.length - 1];
+  const totalDurationMs = lastSegment.end_ms + 500;
+  const durationInFrames = Math.ceil((totalDurationMs / 1000) * FPS);
+
   return (
-    <>
-      <Composition
-        id="SubtitleVideo"
-        component={SubtitleVideo}
-        durationInFrames={durationInFrames}
-        fps={FPS}
-        width={1080}
-        height={1920}
-        defaultProps={{
-          audioFile: timeline.audio_file,
-          segments: timeline.segments,
-          images: images.images,
-        }}
-      />
-    </>
+    <Composition<SubtitleVideoProps>
+      id="SubtitleVideo"
+      component={SubtitleVideo as React.FC<SubtitleVideoProps>}
+      durationInFrames={durationInFrames}
+      fps={FPS}
+      width={1080}
+      height={1920}
+      defaultProps={{
+        audioFile: timeline.audio_file,
+        segments: timeline.segments,
+        images: images ?? [],
+      }}
+    />
   );
 };

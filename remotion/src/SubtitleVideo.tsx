@@ -1,10 +1,24 @@
-import { AbsoluteFill, Audio, Img, useCurrentFrame, useVideoConfig, staticFile, interpolate } from "remotion";
+import {
+  AbsoluteFill,
+  Audio,
+  Img,
+  useCurrentFrame,
+  useVideoConfig,
+  staticFile,
+  interpolate,
+} from "remotion";
+
+/* =========================
+   TYPES
+========================= */
 
 interface Segment {
-  speaker: string;
+  speaker?: string;
   text: string;
   start_ms: number;
   end_ms: number;
+  chunk?: boolean;
+  type?: "pause";
 }
 
 interface ImageInfo {
@@ -16,11 +30,47 @@ interface ImageInfo {
   segment_indices?: number[];
 }
 
-interface SubtitleVideoProps {
+export interface SubtitleVideoProps {
   audioFile: string;
   segments: Segment[];
   images: ImageInfo[];
 }
+
+/* =========================
+   EQUALIZER (SUBTLE)
+========================= */
+
+const Equalizer: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  return (
+    <div style={{ display: "flex", gap: 8, opacity: 0.35 }}>
+      {Array.from({ length: 7 }).map((_, i) => {
+        const h =
+          16 +
+          Math.abs(Math.sin(frame / fps + i)) * 40;
+
+        return (
+          <div
+            key={i}
+            style={{
+              width: 8,
+              height: h,
+              background: "white",
+              borderRadius: 4,
+              boxShadow: "0 0 12px rgba(255,255,255,0.4)",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+};
+
+/* =========================
+   MAIN COMPONENT
+========================= */
 
 export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   audioFile,
@@ -29,38 +79,49 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-
-  // Convert frame to milliseconds
   const currentTimeMs = (frame / fps) * 1000;
 
-  // Find the current segment index based on time
-  const currentSegmentIndex = segments.findIndex(
-    (segment) => currentTimeMs >= segment.start_ms && currentTimeMs <= segment.end_ms
+  /* =========================
+     CHUNK LOGIC
+  ========================= */
+
+  const chunkSegments = segments.filter(
+    (s) => s.chunk && !s.type
   );
 
-  const currentSegment = currentSegmentIndex >= 0 ? segments[currentSegmentIndex] : null;
+  const currentChunkIndex = chunkSegments.findIndex(
+    (s) =>
+      currentTimeMs >= s.start_ms &&
+      currentTimeMs <= s.end_ms
+  );
 
-  // Find which segment we're at or past (for image selection during pauses)
-  const getEffectiveSegmentIndex = (): number => {
-    // Before first segment
-    if (currentTimeMs < segments[0].start_ms) {
-      return 0;
-    }
+  const currentChunk =
+    currentChunkIndex >= 0
+      ? chunkSegments[currentChunkIndex]
+      : null;
 
-    // Find the last segment that started before current time
-    for (let i = segments.length - 1; i >= 0; i--) {
-      if (currentTimeMs >= segments[i].start_ms) {
-        return i;
-      }
-    }
-    return 0;
-  };
+  const previousChunk =
+    currentChunkIndex > 0
+      ? chunkSegments[currentChunkIndex - 1]
+      : null;
 
-  const effectiveSegmentIndex = getEffectiveSegmentIndex();
+  const fadeIn = (startMs: number) =>
+    interpolate(
+      currentTimeMs,
+      [startMs, startMs + 200],
+      [0, 1],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    );
 
-  // Find the current background image based on effective segment index
+  /* =========================
+     IMAGE LOGIC
+  ========================= */
+
+  const effectiveSegmentIndex = segments.findIndex(
+    (s) => currentTimeMs < s.end_ms
+  );
+
   const getCurrentImage = (): ImageInfo | null => {
-    // Find image that contains this segment index
     for (const img of images) {
       if (img.segment_index === effectiveSegmentIndex) {
         return img;
@@ -69,37 +130,35 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
         return img;
       }
     }
-
-    // Fallback: find by approximate position
-    const totalSegments = segments.length;
-    const progress = effectiveSegmentIndex / totalSegments;
-
-    if (progress < 0.1) return images.find(img => img.id === "hook") || images[0];
-    if (progress < 0.4) return images.find(img => img.id === "topic_1") || images[1];
-    if (progress < 0.7) return images.find(img => img.id === "topic_2") || images[2];
-    return images.find(img => img.id === "discussion") || images[images.length - 1];
+    return images[0] ?? null;
   };
 
   const currentImage = getCurrentImage();
 
-  // Get speaker color
-  const getSpeakerColor = (speaker: string) => {
-    return speaker === "A" ? "#3B82F6" : "#EC4899"; // Blue for A, Pink for B
-  };
+  /* =========================
+     BACKGROUND MOTION
+  ========================= */
 
-  // Subtle zoom animation for background
-  const scale = interpolate(frame, [0, fps * 60], [1, 1.1], {
-    extrapolateRight: "clamp",
-  });
+  const scale = interpolate(
+    frame,
+    [0, fps * 60],
+    [1, 1.06],
+    { extrapolateRight: "clamp" }
+  );
+
+  /* =========================
+     RENDER
+  ========================= */
 
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#0F172A",
-        fontFamily: "system-ui, -apple-system, sans-serif",
+        backgroundColor: "#0B1220",
+        fontFamily:
+          "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* Background Image */}
+      {/* Background image */}
       {currentImage?.file && (
         <AbsoluteFill style={{ overflow: "hidden" }}>
           <Img
@@ -114,78 +173,81 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
         </AbsoluteFill>
       )}
 
-      {/* Dark overlay for contrast */}
+      {/* Dark overlay */}
       <AbsoluteFill
         style={{
-          background: "linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.5) 40%, rgba(0,0,0,0.8) 100%)",
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0.2))",
         }}
       />
 
       {/* Audio */}
       <Audio src={staticFile(audioFile)} />
 
-      {/* Subtitle container - centered */}
+      {/* Equalizer */}
       <AbsoluteFill
         style={{
           display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
           justifyContent: "center",
-          padding: "0 48px",
+          alignItems: "flex-end",
+          paddingBottom: 140,
+          pointerEvents: "none",
         }}
       >
-        {currentSegment && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              maxWidth: "100%",
-            }}
-          >
-            {/* Speaker indicator */}
+        <Equalizer />
+      </AbsoluteFill>
+
+      {/* Subtitles */}
+      <AbsoluteFill
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          paddingBottom: 260,
+          paddingLeft: 48,
+          paddingRight: 48,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: "90%",
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            textAlign: "center",
+          }}
+        >
+          {/* Previous chunk */}
+          {previousChunk && (
             <div
               style={{
-                backgroundColor: getSpeakerColor(currentSegment.speaker),
-                color: "white",
-                padding: "12px 32px",
-                borderRadius: 30,
-                fontSize: 32,
-                fontWeight: 700,
-                marginBottom: 32,
-                boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
+                fontSize: 42,
+                fontWeight: 600,
+                color: "rgba(255,255,255,0.55)",
+                lineHeight: 1.25,
               }}
             >
-              {currentSegment.speaker === "A" ? "Osoba A" : "Osoba B"}
+              {previousChunk.text}
             </div>
+          )}
 
-            {/* Subtitle text with strong contrast */}
+          {/* Current chunk */}
+          {currentChunk && (
             <div
               style={{
-                color: "white",
                 fontSize: 56,
                 fontWeight: 800,
-                textAlign: "center",
+                color: "white",
                 lineHeight: 1.3,
-                textShadow: `
-                  0 0 20px rgba(0,0,0,0.9),
-                  0 0 40px rgba(0,0,0,0.8),
-                  0 4px 8px rgba(0,0,0,0.9),
-                  2px 2px 0 rgba(0,0,0,0.8),
-                  -2px -2px 0 rgba(0,0,0,0.8),
-                  2px -2px 0 rgba(0,0,0,0.8),
-                  -2px 2px 0 rgba(0,0,0,0.8)
-                `,
-                maxWidth: "100%",
-                padding: "20px",
-                borderRadius: 16,
-                backgroundColor: "rgba(0,0,0,0.4)",
+                opacity: fadeIn(currentChunk.start_ms),
+                textShadow:
+                  "0 10px 40px rgba(0,0,0,0.9)",
               }}
             >
-              {currentSegment.text}
+              {currentChunk.text}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </AbsoluteFill>
 
       {/* Progress bar */}
@@ -195,19 +257,23 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           bottom: 60,
           left: 40,
           right: 40,
-          height: 8,
-          backgroundColor: "rgba(255,255,255,0.3)",
-          borderRadius: 4,
-          boxShadow: "0 2px 10px rgba(0,0,0,0.5)",
+          height: 6,
+          background: "rgba(255,255,255,0.25)",
+          borderRadius: 3,
         }}
       >
         <div
           style={{
             height: "100%",
-            backgroundColor: "#3B82F6",
-            borderRadius: 4,
-            width: `${(currentTimeMs / (segments[segments.length - 1].end_ms + 500)) * 100}%`,
-            boxShadow: "0 0 10px rgba(59,130,246,0.8)",
+            width: `${
+              (currentTimeMs /
+                segments[segments.length - 1].end_ms) *
+              100
+            }%`,
+            background: "white",
+            borderRadius: 3,
+            boxShadow:
+              "0 0 12px rgba(255,255,255,0.6)",
           }}
         />
       </div>

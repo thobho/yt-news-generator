@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate YouTube Shorts video from news.
-
-This script combines three steps:
-1. Generate dialogue from news using ChatGPT
-2. Generate audio from dialogue using ElevenLabs
-3. Generate video with subtitles using Remotion
-
-Usage (from project root):
-    python src/main.py data/news.json data/prompt.md -o output/audio.mp3
-    python src/main.py data/news.json data/prompt.md -o output/audio.mp3 -v output/video.mp4
-    python src/main.py data/news.json data/prompt.md -o output/audio.mp3 --voice-a "Adam" --voice-b "Domi"
+Supports resumable runs.
 """
 
 import argparse
@@ -20,91 +11,101 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from generate_dialogue import generate_dialogue
 from generate_audio import generate_audio, DEFAULT_VOICE_A, DEFAULT_VOICE_B
+from generate_images import generate_image_prompts, generate_all_images
 
 
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
+IMAGE_PROMPT_PATH = PROJECT_ROOT / "data" / "image_prompt.md"
+
+
+# =========================
+# RUN DIRECTORY MANAGEMENT
+# =========================
+
+def create_run_dir(base_dir: Path) -> Path:
+    run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    run_dir = base_dir / f"run_{run_id}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate YouTube dialogue audio from news"
+        description="Generate YouTube Shorts video from news (resumable)"
     )
     parser.add_argument("news", type=Path, help="Path to news.json file")
-    parser.add_argument("prompt", type=Path, help="Path to prompt.md file")
-    parser.add_argument(
-        "-o", "--output", type=Path, required=True, help="Output MP3 file path"
-    )
-    parser.add_argument(
-        "-m", "--model", default="gpt-4o", help="OpenAI model to use (default: gpt-4o)"
-    )
-    parser.add_argument(
-        "--voice-a",
-        default=DEFAULT_VOICE_A,
-        help=f"Voice name for Speaker A (default: {DEFAULT_VOICE_A})",
-    )
-    parser.add_argument(
-        "--voice-b",
-        default=DEFAULT_VOICE_B,
-        help=f"Voice name for Speaker B (default: {DEFAULT_VOICE_B})",
-    )
-    parser.add_argument(
-        "--keep-dialogue",
-        type=Path,
-        help="Save intermediate dialogue JSON to this path",
-    )
-    parser.add_argument(
-        "-t", "--timeline",
-        type=Path,
-        help="Output timeline JSON file path (for subtitles)",
-    )
-    parser.add_argument(
-        "-v", "--video",
-        type=Path,
-        help="Output video file path (requires Remotion)",
-    )
+    parser.add_argument("prompt", type=Path, help="Path to dialogue prompt.md file")
+
+    parser.add_argument("-o", "--output", type=Path, required=True)
+    parser.add_argument("-v", "--video", type=Path)
+    parser.add_argument("-t", "--timeline", type=Path)
+    parser.add_argument("--keep-dialogue", type=Path)
+
+    parser.add_argument("--resume-run", type=Path)
+    parser.add_argument("--reuse-images", action="store_true")
+
+    parser.add_argument("-m", "--model", default="gpt-4o")
+    parser.add_argument("--voice-a", default=DEFAULT_VOICE_A)
+    parser.add_argument("--voice-b", default=DEFAULT_VOICE_B)
 
     args = parser.parse_args()
 
-    # Validate input files
-    if not args.news.exists():
-        print(f"Error: News file not found: {args.news}", file=sys.stderr)
-        sys.exit(1)
+    # =========================
+    # RESOLVE RUN DIRECTORY
+    # =========================
 
-    if not args.prompt.exists():
-        print(f"Error: Prompt file not found: {args.prompt}", file=sys.stderr)
-        sys.exit(1)
+    if args.resume_run:
+        run_dir = args.resume_run
+        if not run_dir.exists():
+            print(f"Error: run directory not found: {run_dir}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Resuming run: {run_dir}", file=sys.stderr)
+    else:
+        run_dir = create_run_dir(PROJECT_ROOT / "output")
+        print(f"New run directory: {run_dir}", file=sys.stderr)
 
-    try:
-        # Step 1: Generate dialogue
-        print("Step 1: Generating dialogue from news...", file=sys.stderr)
+    audio_path = run_dir / args.output
+    video_path = run_dir / args.video if args.video else None
+    timeline_path = run_dir / args.timeline if args.timeline else None
+    dialogue_path = run_dir / (args.keep_dialogue or "dialogue.json")
+
+    images_dir = run_dir / "images"
+    images_json = images_dir / "images.json"
+    images_data = []
+
+    # =========================
+    # STEP 1: DIALOGUE
+    # =========================
+
+    if args.resume_run:
+        if not dialogue_path.exists():
+            print("Error: dialogue.json missing in resumed run", file=sys.stderr)
+            sys.exit(1)
+        print("Skipping dialogue generation.", file=sys.stderr)
+    else:
+        print("Step 1: Generating dialogue...", file=sys.stderr)
         dialogue_data = generate_dialogue(args.news, args.prompt, args.model)
-        print("Dialogue generated successfully.", file=sys.stderr)
+        with open(dialogue_path, "w", encoding="utf-8") as f:
+            json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
 
-        # Save dialogue to temp file or specified path
-        if args.keep_dialogue:
-            dialogue_path = args.keep_dialogue
-            with open(dialogue_path, "w", encoding="utf-8") as f:
-                json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
-            print(f"Dialogue saved to: {dialogue_path}", file=sys.stderr)
-        else:
-            # Use temp file
-            temp_file = tempfile.NamedTemporaryFile(
-                mode="w", suffix=".json", delete=False, encoding="utf-8"
-            )
-            json.dump(dialogue_data, temp_file, ensure_ascii=False, indent=2)
-            temp_file.close()
-            dialogue_path = Path(temp_file.name)
+    # =========================
+    # STEP 2: AUDIO
+    # =========================
 
-        # Step 2: Generate audio
-        print("\nStep 2: Generating audio from dialogue...", file=sys.stderr)
+    if args.resume_run:
+        if not audio_path.exists():
+            print("Error: audio.mp3 missing in resumed run", file=sys.stderr)
+            sys.exit(1)
+        print("Skipping audio generation.", file=sys.stderr)
+    else:
+        print("Step 2: Generating audio...", file=sys.stderr)
 
-        # If video is requested, we need a timeline (use temp file if not specified)
-        timeline_path = args.timeline
         temp_timeline = False
         if args.video and not timeline_path:
             fd, tmp = tempfile.mkstemp(suffix=".json")
@@ -113,59 +114,62 @@ def main():
             temp_timeline = True
 
         generate_audio(
-            dialogue_path, args.output, timeline_path, args.voice_a, args.voice_b
+            dialogue_path,
+            audio_path,
+            timeline_path,
+            args.voice_a,
+            args.voice_b,
         )
 
-        # Clean up temp file if not keeping dialogue
-        if not args.keep_dialogue:
-            dialogue_path.unlink()
+        if temp_timeline:
+            shutil.move(timeline_path, run_dir / "timeline.json")
+            timeline_path = run_dir / "timeline.json"
 
-        print(f"Audio saved to: {args.output}", file=sys.stderr)
+    # =========================
+    # STEP 3: IMAGES
+    # =========================
 
-        # Step 3: Generate video (if requested)
-        if args.video:
-            print("\nStep 3: Generating video with subtitles...", file=sys.stderr)
+    if args.resume_run and args.reuse_images:
+        if not images_json.exists():
+            print("Error: images.json missing for reuse", file=sys.stderr)
+            sys.exit(1)
+        images_data = json.load(open(images_json)).get("images", [])
+        print("Reusing existing images.", file=sys.stderr)
+    else:
+        print("Step 3: Generating images...", file=sys.stderr)
+        images_dir.mkdir(parents=True, exist_ok=True)
 
-            # Copy audio to Remotion public folder
-            public_dir = REMOTION_DIR / "public"
-            public_dir.mkdir(exist_ok=True)
-            shutil.copy(args.output, public_dir / args.output.name)
+        prompts_data = generate_image_prompts(
+            dialogue_path=dialogue_path,
+            prompt_path=IMAGE_PROMPT_PATH,
+            model=args.model,
+        )
 
-            # Copy timeline to project root for Remotion import (if not already there)
-            target_timeline = PROJECT_ROOT / "timeline.json"
-            if timeline_path.resolve() != target_timeline.resolve():
-                shutil.copy(timeline_path, target_timeline)
+        prompts_data = generate_all_images(prompts_data, images_dir)
 
-            # Update timeline audio_file reference
-            with open(target_timeline, "r", encoding="utf-8") as f:
-                timeline_data = json.load(f)
-            timeline_data["audio_file"] = args.output.name
-            with open(target_timeline, "w", encoding="utf-8") as f:
-                json.dump(timeline_data, f, ensure_ascii=False, indent=2)
+        with open(images_json, "w", encoding="utf-8") as f:
+            json.dump(prompts_data, f, ensure_ascii=False, indent=2)
 
-            # Render video
-            subprocess.run(
-                ["npx", "remotion", "render", "SubtitleVideo", str(args.video.absolute())],
-                cwd=REMOTION_DIR,
-                check=True,
-            )
-            print(f"Video saved to: {args.video}", file=sys.stderr)
+    print("\nDone.", file=sys.stderr)
 
-            # Clean up temp timeline
-            if temp_timeline:
-                timeline_path.unlink()
+    # =========================
+    # STEP 4: VIDEO
+    # =========================
 
-        print("\nDone!", file=sys.stderr)
+    if video_path:
+        print("Step 4: Rendering video...", file=sys.stderr)
 
-    except subprocess.CalledProcessError as e:
-        print(f"Error: Video rendering failed with exit code {e.returncode}", file=sys.stderr)
-        sys.exit(1)
-    except ValueError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+        subprocess.run(
+            [
+                sys.executable,
+                str(PROJECT_ROOT / "src" / "generate_video.py"),
+                "--audio", str(audio_path),
+                "--timeline", str(timeline_path),
+                "--images", str(images_dir),
+                "-o", str(video_path),
+            ],
+            check=True,
+        )
 
 
 if __name__ == "__main__":
