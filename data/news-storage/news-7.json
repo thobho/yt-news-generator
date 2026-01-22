@@ -1,0 +1,67 @@
+{
+  "topic_id": "alimony_paternity_child_non_biological_father",
+  "language": "pl",
+  "news_text": "Mężczyzna w Polsce może trafić do więzienia za niepłacenie alimentów na dziecko, które nie jest jego i np. pochodzi ze zdrady partnerki, jeśli nie udowodnił braku ojcostwa i wciąż widnieje w akcie urodzenia. Dopóki sąd nie orzeknie zaprzeczenia ojcostwa, mężczyzna musi płacić. Jeśli brak wpłat (co najmniej 3) naraża dziecko na brak podstawowych potrzeb, kara rośnie do 2 lat więzienia. W Polsce mężczyzna może płacić alimenty na dziecko, którego nie jest biologicznym ojcem. Nawet, jeśli to efekt zdrady małżeńskiej. Jeśli mężczyzna nie wywiązuje się z obowiązku, grozi mu komornik, odsetki, a nawet kara pozbawienia wolności.",
+  "sources": [
+    {
+      "name": "Gazeta Prawna",
+      "url": "https://prawo.gazetaprawna.pl/artykuly/9882243,mezczyzna-w-polsce-moze-placic-alimenty-na-cudze-dziecko-zaprzeczenie-ojcostwa-ni",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Money.pl",
+      "url": "https://www.money.pl/gospodarka/polskie-miasta-drastycznie-podnosza-oplaty-za-smieci-fala-podwyzek-7241243024181760a.html",
+      "political_inclination": "center-right"
+    },
+    {
+      "name": "wPolityce.pl",
+      "url": "https://wpolityce.pl/polityka/735856-awantura-o-tablice-alimentacyjna-skad-ms-wzielo-te-kwoty",
+      "political_inclination": "right"
+    },
+    {
+      "name": "Niezalezna.pl",
+      "url": "https://niezalezna.pl/polska/sciagalnosc-alimentow-przez-panstwo-to-fikcja-urzednik-zdradza-kulisy-problemu-zamiatanego-pod-dywa",
+      "political_inclination": "right"
+    },
+    {
+      "name": "Krytyka Polityczna",
+      "url": "https://krytykapolityczna.pl/kraj/pakiet-alimentacyjny-jak-dziala-przemoc-ekonomiczna/",
+      "political_inclination": "left"
+    },
+    {
+      "name": "TVN24.pl",
+      "url": "https://tvn24.pl/polska/alimenty-na-rodzica-kiedy-dzieci-musza-je-placic-prawdziwe-historie-st5676775",
+      "political_inclination": "center-left"
+    },
+    {
+      "name": "Polsat News",
+      "url": "https://www.polsatnews.pl/wiadomosc/2025-07-24/tabela-alimentacyjna-wywolala-lawine-komentarzy-posel-ko-chce-wyjasnien/",
+      "political_inclination": "center"
+    },
+    {
+      "name": "O2.pl",
+      "url": "https://www.o2.pl/informacje/placi-alimenty-chociaz-jest-bezplodny-matka-nie-chce-wskazac-ojcow-dzieci-7076974589459296a",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Dzień Dobry TVN",
+      "url": "https://dziendobry.tvn.pl/newsy/nakaz-alimentacyjny-coraz-blizej-co-szykuje-rzad-st8769728",
+      "political_inclination": "center-left"
+    },
+    {
+      "name": "Forsal",
+      "url": "https://forsal.pl/nieruchomosci/artykuly/10581809,alimenty-ojcostwo-prawo-rodzinne.html",
+      "political_inclination": "center-right"
+    },
+    {
+      "name": "Podatnik.info",
+      "url": "https://www.podatnik.info/publikacje/alimenty-2025-wszystko-co-musisz-wiedziec,63970b",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Interia.pl",
+      "url": "https://biznes.interia.pl/finanse/news-alimenciarz-juz-nie-ukryje-majatku-rzad-chce-dac-sadom-doste,nId,22459759",
+      "political_inclination": "center"
+    }
+  ]
+}

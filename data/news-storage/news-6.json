@@ -1,0 +1,77 @@
+{
+  "topic_id": "zamkniete_oddzialy_szpitalne_2024_2025",
+  "language": "pl",
+  "news_text": "W latach 2024–2025 w Polsce zamknięto 95, a zawieszono aż 450 oddziałów szpitalnych w 200 placówkach; najczęściej ginekologiczno-położnicze. Główny powód – braki medyków lub spory o wysokość płac. 150x podawano jako powód remonty, uznawane przez ekspertów za pretekst ukrywający brak pieniędzy. Szpitale kredytują NFZ przez brak zapłaty za nadwykonania, co wymusza zawieszanie działalności. Wiele mówiono o zamkniętych i zawieszonych oddziałach szpitalnych – część tych informacji nie była ani prawdziwa, ani w ogóle weryfikowana. „Menedżer Zdrowia” zamieszcza potwierdzone dane, podając przy tym powody likwidacji oddziałów lub wstrzymania przyjęć. Publikujemy listę z nazwami szpitali i datami (co do dnia) – jest na niej aż 539 pozycji.",
+  "sources": [
+    {
+      "name": "ABC Zdrowie",
+      "url": "https://portal.abczdrowie.pl/539-zawieszonych-i-zamknietych-oddzialow-szpitalnych-powodem-glownie-braki-kadrowe/7242595503827456a",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Termedia (Menedżer Zdrowia)",
+      "url": "https://www.termedia.pl/mz/Zamkniete-porodowki-gdzie-i-dlaczego-,64211.html",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Remedium.md",
+      "url": "https://remedium.md/publikacje/wiadomosci/kryzys-szpitali-w-polsce-kolejne-oddzialy-zawieszane-lub-zamykane",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Dziennik Gazeta Prawna",
+      "url": "https://edgp.gazetaprawna.pl/kraj/zdrowie/artykuly/9902558,resort-uspokaja-ale-porodowki-juz-znikaja.html",
+      "political_inclination": "center"
+    },
+    {
+      "name": "Dziennik Gazeta Prawna",
+      "url": "https://www.gazetaprawna.pl/wiadomosci/kraj/artykuly/10613822,kryzys-szpitali-powiatowych-2026-zagrozenie-zamknieciem.html",
+      "political_inclination": "center-right"
+    },
+    {
+      "name": "TVN24",
+      "url": "https://tvn24.pl/zdrowie/kolejne-porodowki-w-likwidacji-resort-zdrowia-zmienia-zasady-st8785253",
+      "political_inclination": "center-left"
+    },
+    {
+      "name": "OKO.press",
+      "url": "https://oko.press/srodowisko-oczekuje-zmian-doradca-ministry-zdrowia-reaguje-na-krytyke-planu-reformy-szpitali",
+      "political_inclination": "left"
+    },
+    {
+      "name": "Krytyka Polityczna",
+      "url": "https://krytykapolityczna.pl/kraj/raport-nik-miazdzy-reforme-szpitali-co-zrobic-zeby-uzdrowic-system-opieki-zdrowotnej/",
+      "political_inclination": "left"
+    },
+    {
+      "name": "wPolityce.pl",
+      "url": "https://wpolityce.pl/polityka/736963-ustawa-ws-szpitali-doprowadzi-do-znikania-oddzialow",
+      "political_inclination": "right"
+    },
+    {
+      "name": "wPolityce.pl",
+      "url": "https://wpolityce.pl/kraj/747355-tak-znikaja-porodowki-sprawdz-w-ktorych-wojewodztwach",
+      "political_inclination": "right"
+    },
+    {
+      "name": "Rzeczpospolita",
+      "url": "https://www.rp.pl/ochrona-zdrowia/art43335471-szpitale-przygotowuja-sie-do-duzej-reformy-na-czym-ma-polegac",
+      "political_inclination": "center-right"
+    },
+    {
+      "name": "Bankier.pl",
+      "url": "https://www.bankier.pl/wiadomosc/Dziura-w-budzecie-NFZ-uderza-w-powiaty-Szpital-przesuwa-terminy-na-2026-rok-9053728.html",
+      "political_inclination": "center-right"
+    },
+    {
+      "name": "Medonet",
+      "url": "https://www.medonet.pl/biznes-system-i-zdrowie/trendy-w-ochronie-zdrowia,kolejne-porodowki-znikaja-z-mapy-wielkopolski--nie-ma-p-,artykul,80573704.html",
+      "political_inclination": "center"
+    },
+    {
+      "name": "ABC Zdrowie",
+      "url": "https://portal.abczdrowie.pl/kolejne-porodowki-zamkniete-pacjentki-beda-drzaly-czy-zdaza-dojechac-do-szpitala/7240810904336896a",
+      "political_inclination": "center-left"
+    }
+  ]
+}
