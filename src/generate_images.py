@@ -37,13 +37,15 @@ def build_user_message(dialogue_data: dict) -> str:
     if hook := dialogue_data.get("hook"):
         all_text.append(f"HOOK: {hook}")
 
+    script = dialogue_data.get("script", dialogue_data.get("dialogue", []))
     all_text.append("\nDIALOGUE:")
-    for i, entry in enumerate(dialogue_data.get("dialogue", [])):
+    for i, entry in enumerate(script):
         all_text.append(f"  [{i}] Speaker {entry['speaker']}: {entry['text']}")
 
-    all_text.append("\nCOMMON GROUND:")
-    for i, entry in enumerate(dialogue_data.get("common_ground", [])):
-        idx = len(dialogue_data.get("dialogue", [])) + i
+    cooldown = dialogue_data.get("cooldown", dialogue_data.get("common_ground", []))
+    all_text.append("\nCOOLDOWN:")
+    for i, entry in enumerate(cooldown):
+        idx = len(script) + i
         all_text.append(f"  [{idx}] Speaker {entry['speaker']}: {entry['text']}")
 
     if viewer_question := dialogue_data.get("viewer_question"):

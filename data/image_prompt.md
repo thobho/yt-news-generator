@@ -146,22 +146,24 @@ photorealistic, 9:16 vertical format
 
 ## 📏 PROMPT RULES
 
-- 30–50 words per prompt  
-- Always imply Polish or Central European context  
-- Always include photorealistic and 9:16 vertical format  
-- Avoid text, logos, brand names, or readable signs  
-- Nothing staged, symbolic, or theatrical  
+- 30–50 words per prompt
+- Always imply Polish or Central European context
+- Always include photorealistic and 9:16 vertical format
+- **CRITICAL: Compose every scene for VERTICAL (portrait) framing** — use tall elements (standing figures, doorways, stairwells, narrow streets, tall windows). Never describe wide panoramas or horizontal landscapes.
+- Avoid text, logos, brand names, or readable signs
+- Nothing staged, symbolic, or theatrical
 - No global or American visual cues  
 
 ---
 
 ## 🚫 STRICTLY AVOID
 
-- American or UK-looking people  
-- Modern US-style architecture or infrastructure  
-- High saturation or dramatic contrast  
-- Stock-photo compositions  
-- Obvious symbolism or visual metaphors  
+- **Children, teenagers, or minors** — NEVER depict anyone under 18. Only show adults (30+).
+- American or UK-looking people
+- Modern US-style architecture or infrastructure
+- High saturation or dramatic contrast
+- Stock-photo compositions
+- Obvious symbolism or visual metaphors
 - AI-art or Midjourney showcase aesthetics  
 
 ---
@@ -192,38 +194,32 @@ Do not include explanations or commentary.
     {
       "id": "scene_1",
       "purpose": "Mood and atmosphere",
-      "prompt": "<image prompt>",
-      "segment_indices": [0]
+      "prompt": "<image prompt>"
     },
     {
       "id": "scene_2",
       "purpose": "Human presence",
-      "prompt": "<image prompt>",
-      "segment_indices": [1,2]
+      "prompt": "<image prompt>"
     },
     {
       "id": "scene_3",
       "purpose": "Environment or system",
-      "prompt": "<image prompt>",
-      "segment_indices": [3,4]
+      "prompt": "<image prompt>"
     },
     {
       "id": "scene_4",
       "purpose": "Subtle contrast or irony",
-      "prompt": "<image prompt>",
-      "segment_indices": [5,6]
+      "prompt": "<image prompt>"
     },
     {
       "id": "scene_5",
       "purpose": "Quiet consequence",
-      "prompt": "<image prompt>",
-      "segment_indices": [7,8]
+      "prompt": "<image prompt>"
     },
     {
       "id": "scene_6",
       "purpose": "Open-ended reflection",
-      "prompt": "<image prompt>",
-      "segment_indices": [9,10,11]
+      "prompt": "<image prompt>"
     }
   ]
 }

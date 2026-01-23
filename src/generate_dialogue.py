@@ -76,7 +76,8 @@ def generate_dialogue(news_path: Path, prompt_path: Path, model: str = "gpt-4o")
     news = load_news(news_path)
     system_prompt = load_prompt(prompt_path)
     user_message = build_user_message(news)
-
+    print("USER MESSAGE")
+    print(user_message)
     client = OpenAI()
 
     response = client.chat.completions.create(

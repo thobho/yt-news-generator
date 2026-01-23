@@ -3,7 +3,7 @@
 Generate YouTube metadata (title, description, hashtags) using ChatGPT.
 
 Usage:
-    python generate_yt_metadata.py news.json prompt.md -o yt_metadata.json
+    python generate_yt_metadata.py enriched_news.json -o yt_metadata.json
 """
 
 import argparse
@@ -14,71 +14,96 @@ from pathlib import Path
 from openai import OpenAI
 
 
-def load_news(news_path: Path) -> dict:
-    """Load news data from JSON file."""
-    with open(news_path, "r", encoding="utf-8") as f:
+PROJECT_ROOT = Path(__file__).parent.parent
+YT_METADATA_PROMPT_PATH = PROJECT_ROOT / "data" / "yt_metadata_prompt.md"
+
+
+def load_json(path: Path) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def load_prompt(prompt_path: Path) -> str:
-    """Load prompt template from markdown file."""
-    with open(prompt_path, "r", encoding="utf-8") as f:
+def load_prompt(path: Path) -> str:
+    with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
 
 def build_user_message(news: dict) -> str:
-    """Build the user message with news context.
+    """Build user message from enriched news data."""
+    summaries_text = ""
+    for i, s in enumerate(news.get("source_summaries", []), 1):
+        summaries_text += f"\n### Source {i}: {s['name']}\n{s.get('summary', '')}\n"
 
-    Supports both formats:
-    - Original: sources with name/url
-    - Enriched: source_summaries with name/url/summary
-    """
-    # Check if this is enriched format (from fetch_sources.py)
-    if "source_summaries" in news:
-        summaries_text = ""
-        for i, s in enumerate(news.get("source_summaries", []), 1):
-            summaries_text += f"\n### Source {i}: {s['name']}\n{s['summary']}\n"
+    sources_text = ""
+    for s in news.get("sources", []):
+        sources_text += f"- {s['name']}: {s.get('url', '')}\n"
 
-        return f"""NEWS TEXT:
+    return f"""NEWS TEXT:
 {news.get("news_text", "")}
 
-SOURCE SUMMARIES:
-{summaries_text}
+{f"SOURCE SUMMARIES:{summaries_text}" if summaries_text else f"SOURCES:{sources_text}"}
 
-LANGUAGE: {news.get("language", "en")}
+LANGUAGE: {news.get("language", "pl")}
 TOPIC ID: {news.get("topic_id", "unknown")}
-
-TASK:
-Create YouTube Shorts metadata that maximizes CTR and watch time.
-"""
-    else:
-        # Original format - just URLs
-        sources_text = "\n".join(
-            f"- {s['name']}: {s['url']}" for s in news.get("sources", [])
-        )
-
-        return f"""NEWS TEXT:
-{news.get("news_text", "")}
-
-SOURCES:
-{sources_text}
-
-LANGUAGE: {news.get("language", "en")}
-TOPIC ID: {news.get("topic_id", "unknown")}
-
-TASK:
-Create YouTube Shorts metadata that maximizes CTR and watch time.
 """
 
 
-def generate_yt_metadata(
-    news_path: Path,
-    prompt_path: Path,
-    model: str = "gpt-4o",
-) -> dict:
-    """Generate YouTube metadata using ChatGPT."""
-    news = load_news(news_path)
-    system_prompt = load_prompt(prompt_path)
+def extract_source_links(news: dict) -> list[dict]:
+    """Extract source name/url pairs from enriched news."""
+    links = []
+    for s in news.get("source_summaries", news.get("sources", [])):
+        name = s.get("name", "")
+        url = s.get("url", "")
+        if name and url:
+            links.append({"name": name, "url": url})
+    return links
+
+
+def assemble_description(summary: str, hashtags: list[str], source_links: list[dict]) -> str:
+    """Assemble the full YT description from parts."""
+    parts = []
+
+    # 1. Call to action
+    parts.append("🔔 Subskrybuj i włącz dzwonek, żeby nie przegapić kolejnych debat!")
+
+    # 2. Summary
+    parts.append("")
+    parts.append(f"💬 {summary}")
+
+    # 3. Source links
+    if source_links:
+        parts.append("")
+        parts.append("📰 Źródła:")
+        for link in source_links:
+            parts.append(f"  ▸ {link['name']}: {link['url']}")
+
+    # 4. Hashtags
+    parts.append("")
+    parts.append(" ".join(hashtags))
+
+    # 5. AI disclosure
+    parts.append("")
+    parts.append("🤖 Cała treść tego filmu (dialog, obrazy, audio) została wygenerowana przez AI w ramach projektu badającego, jak sztuczna inteligencja może wspierać rzeczowy dialog społeczny.")
+
+    return "\n".join(parts)
+
+
+def format_as_markdown(title: str, description: str) -> str:
+    """Format metadata as a markdown file ready to copy-paste."""
+    return f"""# 🎬 YouTube Metadata
+
+## Tytuł
+{title}
+
+## Opis
+{description}
+"""
+
+
+def generate_yt_metadata(enriched_news_path: Path, model: str = "gpt-4o") -> dict:
+    """Generate YouTube metadata using enriched news data."""
+    news = load_json(enriched_news_path)
+    system_prompt = load_prompt(YT_METADATA_PROMPT_PATH)
     user_message = build_user_message(news)
 
     client = OpenAI()
@@ -90,46 +115,52 @@ def generate_yt_metadata(
             {"role": "user", "content": user_message},
         ],
         response_format={"type": "json_object"},
-        temperature=0.8,
+        temperature=0.7,
     )
 
     content = response.choices[0].message.content
-    return json.loads(content)
+    llm_result = json.loads(content)
+
+    # Extract parts from LLM response
+    title = llm_result.get("title", "")
+    summary = llm_result.get("summary", "")
+    hashtags = llm_result.get("hashtags", [])
+
+    # Get source links from enriched news
+    source_links = extract_source_links(news)
+
+    # Assemble full description
+    description = assemble_description(summary, hashtags, source_links)
+
+    return format_as_markdown(title, description)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate YouTube metadata (title, description, hashtags)"
+        description="Generate YouTube metadata (title, description)"
     )
-    parser.add_argument("news", type=Path, help="Path to news.json file")
-    parser.add_argument("prompt", type=Path, help="Path to yt_metadata_prompt.md")
+    parser.add_argument("news", type=Path, help="Path to enriched_news.json")
     parser.add_argument(
         "-o", "--output", type=Path, help="Output JSON file (default: stdout)"
     )
     parser.add_argument(
-        "-m", "--model", default="gpt-4o", help="OpenAI model to use (default: gpt-4o)"
+        "-m", "--model", default="gpt-4o", help="OpenAI model (default: gpt-4o)"
     )
 
     args = parser.parse_args()
 
     if not args.news.exists():
-        print(f"Error: News file not found: {args.news}", file=sys.stderr)
+        print(f"Error: File not found: {args.news}", file=sys.stderr)
         sys.exit(1)
 
-    if not args.prompt.exists():
-        print(f"Error: Prompt file not found: {args.prompt}", file=sys.stderr)
-        sys.exit(1)
-
-    result = generate_yt_metadata(args.news, args.prompt, args.model)
-
-    output_json = json.dumps(result, ensure_ascii=False, indent=2)
+    result = generate_yt_metadata(args.news, args.model)
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
-            f.write(output_json)
+            f.write(result)
         print(f"Output written to: {args.output}", file=sys.stderr)
     else:
-        print(output_json)
+        print(result)
 
 
 if __name__ == "__main__":

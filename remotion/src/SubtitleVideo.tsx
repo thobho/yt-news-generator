@@ -12,6 +12,11 @@ import {
    TYPES
 ========================= */
 
+interface SegmentSource {
+  name: string;
+  text: string;
+}
+
 interface Segment {
   speaker?: string;
   text: string;
@@ -20,6 +25,7 @@ interface Segment {
   chunk?: boolean;
   type?: "pause";
   emphasis?: string[];
+  source?: SegmentSource;
 }
 
 interface ImageInfo {
@@ -271,6 +277,41 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 
       {/* Audio */}
       <Audio src={staticFile(audioFile)} />
+
+      {/* Source attribution - fixed position at 1/4 screen height */}
+      {currentChunk?.source && (
+        <div
+          style={{
+            position: "absolute",
+            top: "25%",
+            left: 48,
+            right: 48,
+            textAlign: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              color: "#FFD700",
+              fontSize: 30,
+              fontWeight: 700,
+              marginBottom: 6,
+            }}
+          >
+            {currentChunk.source.name}
+          </div>
+          <div
+            style={{
+              color: "rgba(255,255,255,0.45)",
+              fontSize: 28,
+              fontWeight: 400,
+              lineHeight: 1.3,
+            }}
+          >
+            {currentChunk.source.text}
+          </div>
+        </div>
+      )}
 
       {/* Subtitles + Equalizer (centered layout) */}
       <AbsoluteFill
