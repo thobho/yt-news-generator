@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate YouTube Shorts video from news.
-Supports resumable runs.
+Supports resumable runs with manual review checkpoints.
 """
 
 import argparse
@@ -22,7 +22,6 @@ from fetch_sources import (
     build_enriched_news,
 )
 
-
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
 IMAGE_PROMPT_PATH = PROJECT_ROOT / "data" / "image_prompt.md"
@@ -30,7 +29,7 @@ SUMMARIZER_PROMPT_PATH = PROJECT_ROOT / "data" / "fetch_sources_summariser_promp
 
 
 # =========================
-# RUN DIRECTORY MANAGEMENT
+# HELPERS
 # =========================
 
 def create_run_dir(base_dir: Path) -> Path:
@@ -38,6 +37,18 @@ def create_run_dir(base_dir: Path) -> Path:
     run_dir = base_dir / f"run_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
+
+
+def wait_for_user(message: str):
+    print("\n" + "=" * 60, file=sys.stderr)
+    print(message, file=sys.stderr)
+    print("Press ENTER to continue, or Ctrl+C to abort.", file=sys.stderr)
+    print("=" * 60 + "\n", file=sys.stderr)
+    try:
+        input()
+    except KeyboardInterrupt:
+        print("\nAborted by user.", file=sys.stderr)
+        sys.exit(1)
 
 
 def assign_segment_indices(prompts_data: dict, timeline_path: Path) -> dict:
@@ -64,6 +75,10 @@ def assign_segment_indices(prompts_data: dict, timeline_path: Path) -> dict:
 
     return prompts_data
 
+
+# =========================
+# MAIN
+# =========================
 
 def main():
     parser = argparse.ArgumentParser(
@@ -114,7 +129,7 @@ def main():
     if enriched_path.exists():
         print("Step 1: enriched_news.json exists, skipping.", file=sys.stderr)
     else:
-        print("Step 1: Enriching sources (fetching & summarizing)...", file=sys.stderr)
+        print("Step 1: Enriching sources...", file=sys.stderr)
 
         with open(args.news, "r", encoding="utf-8") as f:
             news_data = json.load(f)
@@ -125,9 +140,6 @@ def main():
 
         with open(enriched_path, "w", encoding="utf-8") as f:
             json.dump(enriched_data, f, ensure_ascii=False, indent=2)
-
-        stats = enriched_data["fetch_stats"]
-        print(f"         {stats['successful']}/{stats['total']} sources enriched", file=sys.stderr)
 
     # =========================
     # STEP 2: DIALOGUE
@@ -141,6 +153,11 @@ def main():
         dialogue_data = generate_dialogue(news_input, args.prompt, args.model)
         with open(dialogue_path, "w", encoding="utf-8") as f:
             json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
+
+    wait_for_user(
+        f"Review dialogue JSON:\n{dialogue_path}\n\n"
+        "Make any edits now before continuing."
+    )
 
     # =========================
     # STEP 3: AUDIO + TIMELINE
@@ -180,6 +197,11 @@ def main():
 
         with open(images_json, "w", encoding="utf-8") as f:
             json.dump(prompts_data, f, ensure_ascii=False, indent=2)
+
+    wait_for_user(
+        f"Review generated images and prompts:\n{images_dir}\n\n"
+        "Edit or regenerate images if needed before continuing."
+    )
 
     # =========================
     # STEP 5: VIDEO
