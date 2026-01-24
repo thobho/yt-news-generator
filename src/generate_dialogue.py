@@ -13,13 +13,6 @@ from pathlib import Path
 
 from openai import OpenAI
 
-
-def load_news(news_path: Path) -> dict:
-    """Load news data from JSON file."""
-    with open(news_path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
 def load_prompt(prompt_path: Path) -> str:
     """Load prompt template from markdown file."""
     with open(prompt_path, "r", encoding="utf-8") as f:
@@ -71,9 +64,8 @@ TOPIC ID: {news.get('topic_id', 'unknown')}
 """
 
 
-def generate_dialogue(news_path: Path, prompt_path: Path, model: str = "gpt-4o") -> dict:
+def generate_dialogue(news: dict, prompt_path: Path, model: str = "gpt-4o") -> dict:
     """Generate dialogue by sending news and prompt to ChatGPT."""
-    news = load_news(news_path)
     system_prompt = load_prompt(prompt_path)
     user_message = build_user_message(news)
     print("USER MESSAGE")

@@ -37,7 +37,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtube",
 ]
 
-PLAYLIST_TITLE = "DailyNews"
+PLAYLIST_TITLE = "Daily News"
 
 
 def get_scheduled_publish_time() -> str:

@@ -228,7 +228,7 @@ JSON ONLY
   },
   "hook": "",
   "hook_emphasis": ["word"],
-  "dialogue": [
+  "script": [
     {
       "speaker": "Speaker 1",
       "text": "",
