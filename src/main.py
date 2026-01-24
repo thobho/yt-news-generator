@@ -16,11 +16,8 @@ from generate_dialogue import generate_dialogue
 from generate_audio import generate_audio, DEFAULT_VOICE_A, DEFAULT_VOICE_B
 from generate_images import generate_image_prompts, generate_all_images
 from generate_yt_metadata import generate_yt_metadata
-from fetch_sources import (
-    load_prompt as load_summarizer_prompt,
-    process_sources,
-    build_enriched_news,
-)
+from perplexity_search import run_perplexity_enrichment
+from upload_youtube import upload_to_youtube
 
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
@@ -84,7 +81,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Generate YouTube Shorts video from news (resumable)"
     )
-    parser.add_argument("news", type=Path, help="Path to news.json file")
+    parser.add_argument("news", type=Path, help="Path to news-seed.json file")
     parser.add_argument("prompt", type=Path, help="Path to dialogue prompt.md file")
 
     parser.add_argument("--resume", type=Path, metavar="RUN_DIR",
@@ -113,7 +110,7 @@ def main():
         shutil.copy2(args.news, run_dir / args.news.name)
         shutil.copy2(args.prompt, run_dir / args.prompt.name)
 
-    enriched_path = run_dir / "enriched_news.json"
+    downloaded_news_path = run_dir / "downloaded_news_data.json"
     dialogue_path = run_dir / "dialogue.json"
     audio_path = run_dir / "audio.mp3"
     timeline_path = run_dir / "timeline.json"
@@ -123,23 +120,10 @@ def main():
     yt_metadata_path = run_dir / "yt_metadata.md"
 
     # =========================
-    # STEP 1: ENRICH SOURCES
+    # STEP 1: GET DATA FROM PERPLEXITY
     # =========================
 
-    if enriched_path.exists():
-        print("Step 1: enriched_news.json exists, skipping.", file=sys.stderr)
-    else:
-        print("Step 1: Enriching sources...", file=sys.stderr)
-
-        with open(args.news, "r", encoding="utf-8") as f:
-            news_data = json.load(f)
-
-        summarizer_prompt = load_summarizer_prompt(SUMMARIZER_PROMPT_PATH)
-        results = process_sources(news_data, summarizer_prompt, args.summarizer_model)
-        enriched_data = build_enriched_news(news_data, results)
-
-        with open(enriched_path, "w", encoding="utf-8") as f:
-            json.dump(enriched_data, f, ensure_ascii=False, indent=2)
+    run_perplexity_enrichment(input_path=args.news, output_path=downloaded_news_path)
 
     # =========================
     # STEP 2: DIALOGUE
@@ -149,8 +133,9 @@ def main():
         print("Step 2: dialogue.json exists, skipping.", file=sys.stderr)
     else:
         print("Step 2: Generating dialogue...", file=sys.stderr)
-        news_input = enriched_path if enriched_path.exists() else args.news
-        dialogue_data = generate_dialogue(news_input, args.prompt, args.model)
+        with open(downloaded_news_path, "r", encoding="utf-8") as f:
+            news_data = json.load(f)
+        dialogue_data = generate_dialogue(news_data, args.prompt, args.model)
         with open(dialogue_path, "w", encoding="utf-8") as f:
             json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
 
@@ -232,9 +217,17 @@ def main():
         print("Step 6: yt_metadata.md exists, skipping.", file=sys.stderr)
     else:
         print("Step 6: Generating YouTube metadata...", file=sys.stderr)
-        metadata = generate_yt_metadata(enriched_path, args.model)
+        metadata = generate_yt_metadata(downloaded_news_path, args.model)
         with open(yt_metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata)
+
+    # =========================
+    # STEP 7: UPLOAD TO YOUTUBE
+    # =========================
+
+    wait_for_user("Review video and metadata before uploading to YouTube.")
+
+    upload_to_youtube(video_path, yt_metadata_path)
 
     print("\nDone.", file=sys.stderr)
 

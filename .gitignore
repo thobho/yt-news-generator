@@ -39,3 +39,7 @@ npm-debug.log*
 # Temporary files
 *.tmp
 *.temp
+
+# YouTube API credentials
+credentials/client_secrets.json
+credentials/token.json
