@@ -86,6 +86,80 @@ def generate_dialogue(news: dict, prompt_path: Path, model: str = "gpt-4o") -> d
     return json.loads(content)
 
 
+def log_corrections(original: dict, refined: dict) -> list[str]:
+    """Compare original and refined dialogue, return list of changes."""
+    changes = []
+
+    if original.get("hook") != refined.get("hook"):
+        changes.append(f"HOOK: '{original.get('hook')}' → '{refined.get('hook')}'")
+
+    if original.get("climax_line") != refined.get("climax_line"):
+        changes.append(f"CLIMAX: '{original.get('climax_line')}' → '{refined.get('climax_line')}'")
+
+    if original.get("viewer_question") != refined.get("viewer_question"):
+        changes.append(f"QUESTION: '{original.get('viewer_question')}' → '{refined.get('viewer_question')}'")
+
+    orig_script = original.get("script", [])
+    new_script = refined.get("script", [])
+
+    for i, (orig, new) in enumerate(zip(orig_script, new_script)):
+        if orig.get("text") != new.get("text"):
+            changes.append(f"SCRIPT[{i}] ({orig.get('speaker')}): '{orig.get('text')}' → '{new.get('text')}'")
+        if orig.get("emphasis") != new.get("emphasis"):
+            changes.append(f"SCRIPT[{i}] emphasis: {orig.get('emphasis')} → {new.get('emphasis')}")
+
+    return changes
+
+
+def refine_dialogue(
+    dialogue: dict,
+    news: dict,
+    prompt_path: Path,
+    model: str = "gpt-4o"
+) -> dict:
+    """Refine dialogue using a second LLM pass for corrections."""
+    system_prompt = load_prompt(prompt_path)
+
+    user_message = f"""## dialogue.json
+```json
+{json.dumps(dialogue, ensure_ascii=False, indent=2)}
+```
+
+## data_source.json
+```json
+{json.dumps(news, ensure_ascii=False, indent=2)}
+```
+"""
+
+    print("Step 2: Refining dialogue...", file=sys.stderr)
+    client = OpenAI()
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.5,
+    )
+
+    content = response.choices[0].message.content
+    refined = json.loads(content)
+
+    # Log corrections
+    changes = log_corrections(dialogue, refined)
+    if changes:
+        print("\n=== REFINEMENT CORRECTIONS ===", file=sys.stderr)
+        for change in changes:
+            print(f"  • {change}", file=sys.stderr)
+        print(f"=== {len(changes)} change(s) made ===\n", file=sys.stderr)
+    else:
+        print("Step 2: No corrections needed.", file=sys.stderr)
+
+    return refined
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate dialogue from news using ChatGPT"

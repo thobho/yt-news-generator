@@ -12,7 +12,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from generate_dialogue import generate_dialogue
+from generate_dialogue import generate_dialogue, refine_dialogue
 from generate_audio import generate_audio, DEFAULT_VOICE_A, DEFAULT_VOICE_B
 from generate_images import generate_image_prompts, generate_all_images
 from generate_yt_metadata import generate_yt_metadata
@@ -23,6 +23,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
 IMAGE_PROMPT_PATH = PROJECT_ROOT / "data" / "image_prompt.md"
 SUMMARIZER_PROMPT_PATH = PROJECT_ROOT / "data" / "fetch_sources_summariser_prompt.md"
+DIALOGUE_REFINE_PROMPT_PATH = PROJECT_ROOT / "data" / "dialogue-prompt" / "prompt-5-step-2.md"
 
 
 # =========================
@@ -132,10 +133,16 @@ def main():
     if dialogue_path.exists():
         print("Step 2: dialogue.json exists, skipping.", file=sys.stderr)
     else:
-        print("Step 2: Generating dialogue...", file=sys.stderr)
+        print("Step 2a: Generating dialogue...", file=sys.stderr)
         with open(downloaded_news_path, "r", encoding="utf-8") as f:
             news_data = json.load(f)
         dialogue_data = generate_dialogue(news_data, args.prompt, args.model)
+
+        print("Step 2b: Refining dialogue...", file=sys.stderr)
+        dialogue_data = refine_dialogue(
+            dialogue_data, news_data, DIALOGUE_REFINE_PROMPT_PATH, args.model
+        )
+
         with open(dialogue_path, "w", encoding="utf-8") as f:
             json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
 
