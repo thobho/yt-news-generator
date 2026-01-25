@@ -197,13 +197,16 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> 
     return video_id
 
 
-def upload_to_youtube(video_path: Path, metadata_path: Path):
+def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
     """
     Full upload pipeline: authenticate, parse metadata, upload, add to playlist.
 
     Args:
         video_path: Path to the video file (.mp4)
         metadata_path: Path to yt_metadata.md
+
+    Returns:
+        The YouTube video ID
     """
     if not video_path.exists():
         print(f"Error: Video not found: {video_path}", file=sys.stderr)
@@ -234,6 +237,8 @@ def upload_to_youtube(video_path: Path, metadata_path: Path):
         f"https://youtu.be/{video_id}",
         file=sys.stderr,
     )
+
+    return video_id
 
 
 if __name__ == "__main__":
