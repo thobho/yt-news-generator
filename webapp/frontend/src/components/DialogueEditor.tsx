@@ -1,0 +1,128 @@
+import { useState } from 'react'
+import { Dialogue, DialogueItem, updateDialogue } from '../api/client'
+
+interface DialogueEditorProps {
+  runId: string
+  dialogue: Dialogue
+  onSave: (dialogue: Dialogue) => void
+  onCancel: () => void
+}
+
+export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: DialogueEditorProps) {
+  const [editedDialogue, setEditedDialogue] = useState<Dialogue>({ ...dialogue })
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const updateField = (field: keyof Dialogue, value: string) => {
+    setEditedDialogue({ ...editedDialogue, [field]: value })
+  }
+
+  const updateScriptItem = (index: number, field: keyof DialogueItem, value: string) => {
+    const newScript = [...editedDialogue.script]
+    newScript[index] = { ...newScript[index], [field]: value }
+    setEditedDialogue({ ...editedDialogue, script: newScript })
+  }
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    setError(null)
+
+    try {
+      await updateDialogue(runId, editedDialogue)
+      onSave(editedDialogue)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="dialogue-editor">
+      <div className="editor-header">
+        <h3>Edit Dialogue</h3>
+        <p className="editor-hint">Edit the dialogue before generating audio. Changes cannot be made after audio is generated.</p>
+      </div>
+
+      {error && <div className="error-message">{error}</div>}
+
+      <div className="editor-section">
+        <label>Hook (Opening question)</label>
+        <input
+          type="text"
+          value={editedDialogue.hook}
+          onChange={(e) => updateField('hook', e.target.value)}
+          disabled={isSaving}
+        />
+      </div>
+
+      <div className="editor-section">
+        <label>Scene Description</label>
+        <input
+          type="text"
+          value={editedDialogue.scene}
+          onChange={(e) => updateField('scene', e.target.value)}
+          disabled={isSaving}
+        />
+      </div>
+
+      <div className="editor-section">
+        <label>Script</label>
+        {editedDialogue.script.map((item, index) => (
+          <div key={index} className="script-item-editor">
+            <div className="script-item-header">
+              <select
+                value={item.speaker}
+                onChange={(e) => updateScriptItem(index, 'speaker', e.target.value)}
+                disabled={isSaving}
+              >
+                <option value="Adam">Adam</option>
+                <option value="Bella">Bella</option>
+              </select>
+              {item.source && (
+                <span className="source-badge" title={item.source.text}>
+                  {item.source.name}
+                </span>
+              )}
+            </div>
+            <textarea
+              value={item.text}
+              onChange={(e) => updateScriptItem(index, 'text', e.target.value)}
+              rows={2}
+              disabled={isSaving}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="editor-section">
+        <label>Climax Line</label>
+        <input
+          type="text"
+          value={editedDialogue.climax_line}
+          onChange={(e) => updateField('climax_line', e.target.value)}
+          disabled={isSaving}
+        />
+      </div>
+
+      <div className="editor-section">
+        <label>Viewer Question (Closing)</label>
+        <input
+          type="text"
+          value={editedDialogue.viewer_question}
+          onChange={(e) => updateField('viewer_question', e.target.value)}
+          disabled={isSaving}
+        />
+      </div>
+
+      <div className="editor-actions">
+        <button onClick={onCancel} disabled={isSaving}>
+          Cancel
+        </button>
+        <button onClick={handleSave} className="primary" disabled={isSaving}>
+          {isSaving ? 'Saving...' : 'Save Changes'}
+        </button>
+      </div>
+    </div>
+  )
+}
