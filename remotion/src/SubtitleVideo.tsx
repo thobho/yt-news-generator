@@ -96,6 +96,53 @@ const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis, isCurrentCh
 };
 
 /* =========================
+   FILM GRAIN OVERLAY
+========================= */
+
+const FilmGrain: React.FC = () => {
+  const frame = useCurrentFrame();
+
+  // Animate grain by shifting position each frame
+  const grainOffset = (frame * 50) % 200;
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        opacity: 0.08, // 8% - slightly stronger grain
+        mixBlendMode: "overlay",
+      }}
+    >
+      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="grain" x="0%" y="0%" width="100%" height="100%">
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.7"
+              numOctaves="4"
+              seed={frame % 10}
+              stitchTiles="stitch"
+            />
+            <feColorMatrix type="saturate" values="0" />
+          </filter>
+        </defs>
+        <rect
+          width="100%"
+          height="100%"
+          filter="url(#grain)"
+          transform={`translate(${grainOffset}, ${grainOffset})`}
+        />
+      </svg>
+    </div>
+  );
+};
+
+/* =========================
    EQUALIZER (SUBTLE)
 ========================= */
 
@@ -177,66 +224,110 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     );
 
   /* =========================
-     IMAGE LOGIC (always show an image, never black screen)
+     IMAGE LOGIC (change image every few speaker changes)
   ========================= */
 
+  // Find current segment
   const effectiveSegmentIndex = segments.findIndex(
     (s) => currentTimeMs < s.end_ms
   );
-
-  // Clamp to valid range
   const safeSegmentIndex = effectiveSegmentIndex >= 0
     ? effectiveSegmentIndex
     : segments.length - 1;
 
-  const getCurrentImage = (): ImageInfo => {
-    // First try exact match
-    for (const img of images) {
-      if (img.segment_index === safeSegmentIndex) {
-        return img;
-      }
-      if (img.segment_indices?.includes(safeSegmentIndex)) {
-        return img;
+  // Count speaker changes and calculate image switches
+  const SPEAKER_CHANGES_PER_IMAGE = 3; // Change image every 3 speaker switches
+
+  const getSpeakerChangeCount = (): number => {
+    let changeCount = 0;
+    let lastSpeaker: string | undefined;
+
+    for (let i = 0; i <= safeSegmentIndex; i++) {
+      const seg = segments[i];
+      if (seg.speaker && seg.speaker !== lastSpeaker) {
+        changeCount++;
+        lastSpeaker = seg.speaker;
       }
     }
 
-    // Find closest previous image
-    let bestImage = images[0];
-    for (const img of images) {
-      const imgSegIdx = img.segment_index ?? img.segment_indices?.[0] ?? 0;
-      const bestSegIdx = bestImage.segment_index ?? bestImage.segment_indices?.[0] ?? 0;
-      if (imgSegIdx <= safeSegmentIndex && imgSegIdx > bestSegIdx) {
-        bestImage = img;
-      }
-    }
-
-    // Always return something - never null
-    return bestImage ?? images[0];
+    return Math.max(0, changeCount - 1); // First speaker is change 0
   };
 
-  const currentImage = images.length > 0 ? getCurrentImage() : null;
+  const speakerChangeCount = getSpeakerChangeCount();
+  const imageChangeNumber = Math.floor(speakerChangeCount / SPEAKER_CHANGES_PER_IMAGE);
+  const currentImageIndex = images.length > 0
+    ? imageChangeNumber % images.length
+    : 0;
+  const currentImage = images.length > 0 ? images[currentImageIndex] : null;
 
   /* =========================
-     BACKGROUND MOTION (subtle per-image zoom)
+     IMAGE TIMING (for motion effects)
   ========================= */
 
-  // Find when current image started
-  const imageStartFrame = (() => {
-    if (!currentImage) return 0;
-    const segIdx = currentImage.segment_index ?? currentImage.segment_indices?.[0] ?? 0;
-    const clampedIdx = Math.max(0, Math.min(segIdx, segments.length - 1));
-    const seg = segments[clampedIdx];
-    if (!seg) return 0;
-    return Math.floor((seg.start_ms / 1000) * fps);
-  })();
+  // Find when the current image started (at the speaker change that triggered this image)
+  const getImageStartFrame = (): number => {
+    const targetChangeCount = imageChangeNumber * SPEAKER_CHANGES_PER_IMAGE;
+    let changeCount = 0;
+    let lastSpeaker: string | undefined;
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.speaker && seg.speaker !== lastSpeaker) {
+        if (changeCount === targetChangeCount) {
+          return Math.floor((seg.start_ms / 1000) * fps);
+        }
+        changeCount++;
+        lastSpeaker = seg.speaker;
+      }
+    }
+
+    return 0;
+  };
+
+  const imageStartFrame = getImageStartFrame();
+
+  /* =========================
+     BACKGROUND MOTION (cinematic push-in + parallax pan)
+  ========================= */
 
   const framesIntoImage = frame - imageStartFrame;
-  const zoomDuration = fps * 4; // 4 seconds for full zoom cycle
+  const zoomDuration = fps * 8; // 8 seconds for full zoom cycle
 
+  // Cinematic push-in effect: 1.0 → 1.08 over 8 seconds (stronger zoom)
   const scale = interpolate(
     framesIntoImage,
     [0, zoomDuration],
-    [1.0, 1.06], // Subtle but noticeable: 6% zoom over 4 seconds
+    [1.0, 1.08],
+    { extrapolateRight: "clamp" }
+  );
+
+  // Parallax pan effect - deterministic "random" direction based on image index
+  // Use image index to determine pan direction (8 possible directions)
+  const panDirections = [
+    { x: 1, y: 0 },    // right
+    { x: -1, y: 0 },   // left
+    { x: 0, y: 1 },    // down
+    { x: 0, y: -1 },   // up
+    { x: 1, y: 1 },    // diagonal down-right
+    { x: -1, y: 1 },   // diagonal down-left
+    { x: 1, y: -1 },   // diagonal up-right
+    { x: -1, y: -1 },  // diagonal up-left
+  ];
+
+  const panDirection = panDirections[currentImageIndex % panDirections.length];
+  const panAmount = 15; // pixels to pan over duration
+
+  const panX = interpolate(
+    framesIntoImage,
+    [0, zoomDuration],
+    [0, panDirection.x * panAmount],
+    { extrapolateRight: "clamp" }
+  );
+
+  const panY = interpolate(
+    framesIntoImage,
+    [0, zoomDuration],
+    [0, panDirection.y * panAmount],
     { extrapolateRight: "clamp" }
   );
 
@@ -252,7 +343,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      {/* Background image */}
+      {/* Background image with cinematic effects */}
       {currentImage?.file && (
         <AbsoluteFill style={{ overflow: "hidden" }}>
           <Img
@@ -261,19 +352,33 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              transform: `scale(${scale})`,
+              transform: `scale(${scale}) translate(${panX}px, ${panY}px)`,
+              willChange: "transform",
             }}
           />
         </AbsoluteFill>
       )}
 
-      {/* Dark overlay */}
+      {/* Depth vignette - affects image only */}
+      <AbsoluteFill
+        style={{
+          background:
+            "radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.8) 100%)",
+          opacity: 0.45,
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Dark overlay for text readability */}
       <AbsoluteFill
         style={{
           background:
             "linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0.2))",
         }}
       />
+
+      {/* Film grain overlay - adds realism, removes AI smoothness */}
+      <FilmGrain />
 
       {/* Audio */}
       <Audio src={staticFile(audioFile)} />
@@ -302,7 +407,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           </div>
           <div
             style={{
-              color: "rgba(255,255,255,0.45)",
+              color: "#FFFFFF",
               fontSize: 28,
               fontWeight: 400,
               lineHeight: 1.3,
@@ -313,7 +418,22 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
         </div>
       )}
 
-      {/* Subtitles + Equalizer (centered layout) */}
+      {/* Equalizer - fixed position */}
+      <div
+        style={{
+          position: "absolute",
+          top: "38%",
+          left: 0,
+          right: 0,
+          display: "flex",
+          justifyContent: "center",
+          pointerEvents: "none",
+        }}
+      >
+        <Equalizer />
+      </div>
+
+      {/* Subtitles (centered layout) */}
       <AbsoluteFill
         style={{
           display: "flex",
@@ -324,16 +444,6 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           paddingRight: 48,
         }}
       >
-        {/* Equalizer above text */}
-        <div
-          style={{
-            marginBottom: 32,
-            pointerEvents: "none",
-          }}
-        >
-          <Equalizer />
-        </div>
-
         {/* Subtitles container */}
         <div
           style={{
@@ -408,6 +518,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           }}
         />
       </div>
+
     </AbsoluteFill>
   );
 };
