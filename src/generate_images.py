@@ -16,6 +16,10 @@ from pathlib import Path
 import requests
 from openai import OpenAI
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def load_json(path: Path) -> dict:
     """Load JSON file."""
@@ -122,21 +126,22 @@ def generate_all_images(
     client = OpenAI()
     images = prompts_data.get("images", [])
 
-    print(f"Generating {len(images)} images...", file=sys.stderr)
+    logger.info("Generating %d images with DALL-E...", len(images))
 
     for i, image_info in enumerate(images):
         image_id = image_info["id"]
         prompt = image_info["prompt"]
         output_path = output_dir / f"{image_id}.png"
 
-        print(f"  [{i + 1}/{len(images)}] Generating {image_id}...", file=sys.stderr)
+        logger.info("[%d/%d] Generating %s...", i + 1, len(images), image_id)
+        logger.debug("Prompt: %s", prompt[:100])
 
         try:
             generate_image(client, prompt, output_path)
             image_info["file"] = str(output_path.name)
-            print(f"    Saved: {output_path}", file=sys.stderr)
+            logger.debug("Saved: %s", output_path)
         except Exception as e:
-            print(f"    Error generating {image_id}: {e}", file=sys.stderr)
+            logger.error("Failed to generate %s: %s", image_id, e)
             image_info["file"] = None
             image_info["error"] = str(e)
 
@@ -164,31 +169,30 @@ def main():
     args = parser.parse_args()
 
     if not args.dialogue.exists():
-        print(f"Error: Dialogue file not found: {args.dialogue}", file=sys.stderr)
+        logger.error("Dialogue file not found: %s", args.dialogue)
         sys.exit(1)
 
     if not args.prompt.exists():
-        print(f"Error: Prompt file not found: {args.prompt}", file=sys.stderr)
+        logger.error("Prompt file not found: %s", args.prompt)
         sys.exit(1)
 
     # Create output directory
     args.output.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Generate prompts
-    print("Generating image prompts...", file=sys.stderr)
+    logger.info("Generating image prompts with model=%s", args.model)
     prompts_data = generate_image_prompts(args.dialogue, args.prompt, args.model)
-    print(f"Generated {len(prompts_data.get('images', []))} image prompts.", file=sys.stderr)
+    logger.info("Generated %d image prompts", len(prompts_data.get('images', [])))
 
     # Step 2: Generate actual images (unless --prompts-only)
     if not args.prompts_only:
-        print("\nGenerating images with DALL-E...", file=sys.stderr)
         prompts_data = generate_all_images(prompts_data, args.output)
 
     # Save prompts/metadata JSON
     json_path = args.output / "images.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(prompts_data, f, ensure_ascii=False, indent=2)
-    print(f"\nMetadata saved to: {json_path}", file=sys.stderr)
+    logger.info("Metadata saved to: %s", json_path)
 
 
 if __name__ == "__main__":

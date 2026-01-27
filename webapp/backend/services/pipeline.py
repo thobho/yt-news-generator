@@ -18,6 +18,13 @@ DATA_DIR = PROJECT_ROOT / "data"
 SEEDS_DIR = DATA_DIR / "news-seeds"
 IMAGE_PROMPT_PATH = DATA_DIR / "image_prompt.md"
 
+# Add src to path for imports
+sys.path.insert(0, str(SRC_DIR))
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 # Import settings service for dynamic prompt paths
 from . import settings as settings_service
 
@@ -27,15 +34,13 @@ def get_dialogue_prompt_paths() -> tuple[Path, Path]:
     current_settings = settings_service.load_settings()
     return settings_service.get_prompt_paths(current_settings.prompt_version)
 
-# Add src to path for imports
-sys.path.insert(0, str(SRC_DIR))
-
 
 def create_run_dir() -> Path:
     """Create a new run directory with timestamp ID."""
     run_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = OUTPUT_DIR / f"run_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Created run directory: %s", run_dir)
     return run_dir
 
 
@@ -86,6 +91,7 @@ def generate_dialogue(run_dir: Path, model: str = "gpt-4o") -> dict:
     Generate dialogue from seed.
     Steps: perplexity search -> dialogue generation -> refinement
     """
+    logger.info("Starting dialogue generation for run: %s", run_dir.name)
     from perplexity_search import run_perplexity_enrichment
     from generate_dialogue import generate_dialogue as gen_dialogue, refine_dialogue
 
@@ -125,6 +131,7 @@ def generate_dialogue(run_dir: Path, model: str = "gpt-4o") -> dict:
     with open(paths["dialogue"], "w", encoding="utf-8") as f:
         json.dump(dialogue_data, f, ensure_ascii=False, indent=2)
 
+    logger.info("Dialogue generation complete for run: %s", run_dir.name)
     return dialogue_data
 
 
@@ -140,6 +147,7 @@ def update_dialogue(run_dir: Path, dialogue_data: dict) -> dict:
 
 def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella") -> dict:
     """Generate audio from dialogue."""
+    logger.info("Starting audio generation for run: %s", run_dir.name)
     from generate_audio import generate_audio as gen_audio
 
     paths = get_run_paths(run_dir)
@@ -162,6 +170,7 @@ def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella")
 
 def generate_images(run_dir: Path, model: str = "gpt-4o") -> dict:
     """Generate images from dialogue."""
+    logger.info("Starting image generation for run: %s", run_dir.name)
     from generate_images import generate_image_prompts, generate_all_images
 
     paths = get_run_paths(run_dir)
@@ -221,6 +230,7 @@ def assign_segment_indices(prompts_data: dict, timeline_path: Path) -> dict:
 
 def generate_video(run_dir: Path) -> Path:
     """Render video using Remotion."""
+    logger.info("Starting video generation for run: %s", run_dir.name)
     paths = get_run_paths(run_dir)
 
     if not paths["audio"].exists():
@@ -268,6 +278,7 @@ def generate_yt_metadata(run_dir: Path, model: str = "gpt-4o") -> str:
 
 def upload_to_youtube(run_dir: Path) -> dict:
     """Upload video to YouTube."""
+    logger.info("Starting YouTube upload for run: %s", run_dir.name)
     from upload_youtube import upload_to_youtube as yt_upload, parse_yt_metadata, get_scheduled_publish_time
 
     paths = get_run_paths(run_dir)
@@ -304,6 +315,7 @@ def upload_to_youtube(run_dir: Path) -> dict:
     with open(paths["yt_upload"], "w", encoding="utf-8") as f:
         json.dump(upload_info, f, ensure_ascii=False, indent=2)
 
+    logger.info("YouTube upload complete: %s (episode %d)", upload_info["url"], current_episode)
     return upload_info
 
 

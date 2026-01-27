@@ -15,6 +15,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from google.auth.transport.requests import Request
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -76,14 +80,15 @@ def authenticate() -> Credentials:
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
+            logger.debug("Refreshing expired credentials")
             creds.refresh(Request())
         else:
             if not CLIENT_SECRETS_PATH.exists():
-                print(
-                    f"Error: Client secrets not found at {CLIENT_SECRETS_PATH}\n"
-                    "Download OAuth 2.0 credentials from Google Cloud Console\n"
+                logger.error(
+                    "Client secrets not found at %s. "
+                    "Download OAuth 2.0 credentials from Google Cloud Console "
                     "and save as credentials/client_secrets.json",
-                    file=sys.stderr,
+                    CLIENT_SECRETS_PATH,
                 )
                 sys.exit(1)
 
@@ -146,7 +151,7 @@ def find_or_create_playlist(youtube, title: str) -> str:
         },
     )
     response = request.execute()
-    print(f"Created playlist '{title}': {response['id']}", file=sys.stderr)
+    logger.info("Created playlist '%s': %s", title, response['id'])
     return response["id"]
 
 
@@ -185,15 +190,15 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> 
 
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
-    print("Uploading video...", file=sys.stderr)
+    logger.info("Uploading video to YouTube...")
     response = None
     while response is None:
         status, response = request.next_chunk()
         if status:
-            print(f"  Upload progress: {int(status.progress() * 100)}%", file=sys.stderr)
+            logger.debug("Upload progress: %d%%", int(status.progress() * 100))
 
     video_id = response["id"]
-    print(f"Upload complete. Video ID: {video_id}", file=sys.stderr)
+    logger.info("Upload complete. Video ID: %s", video_id)
     return video_id
 
 
@@ -209,18 +214,18 @@ def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
         The YouTube video ID
     """
     if not video_path.exists():
-        print(f"Error: Video not found: {video_path}", file=sys.stderr)
+        logger.error("Video not found: %s", video_path)
         sys.exit(1)
     if not metadata_path.exists():
-        print(f"Error: Metadata not found: {metadata_path}", file=sys.stderr)
+        logger.error("Metadata not found: %s", metadata_path)
         sys.exit(1)
 
     metadata = parse_yt_metadata(metadata_path)
     publish_at = get_scheduled_publish_time()
 
-    print(f"Title: {metadata['title']}", file=sys.stderr)
-    print(f"Tags: {', '.join(metadata['tags'])}", file=sys.stderr)
-    print(f"Scheduled publish: {publish_at}", file=sys.stderr)
+    logger.info("Title: %s", metadata['title'])
+    logger.info("Tags: %s", ', '.join(metadata['tags']))
+    logger.info("Scheduled publish: %s", publish_at)
 
     creds = authenticate()
     youtube = build("youtube", "v3", credentials=creds)
@@ -230,13 +235,9 @@ def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
     # Add to DailyNews playlist
     playlist_id = find_or_create_playlist(youtube, PLAYLIST_TITLE)
     add_to_playlist(youtube, playlist_id, video_id)
-    print(f"Added to playlist '{PLAYLIST_TITLE}'", file=sys.stderr)
+    logger.info("Added to playlist '%s'", PLAYLIST_TITLE)
 
-    print(
-        f"\nVideo scheduled for {publish_at}\n"
-        f"https://youtu.be/{video_id}",
-        file=sys.stderr,
-    )
+    logger.info("Video scheduled for %s: https://youtu.be/%s", publish_at, video_id)
 
     return video_id
 

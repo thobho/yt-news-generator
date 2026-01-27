@@ -15,6 +15,10 @@ from urllib.parse import urlparse
 
 from perplexity import Perplexity
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 # =========================
 # CONSTANTS
@@ -128,7 +132,11 @@ def run_perplexity_enrichment(
     output_path: Path,
     client: Optional[Perplexity] = None,
 ):
+    logger.info("Loading news seed from: %s", input_path)
     news_text = load_news_seed(input_path)
+    logger.debug("News seed: %s...", news_text[:100])
+
+    logger.info("Searching Perplexity for news sources...")
     search = search_news(news_text, client)
 
     enriched = build_enriched_news_json(
@@ -136,10 +144,14 @@ def run_perplexity_enrichment(
         search_result=search,
     )
 
+    source_count = len(enriched.get("source_summaries", []))
+    logger.info("Found %d sources", source_count)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(enriched, f, ensure_ascii=False, indent=2)
 
+    logger.info("Enriched news saved to: %s", output_path)
     return enriched
 
 
@@ -161,10 +173,9 @@ def main():
             input_path=args.input,
             output_path=args.output,
         )
-        print(f"Saved enriched news to {args.output}", file=sys.stderr)
 
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("Perplexity search failed: %s", e, exc_info=True)
         sys.exit(1)
 
 

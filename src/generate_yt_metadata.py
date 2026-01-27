@@ -13,6 +13,9 @@ from pathlib import Path
 
 from openai import OpenAI
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent
 YT_METADATA_PROMPT_PATH = PROJECT_ROOT / "data" / "yt_metadata_prompt.md"
@@ -102,6 +105,7 @@ def format_as_markdown(title: str, description: str) -> str:
 
 def generate_yt_metadata(enriched_news_path: Path, model: str = "gpt-4o") -> dict:
     """Generate YouTube metadata using enriched news data."""
+    logger.info("Generating YouTube metadata from: %s", enriched_news_path)
     news = load_json(enriched_news_path)
     system_prompt = load_prompt(YT_METADATA_PROMPT_PATH)
     user_message = build_user_message(news)
@@ -150,7 +154,7 @@ def main():
     args = parser.parse_args()
 
     if not args.news.exists():
-        print(f"Error: File not found: {args.news}", file=sys.stderr)
+        logger.error("File not found: %s", args.news)
         sys.exit(1)
 
     result = generate_yt_metadata(args.news, args.model)
@@ -158,7 +162,7 @@ def main():
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(result)
-        print(f"Output written to: {args.output}", file=sys.stderr)
+        logger.info("YouTube metadata written to: %s", args.output)
     else:
         print(result)
 

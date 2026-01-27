@@ -13,6 +13,10 @@ from pathlib import Path
 
 from openai import OpenAI
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 def load_prompt(prompt_path: Path) -> str:
     """Load prompt template from markdown file."""
     with open(prompt_path, "r", encoding="utf-8") as f:
@@ -68,8 +72,8 @@ def generate_dialogue(news: dict, prompt_path: Path, model: str = "gpt-4o") -> d
     """Generate dialogue by sending news and prompt to ChatGPT."""
     system_prompt = load_prompt(prompt_path)
     user_message = build_user_message(news)
-    print("USER MESSAGE")
-    print(user_message)
+    logger.debug("User message for dialogue generation:\n%s", user_message)
+    logger.info("Generating dialogue with model=%s", model)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -131,7 +135,7 @@ def refine_dialogue(
 ```
 """
 
-    print("Step 2: Refining dialogue...", file=sys.stderr)
+    logger.info("Step 2: Refining dialogue with model=%s", model)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -150,12 +154,11 @@ def refine_dialogue(
     # Log corrections
     changes = log_corrections(dialogue, refined)
     if changes:
-        print("\n=== REFINEMENT CORRECTIONS ===", file=sys.stderr)
+        logger.info("Refinement made %d correction(s):", len(changes))
         for change in changes:
-            print(f"  • {change}", file=sys.stderr)
-        print(f"=== {len(changes)} change(s) made ===\n", file=sys.stderr)
+            logger.info("  - %s", change)
     else:
-        print("Step 2: No corrections needed.", file=sys.stderr)
+        logger.info("Step 2: No corrections needed")
 
     return refined
 
@@ -176,11 +179,11 @@ def main():
     args = parser.parse_args()
 
     if not args.news.exists():
-        print(f"Error: News file not found: {args.news}", file=sys.stderr)
+        logger.error("News file not found: %s", args.news)
         sys.exit(1)
 
     if not args.prompt.exists():
-        print(f"Error: Prompt file not found: {args.prompt}", file=sys.stderr)
+        logger.error("Prompt file not found: %s", args.prompt)
         sys.exit(1)
 
     result = generate_dialogue(args.news, args.prompt, args.model)
@@ -190,7 +193,7 @@ def main():
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(output_json)
-        print(f"Output written to: {args.output}", file=sys.stderr)
+        logger.info("Dialogue written to: %s", args.output)
     else:
         print(output_json)
 

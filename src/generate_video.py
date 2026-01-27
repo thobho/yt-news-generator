@@ -11,6 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
 CHANNEL_LOGO = PROJECT_ROOT / "data" / "media" / "balanced_news_logo.png"
@@ -72,7 +76,7 @@ def prepare_public_dir(
 def install_dependencies() -> None:
     node_modules = REMOTION_DIR / "node_modules"
     if not node_modules.exists():
-        print("Installing Remotion dependencies...", file=sys.stderr)
+        logger.info("Installing Remotion dependencies...")
         subprocess.run(["npm", "install"], cwd=REMOTION_DIR, check=True)
 
 
@@ -83,7 +87,8 @@ def render_video(
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    print("Rendering video...", file=sys.stderr)
+    logger.info("Rendering video with Remotion...")
+    logger.debug("Output: %s, public_dir: %s", output_path, public_dir)
 
     subprocess.run(
         [
@@ -101,7 +106,7 @@ def render_video(
         check=True,
     )
 
-    print(f"Video rendered: {output_path}", file=sys.stderr)
+    logger.info("Video rendered successfully: %s", output_path)
 
 
 def main():
@@ -120,15 +125,15 @@ def main():
     args = parser.parse_args()
 
     if not args.timeline.exists():
-        print(f"Error: timeline not found: {args.timeline}", file=sys.stderr)
+        logger.error("Timeline not found: %s", args.timeline)
         sys.exit(1)
 
     if not args.audio.exists():
-        print(f"Error: audio not found: {args.audio}", file=sys.stderr)
+        logger.error("Audio not found: %s", args.audio)
         sys.exit(1)
 
     if args.images and not args.images.exists():
-        print(f"Warning: images directory not found: {args.images}", file=sys.stderr)
+        logger.warning("Images directory not found: %s", args.images)
         args.images = None
 
     # Per-run public directory
@@ -152,10 +157,10 @@ def main():
         )
 
     except subprocess.CalledProcessError as e:
-        print(f"Error: Remotion failed with exit code {e.returncode}", file=sys.stderr)
+        logger.error("Remotion failed with exit code %d", e.returncode)
         sys.exit(1)
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
+        logger.error("Video generation failed: %s", e, exc_info=True)
         sys.exit(1)
 
 

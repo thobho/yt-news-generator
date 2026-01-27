@@ -2,12 +2,21 @@
 Workflow routes - API endpoints for pipeline actions.
 """
 
+import sys
 import asyncio
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+
+# Add src to path for logging
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from ..services import pipeline
 

@@ -18,6 +18,10 @@ from pathlib import Path
 
 from elevenlabs import ElevenLabs
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 # ==========================
 # CONFIG
@@ -202,10 +206,6 @@ def extract_segments(data: dict):
             speakers.append(s)
         return s
 
-    if hook := data.get("hook"):
-        hook_emphasis = data.get("hook_emphasis", [])
-        segments.append(("__NARRATOR__", hook, hook_emphasis, None))
-
     for d in data.get("script", []):
         emphasis = d.get("emphasis", [])
         source = d.get("source")
@@ -235,13 +235,16 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY not set")
 
+    logger.info("Generating audio from dialogue: %s", dialogue_path)
     client = ElevenLabs(api_key=api_key)
 
     data = load_dialogue(dialogue_path)
     segments, speakers = extract_segments(data)
+    logger.info("Found %d segments with speakers: %s", len(segments), speakers)
 
     voices = [voice_id(voice_a), voice_id(voice_b)]
     voice_map = {s: voices[i % 2] for i, s in enumerate(speakers)}
+    logger.debug("Voice mapping: %s", voice_map)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
@@ -250,10 +253,12 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
 
         for i, (speaker, text, _emphasis, _source) in enumerate(segments):
             out = tmp / f"seg_{i:03}.mp3"
+            logger.debug("Generating segment %d/%d: %s...", i + 1, len(segments), text[:50])
             dur = generate_audio_segment(client, text, voice_map[speaker], out)
             audio_files.append(out)
             durations.append(dur)
 
+        logger.info("Merging %d audio segments", len(audio_files))
         merge_audio(audio_files, output, PAUSE_BETWEEN_SEGMENTS_MS)
 
     timeline_segments = []
@@ -288,6 +293,9 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
 
     with open(timeline, "w", encoding="utf-8") as f:
         json.dump(timeline_data, f, ensure_ascii=False, indent=2)
+
+    total_duration_s = sum(durations) / 1000
+    logger.info("Audio generated: %s (%.1fs, %d chunks)", output, total_duration_s, len(timeline_segments))
 
 
 # ==========================

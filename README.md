@@ -163,8 +163,10 @@ Access the dashboard at `http://localhost:5173`
 ```
 yt-centric-generator/
 ├── run.sh                    # Production runner script
+├── deploy-ec2.sh             # Deploy to new EC2 instance
+├── sync-ec2.sh               # Sync changes to existing EC2
 ├── requirements.txt          # Python dependencies (core)
-├── credentials/              # OAuth credentials (gitignored)
+├── credentials/              # SSH keys & OAuth (gitignored)
 │   └── client_secrets.json   # Google OAuth for YouTube
 ├── data/
 │   ├── dialogue-prompt/      # Dialogue generation prompts
@@ -237,3 +239,91 @@ PORT=3000 ./run.sh
 - Ensure `credentials/client_secrets.json` exists
 - Delete `credentials/token.json` to re-authenticate
 - Check YouTube Data API is enabled in Google Cloud Console
+
+## EC2 Deployment
+
+Deploy the application to AWS EC2 for production use.
+
+### Prerequisites
+
+1. **AWS CLI** installed and configured
+2. **AWS credentials** set as environment variables:
+   ```bash
+   export AWS_ACCESS_KEY_ID=your_access_key
+   export AWS_SECRET_ACCESS_KEY=your_secret_key
+   export AWS_DEFAULT_REGION=us-east-1  # optional
+   ```
+3. **SSH key pair** in `credentials/yt-news-generator-key.pem`
+
+### First-Time Deployment
+
+```bash
+# Deploy new EC2 instance
+./deploy-ec2.sh
+```
+
+This script will:
+1. Launch a t4g.nano instance (Ubuntu 22.04 ARM64)
+2. Create security group (ports 22, 8000)
+3. Wait for SSH to be ready
+4. Install Node.js 18 and Python dependencies
+5. Copy project files via rsync
+6. Set up Python venv and install requirements
+7. Create `.env` template
+8. Start the webapp server
+
+**Output:**
+```
+Instance ID: i-xxxxxxxxx
+Public IP:   x.x.x.x
+Webapp: http://x.x.x.x:8000
+Password: admin123
+```
+
+### Syncing Changes
+
+After making local changes, sync to the existing instance:
+
+```bash
+# Sync to default IP (saved from last deploy)
+./sync-ec2.sh
+
+# Or specify IP explicitly
+./sync-ec2.sh 100.53.141.50
+```
+
+This script will:
+1. Copy changed files via rsync (excludes node_modules, venv, .git)
+2. Restart the uvicorn server
+
+### Updating API Keys
+
+```bash
+# SSH into the instance
+ssh -i credentials/yt-news-generator-key.pem ubuntu@<PUBLIC_IP>
+
+# Edit environment file
+nano /home/ubuntu/yt-news-generator/.env
+
+# Restart the server
+pkill uvicorn
+cd /home/ubuntu/yt-news-generator
+source .env && source venv/bin/activate
+nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
+```
+
+### Deployment Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `deploy-ec2.sh` | Create new EC2 instance from scratch |
+| `sync-ec2.sh` | Sync local changes to existing instance |
+
+### Supported Regions
+
+- us-east-1 (default)
+- us-east-2
+- us-west-1
+- us-west-2
+- eu-west-1
+- eu-central-1

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -5,6 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
+
+# Add src to path for logging_config
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
+
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from .routes import runs, workflow, settings, auth
 from .services import auth as auth_service
@@ -58,6 +67,8 @@ app = FastAPI(
     description="API for browsing and managing video generation runs",
     version="1.0.0",
 )
+
+logger.info("Starting YT News Generator Dashboard API")
 
 # Configure CORS for frontend development
 app.add_middleware(

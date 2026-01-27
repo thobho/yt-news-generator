@@ -44,6 +44,6 @@ npm-debug.log*
 *.tmp
 *.temp
 
-# YouTube API credentials
-credentials/client_secrets.json
-credentials/token.json
+# Credentials (API keys, SSH keys, tokens)
+credentials/
+*.pem
