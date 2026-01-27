@@ -16,9 +16,16 @@ SRC_DIR = PROJECT_ROOT / "src"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 DATA_DIR = PROJECT_ROOT / "data"
 SEEDS_DIR = DATA_DIR / "news-seeds"
-DIALOGUE_PROMPT_PATH = DATA_DIR / "dialogue-prompt" / "prompt-5.md"
-DIALOGUE_REFINE_PROMPT_PATH = DATA_DIR / "dialogue-prompt" / "prompt-5-step-2.md"
 IMAGE_PROMPT_PATH = DATA_DIR / "image_prompt.md"
+
+# Import settings service for dynamic prompt paths
+from . import settings as settings_service
+
+
+def get_dialogue_prompt_paths() -> tuple[Path, Path]:
+    """Get dialogue prompt paths based on current settings."""
+    current_settings = settings_service.load_settings()
+    return settings_service.get_prompt_paths(current_settings.prompt_version)
 
 # Add src to path for imports
 sys.path.insert(0, str(SRC_DIR))
@@ -104,11 +111,14 @@ def generate_dialogue(run_dir: Path, model: str = "gpt-4o") -> dict:
     with open(paths["news_data"], "r", encoding="utf-8") as f:
         news_data = json.load(f)
 
-    dialogue_data = gen_dialogue(news_data, DIALOGUE_PROMPT_PATH, model)
+    # Get prompt paths from settings
+    dialogue_prompt_path, refine_prompt_path = get_dialogue_prompt_paths()
+
+    dialogue_data = gen_dialogue(news_data, dialogue_prompt_path, model)
 
     # Step 3: Refine dialogue
     dialogue_data = refine_dialogue(
-        dialogue_data, news_data, DIALOGUE_REFINE_PROMPT_PATH, model
+        dialogue_data, news_data, refine_prompt_path, model
     )
 
     # Save dialogue
@@ -219,6 +229,9 @@ def generate_video(run_dir: Path) -> Path:
     if not paths["timeline"].exists():
         raise FileNotFoundError("Timeline not found. Generate audio first.")
 
+    # Get current episode number for DYSKUSJA counter
+    episode_number = settings_service.get_episode_number()
+
     # Call generate_video.py as subprocess
     subprocess.run(
         [
@@ -227,6 +240,7 @@ def generate_video(run_dir: Path) -> Path:
             "--audio", str(paths["audio"]),
             "--timeline", str(paths["timeline"]),
             "--images", str(paths["images_dir"]),
+            "--episode", str(episode_number),
             "-o", str(paths["video"]),
         ],
         check=True,
@@ -268,8 +282,14 @@ def upload_to_youtube(run_dir: Path) -> dict:
     metadata = parse_yt_metadata(paths["yt_metadata"])
     publish_at = get_scheduled_publish_time()
 
+    # Get current episode number (before upload, for logging)
+    current_episode = settings_service.get_episode_number()
+
     # Do the upload
     video_id = yt_upload(paths["video"], paths["yt_metadata"])
+
+    # Increment episode counter after successful upload
+    new_episode = settings_service.increment_episode_counter()
 
     # Save upload info
     upload_info = {
@@ -277,7 +297,8 @@ def upload_to_youtube(run_dir: Path) -> dict:
         "url": f"https://youtu.be/{video_id}",
         "title": metadata["title"],
         "publish_at": publish_at,
-        "status": "uploaded"
+        "status": "uploaded",
+        "episode_number": current_episode,
     }
 
     with open(paths["yt_upload"], "w", encoding="utf-8") as f:

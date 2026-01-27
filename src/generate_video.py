@@ -13,6 +13,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
 REMOTION_DIR = PROJECT_ROOT / "remotion"
+CHANNEL_LOGO = PROJECT_ROOT / "data" / "media" / "balanced_news_logo.png"
+
+
+DEFAULT_EPISODE_NUMBER = 6  # Starting episode number for DYSKUSJA counter
 
 
 def prepare_public_dir(
@@ -20,6 +24,7 @@ def prepare_public_dir(
     timeline_path: Path,
     images_dir: Path | None,
     public_dir: Path,
+    episode_number: int,
 ) -> dict:
     """
     Prepare a run-scoped Remotion public directory.
@@ -31,6 +36,10 @@ def prepare_public_dir(
 
     # --- Audio ---
     shutil.copy(audio_path, public_dir / audio_path.name)
+
+    # --- Channel logo ---
+    if CHANNEL_LOGO.exists():
+        shutil.copy(CHANNEL_LOGO, public_dir / "channel-logo.png")
 
     # --- Timeline ---
     with open(timeline_path, "r", encoding="utf-8") as f:
@@ -56,6 +65,7 @@ def prepare_public_dir(
     return {
         "timeline": timeline_data,
         "images": images,
+        "episodeNumber": episode_number,
     }
 
 
@@ -102,6 +112,10 @@ def main():
     parser.add_argument("--timeline", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--images", type=Path)
+    parser.add_argument(
+        "--episode", type=int, default=DEFAULT_EPISODE_NUMBER,
+        help=f"Episode number for DYSKUSJA counter (default: {DEFAULT_EPISODE_NUMBER})"
+    )
 
     args = parser.parse_args()
 
@@ -128,6 +142,7 @@ def main():
             timeline_path=args.timeline,
             images_dir=args.images,
             public_dir=public_dir,
+            episode_number=args.episode,
         )
 
         render_video(

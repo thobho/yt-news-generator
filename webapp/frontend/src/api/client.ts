@@ -1,5 +1,45 @@
 const API_BASE = '/api';
 
+// Auth types and functions
+
+export interface AuthStatus {
+  authenticated: boolean;
+  auth_enabled: boolean;
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const response = await fetch(`${API_BASE}/auth/status`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch auth status');
+  }
+  return response.json();
+}
+
+export async function login(password: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Login failed');
+  }
+}
+
+export async function logout(): Promise<void> {
+  const response = await fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error('Logout failed');
+  }
+}
+
 export interface RunSummary {
   id: string;
   timestamp: string;
@@ -250,6 +290,54 @@ export async function regenerateImage(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to start image regeneration');
+  }
+  return response.json();
+}
+
+// Settings types and functions
+
+export interface Settings {
+  prompt_version: string;
+}
+
+export interface PromptVersionInfo {
+  version: string;
+  label: string;
+  files: {
+    main: string;
+    refine: string;
+  };
+}
+
+export interface AvailableSettings {
+  prompt_versions: PromptVersionInfo[];
+}
+
+export async function fetchSettings(): Promise<Settings> {
+  const response = await fetch(`${API_BASE}/settings`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch settings');
+  }
+  return response.json();
+}
+
+export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
+  const response = await fetch(`${API_BASE}/settings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update settings');
+  }
+  return response.json();
+}
+
+export async function fetchAvailableSettings(): Promise<AvailableSettings> {
+  const response = await fetch(`${API_BASE}/settings/available`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch available settings');
   }
   return response.json();
 }

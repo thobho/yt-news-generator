@@ -41,6 +41,7 @@ export interface SubtitleVideoProps {
   audioFile: string;
   segments: Segment[];
   images: ImageInfo[];
+  episodeNumber?: number; // Episode counter starting from 6
 }
 
 /* =========================
@@ -101,9 +102,39 @@ const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis, isCurrentCh
 
 const FilmGrain: React.FC = () => {
   const frame = useCurrentFrame();
+  const { width, height } = useVideoConfig();
 
-  // Animate grain by shifting position each frame
-  const grainOffset = (frame * 50) % 200;
+  // Generate noise pattern using canvas-like approach with random dots
+  // Use frame to create animated grain effect
+  const seed = frame % 60; // Change pattern every frame, loop every 60
+
+  // Create a pseudo-random but deterministic pattern based on seed
+  const generateNoise = () => {
+    const dots: React.ReactNode[] = [];
+    const gridSize = 8; // Size of noise grid
+    const cols = Math.ceil(width / gridSize);
+    const rows = Math.ceil(height / gridSize);
+
+    for (let i = 0; i < 800; i++) {
+      // Pseudo-random positions based on index and seed
+      const x = ((i * 127 + seed * 311) % cols) * gridSize;
+      const y = ((i * 311 + seed * 127) % rows) * gridSize;
+      const opacity = ((i * 17 + seed * 23) % 100) / 100;
+
+      dots.push(
+        <rect
+          key={i}
+          x={x}
+          y={y}
+          width={gridSize}
+          height={gridSize}
+          fill={opacity > 0.5 ? "white" : "black"}
+          opacity={0.15}
+        />
+      );
+    }
+    return dots;
+  };
 
   return (
     <div
@@ -114,30 +145,164 @@ const FilmGrain: React.FC = () => {
         width: "100%",
         height: "100%",
         pointerEvents: "none",
-        opacity: 0.08, // 8% - slightly stronger grain
+        opacity: 0.12,
         mixBlendMode: "overlay",
       }}
     >
-      <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <filter id="grain" x="0%" y="0%" width="100%" height="100%">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.7"
-              numOctaves="4"
-              seed={frame % 10}
-              stitchTiles="stitch"
-            />
-            <feColorMatrix type="saturate" values="0" />
-          </filter>
-        </defs>
-        <rect
-          width="100%"
-          height="100%"
-          filter="url(#grain)"
-          transform={`translate(${grainOffset}, ${grainOffset})`}
-        />
+      <svg width={width} height={height}>
+        {generateNoise()}
       </svg>
+    </div>
+  );
+};
+
+/* =========================
+   CALL TO ACTION (end of video)
+========================= */
+
+interface CTAProps {
+  startFrame: number;
+  durationFrames: number;
+}
+
+const CallToAction: React.FC<CTAProps> = ({ startFrame, durationFrames }) => {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+
+  const framesIntoAnimation = frame - startFrame;
+
+  // Don't render if not yet visible
+  if (framesIntoAnimation < 0) return null;
+
+  const animationDuration = Math.min(fps * 0.8, durationFrames); // 0.8s animation
+
+  // Opacity: 0 → 1 with ease-out
+  const opacity = interpolate(
+    framesIntoAnimation,
+    [0, animationDuration],
+    [0, 1],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: (t) => 1 - Math.pow(1 - t, 3), // ease-out cubic
+    }
+  );
+
+  // TranslateY: 30px → 0 with ease-out
+  const translateY = interpolate(
+    framesIntoAnimation,
+    [0, animationDuration],
+    [30, 0],
+    {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+      easing: (t) => 1 - Math.pow(1 - t, 3), // ease-out cubic
+    }
+  );
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        bottom: 340, // Higher - well above YT subscribe button area
+        left: 0,
+        right: 0,
+        display: "flex",
+        justifyContent: "center",
+        pointerEvents: "none",
+        opacity,
+        transform: `translateY(${translateY}px)`,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 28,
+            fontWeight: 500,
+            color: "rgba(255, 255, 255, 0.9)",
+            textAlign: "center",
+            lineHeight: 1.4,
+            textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+            letterSpacing: "0.02em",
+          }}
+        >
+          Mniej emocji. Więcej debat.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontSize: 26,
+            fontWeight: 400,
+            color: "rgba(255, 255, 255, 0.75)",
+            textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+          }}
+        >
+          <span>Źródła w opisie</span>
+          <span style={{ fontSize: 24 }}>↓</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* =========================
+   HEADER WATERMARK (episode counter + logo)
+========================= */
+
+interface HeaderWatermarkProps {
+  episodeNumber?: number;
+}
+
+const HeaderWatermark: React.FC<HeaderWatermarkProps> = ({ episodeNumber }) => {
+  // Default to 6 if no episode number provided
+  const displayNumber = episodeNumber ?? 6;
+  const headerHeight = 28; // Shared height for text and logo
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 40,
+        left: 32,
+        right: 32,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        opacity: 0.6,
+        pointerEvents: "none",
+      }}
+    >
+      {/* Episode counter - upper left */}
+      <div
+        style={{
+          fontSize: headerHeight,
+          fontWeight: 700,
+          color: "white",
+          textShadow: "0 2px 6px rgba(0,0,0,0.6)",
+          letterSpacing: "0.08em",
+        }}
+      >
+        DYSKUSJA #{displayNumber}
+      </div>
+
+      {/* Logo - upper right */}
+      <Img
+        src={staticFile("channel-logo.png")}
+        style={{
+          height: headerHeight,
+          width: "auto",
+          objectFit: "contain",
+        }}
+      />
     </div>
   );
 };
@@ -182,6 +347,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   audioFile,
   segments,
   images,
+  episodeNumber,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -224,7 +390,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     );
 
   /* =========================
-     IMAGE LOGIC (change image every few speaker changes)
+     IMAGE LOGIC (show every image exactly once, change on speaker switch)
   ========================= */
 
   // Find current segment
@@ -235,10 +401,21 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     ? effectiveSegmentIndex
     : segments.length - 1;
 
-  // Count speaker changes and calculate image switches
-  const SPEAKER_CHANGES_PER_IMAGE = 3; // Change image every 3 speaker switches
+  // Count total speaker changes in the entire video
+  const getTotalSpeakerChanges = (): number => {
+    let count = 0;
+    let lastSpeaker: string | undefined;
+    for (const seg of segments) {
+      if (seg.speaker && seg.speaker !== lastSpeaker) {
+        count++;
+        lastSpeaker = seg.speaker;
+      }
+    }
+    return Math.max(1, count);
+  };
 
-  const getSpeakerChangeCount = (): number => {
+  // Count speaker changes up to current segment
+  const getCurrentSpeakerChangeCount = (): number => {
     let changeCount = 0;
     let lastSpeaker: string | undefined;
 
@@ -253,27 +430,40 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     return Math.max(0, changeCount - 1); // First speaker is change 0
   };
 
-  const speakerChangeCount = getSpeakerChangeCount();
-  const imageChangeNumber = Math.floor(speakerChangeCount / SPEAKER_CHANGES_PER_IMAGE);
-  const currentImageIndex = images.length > 0
-    ? imageChangeNumber % images.length
-    : 0;
+  const totalSpeakerChanges = getTotalSpeakerChanges();
+  const currentSpeakerChange = getCurrentSpeakerChangeCount();
+
+  // Distribute images evenly: image i shows at speaker change floor(i * totalChanges / numImages)
+  const numImages = images.length;
+  const getCurrentImageIndex = (): number => {
+    if (numImages === 0) return 0;
+
+    for (let imgIdx = numImages - 1; imgIdx >= 0; imgIdx--) {
+      const startAtChange = Math.floor(imgIdx * totalSpeakerChanges / numImages);
+      if (currentSpeakerChange >= startAtChange) {
+        return imgIdx;
+      }
+    }
+    return 0;
+  };
+
+  const currentImageIndex = getCurrentImageIndex();
   const currentImage = images.length > 0 ? images[currentImageIndex] : null;
 
   /* =========================
      IMAGE TIMING (for motion effects)
   ========================= */
 
-  // Find when the current image started (at the speaker change that triggered this image)
+  // Find when the current image started (at its designated speaker change)
   const getImageStartFrame = (): number => {
-    const targetChangeCount = imageChangeNumber * SPEAKER_CHANGES_PER_IMAGE;
+    const imageStartAtChange = Math.floor(currentImageIndex * totalSpeakerChanges / numImages);
     let changeCount = 0;
     let lastSpeaker: string | undefined;
 
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i];
       if (seg.speaker && seg.speaker !== lastSpeaker) {
-        if (changeCount === targetChangeCount) {
+        if (changeCount === imageStartAtChange) {
           return Math.floor((seg.start_ms / 1000) * fps);
         }
         changeCount++;
@@ -286,17 +476,47 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 
   const imageStartFrame = getImageStartFrame();
 
+  // Calculate when the current image ends (next image starts or end of video)
+  const getImageEndFrame = (): number => {
+    const nextImageIndex = currentImageIndex + 1;
+    if (nextImageIndex >= numImages) {
+      // Last image - goes to end of video
+      const lastSegment = segments[segments.length - 1];
+      return Math.floor((lastSegment.end_ms / 1000) * fps);
+    }
+    // Next image starts at this speaker change
+    const nextImageStartAtChange = Math.floor(nextImageIndex * totalSpeakerChanges / numImages);
+    let changeCount = 0;
+    let lastSpeaker: string | undefined;
+
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      if (seg.speaker && seg.speaker !== lastSpeaker) {
+        if (changeCount === nextImageStartAtChange) {
+          return Math.floor((seg.start_ms / 1000) * fps);
+        }
+        changeCount++;
+        lastSpeaker = seg.speaker;
+      }
+    }
+    // Fallback to end of video
+    const lastSegment = segments[segments.length - 1];
+    return Math.floor((lastSegment.end_ms / 1000) * fps);
+  };
+
+  const imageEndFrame = getImageEndFrame();
+
   /* =========================
      BACKGROUND MOTION (cinematic push-in + parallax pan)
   ========================= */
 
   const framesIntoImage = frame - imageStartFrame;
-  const zoomDuration = fps * 8; // 8 seconds for full zoom cycle
+  const imageDuration = Math.max(1, imageEndFrame - imageStartFrame);
 
-  // Cinematic push-in effect: 1.0 → 1.08 over 8 seconds (stronger zoom)
+  // Cinematic push-in effect: 1.0 → 1.08 over entire image duration
   const scale = interpolate(
     framesIntoImage,
-    [0, zoomDuration],
+    [0, imageDuration],
     [1.0, 1.08],
     { extrapolateRight: "clamp" }
   );
@@ -315,18 +535,18 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   ];
 
   const panDirection = panDirections[currentImageIndex % panDirections.length];
-  const panAmount = 15; // pixels to pan over duration
+  const panAmount = 40; // pixels to pan over duration (stronger parallax)
 
   const panX = interpolate(
     framesIntoImage,
-    [0, zoomDuration],
+    [0, imageDuration],
     [0, panDirection.x * panAmount],
     { extrapolateRight: "clamp" }
   );
 
   const panY = interpolate(
     framesIntoImage,
-    [0, zoomDuration],
+    [0, imageDuration],
     [0, panDirection.y * panAmount],
     { extrapolateRight: "clamp" }
   );
@@ -379,6 +599,9 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
 
       {/* Film grain overlay - adds realism, removes AI smoothness */}
       <FilmGrain />
+
+      {/* Header watermark - episode counter + channel logo */}
+      <HeaderWatermark episodeNumber={episodeNumber} />
 
       {/* Audio */}
       <Audio src={staticFile(audioFile)} />
@@ -490,6 +713,21 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
           )}
         </div>
       </AbsoluteFill>
+
+      {/* Call to Action - appears in last 15% of video */}
+      {(() => {
+        const totalDurationMs = segments[segments.length - 1].end_ms;
+        const ctaStartMs = totalDurationMs * 0.85; // Start at 85% of video
+        const ctaStartFrame = Math.floor((ctaStartMs / 1000) * fps);
+        const ctaDurationFrames = Math.floor(((totalDurationMs - ctaStartMs) / 1000) * fps);
+
+        return (
+          <CallToAction
+            startFrame={ctaStartFrame}
+            durationFrames={ctaDurationFrames}
+          />
+        );
+      })()}
 
       {/* Progress bar */}
       <div

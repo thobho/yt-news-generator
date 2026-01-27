@@ -96,6 +96,27 @@ A viewer joining at second three must fully understand the topic by second seven
 
 ---
 
+### PHASE 2.5 — MIDPOINT SHOCK (0:14–0:17)
+
+MANDATORY.
+
+At exactly the midpoint of the script, insert **one sentence** that:
+
+- reframes the entire conflict in a more threatening way  
+- introduces a **non-obvious personal or systemic consequence**
+- makes at least one prior line feel incomplete or naïve  
+- sounds like a line that would be quoted out of context  
+
+This line must:
+- be declarative (no questions)
+- contain the strongest verb in the script
+- NOT introduce new facts
+- escalate stakes, not summarize
+
+Failure to include a clear midpoint shock is a hard failure.
+
+---
+
 ### PHASE 3 — IDEOLOGICAL TUG-OF-WAR (0:07–0:40)
 
 **Format:** dialectical escalation
@@ -122,9 +143,9 @@ Short sentences. Interruptions allowed. Dry delivery.
 
 ## 4. HARD STRUCTURAL CONSTRAINTS
 
-- Duration: ~40 seconds  
-- Word count: 120–140 words  
-- Dialogue lines: exactly 8–10  
+- Target duration: thirty to thirty five seconds  
+- Word count: ninety to one hundred ten words (hard cap)
+- Dialogue lines: about 7–8
 - Facts / numbers: exactly 2 (written out in words)  
 - Sources: minimum 3 lines with `"source"`  
 - Language: Polish  
@@ -172,6 +193,25 @@ Rules:
 - Every line must defend or pressure-test its thesis  
 
 ---
+
+## 6.5 NUMERICAL FRICTION PRIORITY (MANDATORY)
+
+If any provided source contains numerical data that:
+- is asymmetric (one group pays more than another), OR
+- implies scale (millions, percentages, growth, decline), OR
+- contradicts intuitive expectations
+
+THEN:
+
+- At least ONE dialogue line MUST explicitly reference that number
+- That line MUST be framed as conflict, not explanation
+- The number MUST increase tension between T1 and T2
+- Prefer numbers that can be morally or politically interpreted in opposite ways
+
+If a numerical fact is available and not used, the output is invalid.
+
+---
+
 
 ## 7. PREMISE → INTERPRETATION → IMPLICATION
 
@@ -237,7 +277,7 @@ No questions as conclusions.
 
 ## 11. SOURCE ATTRIBUTION — STRICT
 
-- Minimum **three** script lines MUST include a `"source"` field.  
+- Minimum two script lines MUST include a "source" field.
 - Use **exact source names** as provided in the input (e.g. *Business Insider Polska*, *bankier.pl*, *gov.pl*).  
 - The `"text"` field must:
   - summarize the factual claim used in that line  

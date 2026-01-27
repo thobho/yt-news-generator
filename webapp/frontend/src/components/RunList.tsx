@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, RunSummary } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import NewRunDialog from './NewRunDialog'
+import Settings from './Settings'
 
 function formatDate(timestamp: string): string {
   const date = new Date(timestamp)
@@ -49,6 +51,8 @@ export default function RunList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isNewRunOpen, setIsNewRunOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const { logout, isAuthEnabled } = useAuth()
 
   const loadRuns = () => {
     setLoading(true)
@@ -74,10 +78,27 @@ export default function RunList() {
     <div>
       <div className="page-header">
         <h1>YT News Generator Dashboard</h1>
-        <button className="primary new-run-btn" onClick={() => setIsNewRunOpen(true)}>
-          + New Run
-        </button>
+        <div className="header-actions">
+          <button
+            className="settings-toggle"
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          >
+            Settings
+          </button>
+          <button className="primary new-run-btn" onClick={() => setIsNewRunOpen(true)}>
+            + New Run
+          </button>
+          {isAuthEnabled && (
+            <button className="logout-btn" onClick={logout}>
+              Logout
+            </button>
+          )}
+        </div>
       </div>
+
+      {isSettingsOpen && (
+        <Settings onClose={() => setIsSettingsOpen(false)} />
+      )}
 
       <NewRunDialog
         isOpen={isNewRunOpen}

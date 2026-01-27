@@ -10,9 +10,10 @@ type Timeline = {
 };
 
 export const RemotionRoot: React.FC = () => {
-  const { timeline, images } = getInputProps() as {
+  const { timeline, images, episodeNumber } = getInputProps() as {
     timeline: Timeline;
     images: SubtitleVideoProps["images"];
+    episodeNumber?: number;
   };
 
   if (!timeline || !timeline.segments || timeline.segments.length === 0) {
@@ -35,6 +36,7 @@ export const RemotionRoot: React.FC = () => {
         audioFile: timeline.audio_file,
         segments: timeline.segments,
         images: images ?? [],
+        episodeNumber: episodeNumber,
       }}
     />
   );
