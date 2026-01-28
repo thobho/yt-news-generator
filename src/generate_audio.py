@@ -15,10 +15,12 @@ import sys
 import tempfile
 import re
 from pathlib import Path
+from typing import Union
 
 from elevenlabs import ElevenLabs
 
 from logging_config import get_logger
+from storage import StorageBackend
 
 logger = get_logger(__name__)
 
@@ -188,7 +190,16 @@ def merge_audio(files: list[Path], output: Path, pause_ms: int):
 # MAIN GENERATION
 # ==========================
 
-def load_dialogue(path: Path) -> dict:
+def load_dialogue(path: Union[Path, str], storage: StorageBackend = None) -> dict:
+    """Load dialogue from file.
+
+    Args:
+        path: Path to dialogue file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        content = storage.read_text(str(path))
+        return json.loads(content)
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -228,17 +239,32 @@ def voice_id(name: str) -> str:
     return VOICE_IDS.get(name, name)
 
 
-def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
-                   voice_a: str, voice_b: str):
+def generate_audio(
+    dialogue_path: Union[Path, str],
+    output: Union[Path, str],
+    timeline: Union[Path, str],
+    voice_a: str,
+    voice_b: str,
+    storage: StorageBackend = None
+):
+    """Generate audio from dialogue.
 
+    Args:
+        dialogue_path: Path to dialogue JSON file
+        output: Path to output audio file
+        timeline: Path to output timeline file
+        voice_a: Voice name for speaker A
+        voice_b: Voice name for speaker B
+        storage: Optional storage backend. If None, uses local filesystem.
+    """
     api_key = os.environ.get("ELEVENLABS_API_KEY")
     if not api_key:
         raise RuntimeError("ELEVENLABS_API_KEY not set")
 
     logger.info("Generating audio from dialogue: %s", dialogue_path)
-    client = ElevenLabs(api_key=api_key)
+    eleven_client = ElevenLabs(api_key=api_key)
 
-    data = load_dialogue(dialogue_path)
+    data = load_dialogue(dialogue_path, storage)
     segments, speakers = extract_segments(data)
     logger.info("Found %d segments with speakers: %s", len(segments), speakers)
 
@@ -254,15 +280,29 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
         for i, (speaker, text, _emphasis, _source) in enumerate(segments):
             out = tmp / f"seg_{i:03}.mp3"
             logger.debug("Generating segment %d/%d: %s...", i + 1, len(segments), text[:50])
-            dur = generate_audio_segment(client, text, voice_map[speaker], out)
+            dur = generate_audio_segment(eleven_client, text, voice_map[speaker], out)
             audio_files.append(out)
             durations.append(dur)
 
         logger.info("Merging %d audio segments", len(audio_files))
-        merge_audio(audio_files, output, PAUSE_BETWEEN_SEGMENTS_MS)
+
+        # Create temp output for merging
+        temp_output = tmp / "merged.mp3"
+        merge_audio(audio_files, temp_output, PAUSE_BETWEEN_SEGMENTS_MS)
+
+        # Copy to final destination
+        if storage is not None:
+            storage.copy_from_local(temp_output, str(output))
+        else:
+            import shutil
+            output = Path(output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(temp_output, output)
 
     timeline_segments = []
     t = 0
+
+    output_name = Path(output).name if isinstance(output, (str, Path)) else output
 
     for i, ((speaker, text, emphasis, source), dur) in enumerate(zip(segments, durations)):
         base = {
@@ -287,12 +327,18 @@ def generate_audio(dialogue_path: Path, output: Path, timeline: Path,
             t += PAUSE_BETWEEN_SEGMENTS_MS
 
     timeline_data = {
-        "audio_file": output.name,
+        "audio_file": output_name,
         "segments": timeline_segments
     }
 
-    with open(timeline, "w", encoding="utf-8") as f:
-        json.dump(timeline_data, f, ensure_ascii=False, indent=2)
+    timeline_json = json.dumps(timeline_data, ensure_ascii=False, indent=2)
+
+    if storage is not None:
+        storage.write_text(str(timeline), timeline_json)
+    else:
+        timeline = Path(timeline)
+        with open(timeline, "w", encoding="utf-8") as f:
+            f.write(timeline_json)
 
     total_duration_s = sum(durations) / 1000
     logger.info("Audio generated: %s (%.1fs, %d chunks)", output, total_duration_s, len(timeline_segments))

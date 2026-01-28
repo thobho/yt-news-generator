@@ -10,12 +10,13 @@ import sys
 import unicodedata
 from hashlib import sha1
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 from perplexity import Perplexity
 
 from logging_config import get_logger
+from storage import StorageBackend
 
 logger = get_logger(__name__)
 
@@ -31,9 +32,19 @@ LANGUAGE = "pl"
 # CORE LOGIC
 # =========================
 
-def load_news_seed(path: Path) -> str:
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+def load_news_seed(path: Union[Path, str], storage: StorageBackend = None) -> str:
+    """Load news seed from file.
+
+    Args:
+        path: Path to seed file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        content = storage.read_text(str(path))
+        data = json.loads(content)
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
     news_seed = data.get("news_seed", "").strip()
     if not news_seed:
@@ -128,12 +139,21 @@ def build_enriched_news_json(
 
 def run_perplexity_enrichment(
     *,
-    input_path: Path,
-    output_path: Path,
+    input_path: Union[Path, str],
+    output_path: Union[Path, str],
     client: Optional[Perplexity] = None,
+    storage: StorageBackend = None,
 ):
+    """Run Perplexity enrichment on a news seed.
+
+    Args:
+        input_path: Path to input seed file
+        output_path: Path to output enriched file
+        client: Optional Perplexity client
+        storage: Optional storage backend. If None, uses local filesystem.
+    """
     logger.info("Loading news seed from: %s", input_path)
-    news_text = load_news_seed(input_path)
+    news_text = load_news_seed(input_path, storage)
     logger.debug("News seed: %s...", news_text[:100])
 
     logger.info("Searching Perplexity for news sources...")
@@ -147,9 +167,15 @@ def run_perplexity_enrichment(
     source_count = len(enriched.get("source_summaries", []))
     logger.info("Found %d sources", source_count)
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(enriched, f, ensure_ascii=False, indent=2)
+    output_json = json.dumps(enriched, ensure_ascii=False, indent=2)
+
+    if storage is not None:
+        storage.write_text(str(output_path), output_json)
+    else:
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(output_json)
 
     logger.info("Enriched news saved to: %s", output_path)
     return enriched

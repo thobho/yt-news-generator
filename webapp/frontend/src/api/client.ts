@@ -102,6 +102,10 @@ export interface WorkflowState {
   can_generate_audio: boolean;
   can_generate_video: boolean;
   can_upload: boolean;
+  // Regeneration options
+  can_drop_audio?: boolean;
+  can_drop_images?: boolean;
+  can_drop_video?: boolean;
 }
 
 export interface ImageInfo {
@@ -225,9 +229,13 @@ export async function generateVideo(runId: string): Promise<{ task_id: string }>
   return response.json();
 }
 
-export async function uploadToYoutube(runId: string): Promise<{ task_id: string }> {
+export type ScheduleOption = '8:00' | '18:00' | '1hour' | 'auto';
+
+export async function uploadToYoutube(runId: string, scheduleOption: ScheduleOption = 'auto'): Promise<{ task_id: string }> {
   const response = await fetch(`${API_BASE}/workflow/${runId}/upload-youtube`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ schedule_option: scheduleOption }),
   });
   if (!response.ok) {
     const error = await response.json();
@@ -338,6 +346,214 @@ export async function fetchAvailableSettings(): Promise<AvailableSettings> {
   const response = await fetch(`${API_BASE}/settings/available`);
   if (!response.ok) {
     throw new Error('Failed to fetch available settings');
+  }
+  return response.json();
+}
+
+// Running tasks
+
+export interface RunningTaskInfo {
+  status: string;
+  message: string | null;
+}
+
+export interface AllRunningTasks {
+  [runId: string]: {
+    [taskType: string]: RunningTaskInfo;
+  };
+}
+
+export async function fetchAllRunningTasks(): Promise<AllRunningTasks> {
+  const response = await fetch(`${API_BASE}/workflow/tasks/running`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch running tasks');
+  }
+  return response.json();
+}
+
+export async function fetchRunningTasksForRun(runId: string): Promise<{
+  run_id: string;
+  tasks: { [taskType: string]: RunningTaskInfo };
+}> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/tasks/running`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch running tasks');
+  }
+  return response.json();
+}
+
+// Drop functions for regeneration
+
+export async function dropAudio(runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/audio`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to drop audio');
+  }
+  return response.json();
+}
+
+export async function dropVideo(runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/video`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to drop video');
+  }
+  return response.json();
+}
+
+export async function dropImages(runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/images`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to drop images');
+  }
+  return response.json();
+}
+
+// Delete run
+
+export async function deleteRun(runId: string): Promise<{ status: string; deleted_count: number }> {
+  const response = await fetch(`${API_BASE}/runs/${runId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete run');
+  }
+  return response.json();
+}
+
+// Prompts types and functions
+
+export type PromptType = 'dialogue' | 'image' | 'research' | 'yt-metadata';
+
+export interface PromptInfo {
+  id: string;
+  name: string;
+  prompt_type: PromptType;
+  created_at: string | null;
+  is_active: boolean;
+  has_step2: boolean;
+}
+
+export interface PromptContent {
+  id: string;
+  name: string;
+  prompt_type: PromptType;
+  content: string;
+  step2_content: string | null;
+  is_active: boolean;
+}
+
+export interface PromptTypeInfo {
+  type: PromptType;
+  label: string;
+  description: string;
+  prompts: PromptInfo[];
+  active_id: string | null;
+  has_step2: boolean;
+}
+
+export interface AllPromptsResponse {
+  types: PromptTypeInfo[];
+}
+
+export async function fetchAllPrompts(): Promise<AllPromptsResponse> {
+  const response = await fetch(`${API_BASE}/prompts`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch prompts');
+  }
+  return response.json();
+}
+
+export async function fetchPrompt(promptType: PromptType, promptId: string): Promise<PromptContent> {
+  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch prompt');
+  }
+  return response.json();
+}
+
+export async function createPrompt(
+  promptType: PromptType,
+  promptId: string,
+  content: string,
+  step2Content?: string,
+  setActive?: boolean
+): Promise<PromptContent> {
+  const response = await fetch(`${API_BASE}/prompts/${promptType}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt_id: promptId,
+      content,
+      step2_content: step2Content,
+      set_active: setActive,
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to create prompt');
+  }
+  return response.json();
+}
+
+export async function updatePrompt(
+  promptType: PromptType,
+  promptId: string,
+  content: string,
+  step2Content?: string
+): Promise<PromptContent> {
+  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content,
+      step2_content: step2Content,
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update prompt');
+  }
+  return response.json();
+}
+
+export async function deletePrompt(promptType: PromptType, promptId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete prompt');
+  }
+}
+
+export async function setActivePrompt(promptType: PromptType, promptId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/prompts/${promptType}/active`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt_id: promptId }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to set active prompt');
+  }
+}
+
+export async function migratePrompts(): Promise<{ migrated: Record<string, string[]> }> {
+  const response = await fetch(`${API_BASE}/prompts/migrate`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to migrate prompts');
   }
   return response.json();
 }

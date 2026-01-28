@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchRuns, RunSummary } from '../api/client'
+import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import NewRunDialog from './NewRunDialog'
 import Settings from './Settings'
@@ -48,6 +48,7 @@ function MediaIcons({ run }: { run: RunSummary }) {
 
 export default function RunList() {
   const [runs, setRuns] = useState<RunSummary[]>([])
+  const [runningTasks, setRunningTasks] = useState<AllRunningTasks>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isNewRunOpen, setIsNewRunOpen] = useState(false)
@@ -62,9 +63,41 @@ export default function RunList() {
       .finally(() => setLoading(false))
   }
 
+  const loadRunningTasks = () => {
+    fetchAllRunningTasks()
+      .then(setRunningTasks)
+      .catch(() => {}) // Silently fail
+  }
+
+  const handleDeleteRun = async (runId: string, title: string | null) => {
+    const displayName = title || runId
+    if (!confirm(`Are you sure you want to delete "${displayName}"? This cannot be undone.`)) {
+      return
+    }
+    try {
+      await deleteRun(runId)
+      loadRuns()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete run')
+    }
+  }
+
   useEffect(() => {
     loadRuns()
+    loadRunningTasks()
+    // Poll for running tasks every 3 seconds
+    const interval = setInterval(loadRunningTasks, 3000)
+    return () => clearInterval(interval)
   }, [])
+
+  const getRunningTaskInfo = (runId: string) => {
+    const tasks = runningTasks[runId]
+    if (!tasks) return null
+    const taskTypes = Object.keys(tasks)
+    if (taskTypes.length === 0) return null
+    const firstTask = tasks[taskTypes[0]]
+    return firstTask.message || taskTypes[0]
+  }
 
   if (loading) {
     return <div className="loading">Loading runs...</div>
@@ -79,11 +112,14 @@ export default function RunList() {
       <div className="page-header">
         <h1>YT News Generator Dashboard</h1>
         <div className="header-actions">
+          <Link to="/settings" className="settings-toggle">
+            Prompt Settings
+          </Link>
           <button
             className="settings-toggle"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
           >
-            Settings
+            Quick Settings
           </button>
           <button className="primary new-run-btn" onClick={() => setIsNewRunOpen(true)}>
             + New Run
@@ -120,27 +156,46 @@ export default function RunList() {
               <th>Title</th>
               <th>Status</th>
               <th>Media</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            {runs.map((run) => (
-              <tr key={run.id}>
-                <td>
-                  <Link to={`/runs/${run.id}`}>{formatDate(run.timestamp)}</Link>
-                </td>
-                <td>
-                  <Link to={`/runs/${run.id}`}>
-                    {run.title || <em style={{ color: '#999' }}>No title</em>}
-                  </Link>
-                </td>
-                <td>
-                  <StatusBadge status={run.status} />
-                </td>
-                <td>
-                  <MediaIcons run={run} />
-                </td>
-              </tr>
-            ))}
+            {runs.map((run) => {
+              const processingInfo = getRunningTaskInfo(run.id)
+              return (
+                <tr key={run.id} className={processingInfo ? 'processing' : ''}>
+                  <td>
+                    <Link to={`/runs/${run.id}`}>{formatDate(run.timestamp)}</Link>
+                  </td>
+                  <td>
+                    <Link to={`/runs/${run.id}`}>
+                      {run.title || <em style={{ color: '#999' }}>No title</em>}
+                    </Link>
+                    {processingInfo && (
+                      <div className="processing-indicator">
+                        <span className="spinner small"></span>
+                        <span className="processing-text">{processingInfo}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    <StatusBadge status={run.status} />
+                  </td>
+                  <td>
+                    <MediaIcons run={run} />
+                  </td>
+                  <td>
+                    <button
+                      className="delete-btn small"
+                      onClick={() => handleDeleteRun(run.id, run.title)}
+                      title="Delete run"
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

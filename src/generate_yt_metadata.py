@@ -10,23 +10,43 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Union
 
 from openai import OpenAI
 
 from logging_config import get_logger
+from storage import StorageBackend
+from storage_config import get_data_storage, get_project_root
 
 logger = get_logger(__name__)
 
-PROJECT_ROOT = Path(__file__).parent.parent
-YT_METADATA_PROMPT_PATH = PROJECT_ROOT / "data" / "yt_metadata_prompt.md"
+PROJECT_ROOT = get_project_root()
+YT_METADATA_PROMPT_KEY = "yt_metadata_prompt.md"
 
 
-def load_json(path: Path) -> dict:
+def load_json(path: Union[Path, str], storage: StorageBackend = None) -> dict:
+    """Load JSON file.
+
+    Args:
+        path: Path to JSON file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        content = storage.read_text(str(path))
+        return json.loads(content)
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def load_prompt(path: Path) -> str:
+def load_prompt(path: Union[Path, str], storage: StorageBackend = None) -> str:
+    """Load prompt from file.
+
+    Args:
+        path: Path to prompt file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        return storage.read_text(str(path))
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -103,11 +123,26 @@ def format_as_markdown(title: str, description: str) -> str:
 """
 
 
-def generate_yt_metadata(enriched_news_path: Path, model: str = "gpt-4o") -> dict:
-    """Generate YouTube metadata using enriched news data."""
+def generate_yt_metadata(
+    enriched_news_path: Union[Path, str],
+    model: str = "gpt-4o",
+    storage: StorageBackend = None,
+    prompt_key: str = None
+) -> str:
+    """Generate YouTube metadata using enriched news data.
+
+    Args:
+        enriched_news_path: Path to enriched news JSON
+        model: OpenAI model to use
+        storage: Optional storage backend for reading news file
+        prompt_key: Custom prompt key (default: YT_METADATA_PROMPT_KEY)
+    """
     logger.info("Generating YouTube metadata from: %s", enriched_news_path)
-    news = load_json(enriched_news_path)
-    system_prompt = load_prompt(YT_METADATA_PROMPT_PATH)
+    news = load_json(enriched_news_path, storage)
+
+    # Load prompt from data storage
+    data_storage = get_data_storage()
+    system_prompt = load_prompt(prompt_key or YT_METADATA_PROMPT_KEY, data_storage)
     user_message = build_user_message(news)
 
     client = OpenAI()

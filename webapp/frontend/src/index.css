@@ -517,6 +517,58 @@ button.upload:hover:not(:disabled) {
   flex-wrap: wrap;
 }
 
+/* Upload section with schedule */
+.upload-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.schedule-options {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-label {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.schedule-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.schedule-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  background: white;
+  color: #666;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.schedule-btn:hover:not(:disabled) {
+  border-color: #0066cc;
+  color: #0066cc;
+}
+
+.schedule-btn.active {
+  background: #0066cc;
+  border-color: #0066cc;
+  color: white;
+}
+
+.schedule-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Dialogue editor */
 .dialogue-editor {
   background: white;
@@ -1008,4 +1060,302 @@ button.upload:hover:not(:disabled) {
 .logout-btn:hover {
   background: #f5f5f5;
   color: #333;
+}
+
+/* Danger button */
+button.danger {
+  background: #dc3545;
+  color: white;
+  border-color: #dc3545;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #c82333;
+}
+
+/* Small button */
+button.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Delete button in table */
+.delete-btn {
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
+.delete-btn:hover {
+  opacity: 1;
+  background: #ffebee;
+}
+
+/* Workflow drop section */
+.workflow-drop-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.drop-label {
+  font-size: 13px;
+  color: #666;
+}
+
+.drop-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Processing indicator in list */
+.runs-table tr.processing {
+  background: #fff8e1;
+}
+
+.processing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #1565c0;
+}
+
+.processing-text {
+  font-style: italic;
+}
+
+.spinner.small {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+}
+
+/* Settings Page */
+.settings-page {
+  max-width: 900px;
+}
+
+.settings-page .page-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.settings-page .page-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-page .page-header h1 {
+  margin-bottom: 0;
+}
+
+.migrate-btn {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.migrate-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
+/* Prompt type sections */
+.prompt-types {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.prompt-type-section {
+  cursor: default;
+}
+
+.prompt-type-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.prompt-type-header:hover {
+  opacity: 0.9;
+}
+
+.prompt-type-info h2 {
+  margin-bottom: 4px;
+  font-size: 18px;
+}
+
+.prompt-type-description {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
+}
+
+.prompt-type-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.prompt-count {
+  font-size: 13px;
+  color: #999;
+  background: #f0f0f0;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.expand-icon {
+  color: #999;
+  font-size: 12px;
+}
+
+/* Prompt type content */
+.prompt-type-content {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+.prompt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.prompt-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.prompt-item.active {
+  background: #e3f2fd;
+  border-color: #0066cc;
+}
+
+.prompt-item-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.prompt-name {
+  font-weight: 500;
+  color: #333;
+}
+
+.badge-active {
+  background: #c8e6c9;
+  color: #2e7d32;
+}
+
+.badge-step2 {
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 11px;
+}
+
+.prompt-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.create-prompt-btn {
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed #ddd;
+  background: transparent;
+  color: #666;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.create-prompt-btn:hover {
+  border-color: #0066cc;
+  color: #0066cc;
+  background: #f8f9fa;
+}
+
+/* Prompt editor dialog */
+.prompt-editor-dialog {
+  max-width: 800px;
+  width: 95%;
+}
+
+.prompt-editor-dialog .dialog-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.form-field {
+  margin-bottom: 20px;
+}
+
+.form-field label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.form-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.form-field input:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+.form-field textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: monospace;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.form-field textarea:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+.form-hint {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+/* Link styled as button for settings toggle */
+a.settings-toggle {
+  text-decoration: none;
 }

@@ -11,7 +11,10 @@ build/
 node_modules/
 remotion/node_modules/
 
-# Output files (generated content)
+# Storage (data, output, config - can be local or synced from S3)
+storage/
+
+# Legacy output location (deprecated - now in storage/)
 output/
 data/news-seeds/
 

@@ -10,15 +10,25 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Union
 
 from openai import OpenAI
 
 from logging_config import get_logger
+from storage import StorageBackend
+from storage_config import get_data_storage
 
 logger = get_logger(__name__)
 
-def load_prompt(prompt_path: Path) -> str:
-    """Load prompt template from markdown file."""
+def load_prompt(prompt_path: Union[Path, str], storage: StorageBackend = None) -> str:
+    """Load prompt template from markdown file.
+
+    Args:
+        prompt_path: Path to prompt file (relative to data/ for storage, or absolute Path)
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        return storage.read_text(str(prompt_path))
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -68,9 +78,21 @@ TOPIC ID: {news.get('topic_id', 'unknown')}
 """
 
 
-def generate_dialogue(news: dict, prompt_path: Path, model: str = "gpt-4o") -> dict:
-    """Generate dialogue by sending news and prompt to ChatGPT."""
-    system_prompt = load_prompt(prompt_path)
+def generate_dialogue(
+    news: dict,
+    prompt_path: Union[Path, str],
+    model: str = "gpt-4o",
+    storage: StorageBackend = None
+) -> dict:
+    """Generate dialogue by sending news and prompt to ChatGPT.
+
+    Args:
+        news: News data dict
+        prompt_path: Path to prompt file
+        model: OpenAI model to use
+        storage: Optional storage backend for reading prompt
+    """
+    system_prompt = load_prompt(prompt_path, storage)
     user_message = build_user_message(news)
     logger.debug("User message for dialogue generation:\n%s", user_message)
     logger.info("Generating dialogue with model=%s", model)
@@ -118,11 +140,20 @@ def log_corrections(original: dict, refined: dict) -> list[str]:
 def refine_dialogue(
     dialogue: dict,
     news: dict,
-    prompt_path: Path,
-    model: str = "gpt-4o"
+    prompt_path: Union[Path, str],
+    model: str = "gpt-4o",
+    storage: StorageBackend = None
 ) -> dict:
-    """Refine dialogue using a second LLM pass for corrections."""
-    system_prompt = load_prompt(prompt_path)
+    """Refine dialogue using a second LLM pass for corrections.
+
+    Args:
+        dialogue: Generated dialogue dict
+        news: News data dict
+        prompt_path: Path to refinement prompt file
+        model: OpenAI model to use
+        storage: Optional storage backend for reading prompt
+    """
+    system_prompt = load_prompt(prompt_path, storage)
 
     user_message = f"""## dialogue.json
 ```json

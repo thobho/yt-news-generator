@@ -11,12 +11,16 @@ Prerequisites:
 
 import re
 import sys
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Union
 
 from google.auth.transport.requests import Request
 
 from logging_config import get_logger
+from storage import StorageBackend
+from storage_config import get_project_root
 
 logger = get_logger(__name__)
 from google.oauth2.credentials import Credentials
@@ -31,7 +35,7 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo
     WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = get_project_root()
 CREDENTIALS_DIR = PROJECT_ROOT / "credentials"
 CLIENT_SECRETS_PATH = CREDENTIALS_DIR / "client_secrets.json"
 TOKEN_PATH = CREDENTIALS_DIR / "token.json"
@@ -44,29 +48,55 @@ SCOPES = [
 PLAYLIST_TITLE = "Daily News"
 
 
-def get_scheduled_publish_time() -> str:
+def get_scheduled_publish_time(schedule_option: str = "auto") -> str:
     """
-    Calculate next publish time in Europe/Warsaw timezone.
+    Calculate publish time in Europe/Warsaw timezone based on schedule option.
 
-    Rules:
-        - If now < 8:00 → schedule today 8:00
-        - If 8:00 ≤ now < 16:00 → schedule today 16:00
-        - If now ≥ 16:00 → schedule tomorrow 8:00
+    Args:
+        schedule_option: One of:
+            - "8:00" - Schedule for 8:00 Warsaw time (today or tomorrow)
+            - "18:00" - Schedule for 18:00 Warsaw time (today or tomorrow)
+            - "1hour" - Publish in 1 hour, rounded to nearest 15 minutes
+            - "auto" - Legacy behavior (next 8:00 or 16:00)
 
     Returns ISO 8601 string in UTC for the YouTube API.
     """
+    from datetime import timezone
     now = datetime.now(WARSAW_TZ)
 
-    if now.hour < 8:
+    if schedule_option == "8:00":
+        # Schedule for 8:00 today, or tomorrow if already past 8:00
         publish_local = now.replace(hour=8, minute=0, second=0, microsecond=0)
-    elif now.hour < 16:
-        publish_local = now.replace(hour=16, minute=0, second=0, microsecond=0)
-    else:
-        tomorrow = now + timedelta(days=1)
-        publish_local = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now.hour >= 8:
+            publish_local = publish_local + timedelta(days=1)
+
+    elif schedule_option == "18:00":
+        # Schedule for 18:00 today, or tomorrow if already past 18:00
+        publish_local = now.replace(hour=18, minute=0, second=0, microsecond=0)
+        if now.hour >= 18:
+            publish_local = publish_local + timedelta(days=1)
+
+    elif schedule_option == "1hour":
+        # Publish in 1 hour, rounded to nearest 15 minutes
+        publish_local = now + timedelta(hours=1)
+        # Round to nearest 15 minutes
+        minutes = publish_local.minute
+        rounded_minutes = ((minutes + 7) // 15) * 15
+        if rounded_minutes == 60:
+            publish_local = publish_local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        else:
+            publish_local = publish_local.replace(minute=rounded_minutes, second=0, microsecond=0)
+
+    else:  # "auto" - legacy behavior
+        if now.hour < 8:
+            publish_local = now.replace(hour=8, minute=0, second=0, microsecond=0)
+        elif now.hour < 16:
+            publish_local = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        else:
+            tomorrow = now + timedelta(days=1)
+            publish_local = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
 
     # Convert to UTC ISO 8601 format required by YouTube API
-    from datetime import timezone
     publish_utc = publish_local.astimezone(timezone.utc)
     return publish_utc.strftime("%Y-%m-%dT%H:%M:%S.0Z")
 
@@ -105,7 +135,10 @@ def authenticate() -> Credentials:
     return creds
 
 
-def parse_yt_metadata(metadata_path: Path) -> dict:
+def parse_yt_metadata(
+    metadata_path: Union[Path, str],
+    storage: StorageBackend = None
+) -> dict:
     """
     Parse yt_metadata.md to extract title, description, and tags.
 
@@ -115,8 +148,15 @@ def parse_yt_metadata(metadata_path: Path) -> dict:
         <title>
         ## Opis
         <description with #hashtags>
+
+    Args:
+        metadata_path: Path to metadata file
+        storage: Optional storage backend. If None, reads from local filesystem.
     """
-    content = metadata_path.read_text(encoding="utf-8")
+    if storage is not None:
+        content = storage.read_text(str(metadata_path))
+    else:
+        content = Path(metadata_path).read_text(encoding="utf-8")
 
     # Extract title (text between "## Tytuł" and "## Opis")
     title_match = re.search(r"## Tytuł\s*\n(.+?)(?=\n## )", content, re.DOTALL)
@@ -202,26 +242,42 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> 
     return video_id
 
 
-def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
+def upload_to_youtube(
+    video_path: Union[Path, str],
+    metadata_path: Union[Path, str],
+    storage: StorageBackend = None,
+    schedule_option: str = "auto"
+) -> tuple[str, str]:
     """
     Full upload pipeline: authenticate, parse metadata, upload, add to playlist.
 
     Args:
-        video_path: Path to the video file (.mp4)
-        metadata_path: Path to yt_metadata.md
+        video_path: Path/key to the video file (.mp4)
+        metadata_path: Path/key to yt_metadata.md
+        storage: Optional storage backend. If provided, downloads files from storage.
+        schedule_option: One of "8:00", "18:00", "1hour", or "auto"
 
     Returns:
-        The YouTube video ID
+        Tuple of (video_id, publish_at)
     """
-    if not video_path.exists():
-        logger.error("Video not found: %s", video_path)
-        sys.exit(1)
-    if not metadata_path.exists():
-        logger.error("Metadata not found: %s", metadata_path)
-        sys.exit(1)
+    # Validate files exist
+    if storage is not None:
+        if not storage.exists(str(video_path)):
+            logger.error("Video not found: %s", video_path)
+            sys.exit(1)
+        if not storage.exists(str(metadata_path)):
+            logger.error("Metadata not found: %s", metadata_path)
+            sys.exit(1)
+    else:
+        if not Path(video_path).exists():
+            logger.error("Video not found: %s", video_path)
+            sys.exit(1)
+        if not Path(metadata_path).exists():
+            logger.error("Metadata not found: %s", metadata_path)
+            sys.exit(1)
 
-    metadata = parse_yt_metadata(metadata_path)
-    publish_at = get_scheduled_publish_time()
+    metadata = parse_yt_metadata(metadata_path, storage)
+    publish_at = get_scheduled_publish_time(schedule_option)
 
     logger.info("Title: %s", metadata['title'])
     logger.info("Tags: %s", ', '.join(metadata['tags']))
@@ -230,7 +286,12 @@ def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
     creds = authenticate()
     youtube = build("youtube", "v3", credentials=creds)
 
-    video_id = upload_video(youtube, video_path, metadata, publish_at)
+    # YouTube API needs a local file path
+    if storage is not None:
+        with storage.get_local_path(str(video_path)) as local_video:
+            video_id = upload_video(youtube, local_video, metadata, publish_at)
+    else:
+        video_id = upload_video(youtube, Path(video_path), metadata, publish_at)
 
     # Add to DailyNews playlist
     playlist_id = find_or_create_playlist(youtube, PLAYLIST_TITLE)
@@ -239,7 +300,7 @@ def upload_to_youtube(video_path: Path, metadata_path: Path) -> str:
 
     logger.info("Video scheduled for %s: https://youtu.be/%s", publish_at, video_id)
 
-    return video_id
+    return video_id, publish_at
 
 
 if __name__ == "__main__":

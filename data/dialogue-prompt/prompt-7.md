@@ -121,6 +121,7 @@ At the midpoint of the script, include ONE sentence that:
 - exposes a non-obvious systemic or personal consequence  
 - makes at least one earlier line feel naïve  
 - would sound dangerous if quoted out of context  
+- the midpoint shock MUST be eight to ten words long.
 
 Rules:
 - declarative only  
@@ -130,7 +131,7 @@ Rules:
 
 ---
 
-### PHASE 3 — IDEOLOGICAL TUG-OF-WAR (0:08–0:40)
+### PHASE 3 — IDEOLOGICAL TUG-OF-WAR (0:08–0:35)
 
 Format: dialectical escalation.
 
@@ -176,9 +177,9 @@ Language: **polszczyzna inteligencka**
 
 ## 5. STRUCTURAL CONSTRAINTS (HARD)
 
-- Duration: thirty to thirty five seconds  
-- Word count: ninety to one hundred ten words  
-- Dialogue lines: seven or eight  
+- Duration: twenty five to thirty seconds  
+- Word count: eighty to one ninety words
+- Dialogue lines: six or seven  
 - Language: Polish  
 
 ---

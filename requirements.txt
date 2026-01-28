@@ -4,3 +4,4 @@ beautifulsoup4>=4.12.0
 perplexityai>=0.24.0
 google-api-python-client>=2.100.0
 google-auth-oauthlib>=1.1.0
+boto3>=1.28.0

@@ -1,6 +1,11 @@
 #!/bin/bash
 #
 # Deploy YT News Generator to AWS EC2
+# - Creates EC2 instance with IAM role for S3
+# - Installs all system dependencies
+# - Copies all credentials
+# - Sets up swap for low-memory instances
+# - Installs Python and NPM dependencies
 # Usage: ./deploy-ec2.sh [--key-path PATH_TO_PEM] [--region REGION]
 #
 
@@ -11,10 +16,15 @@ set -e
 # ==========================================
 
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
-INSTANCE_TYPE="t4g.nano"
+INSTANCE_TYPE="t4g.micro"
 APP_NAME="yt-news-generator"
-KEY_PATH="credentials/yt-news-generator-key.pem"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+KEY_PATH="$PROJECT_ROOT/credentials/yt-news-generator-key.pem"
 KEY_NAME="yt-news-generator-key"
+IAM_ROLE_NAME="yt-news-generator-ec2-role"
+INSTANCE_PROFILE_NAME="yt-news-generator-ec2-profile"
+S3_BUCKET="yt-news-generator"
 
 # Ubuntu 22.04 LTS ARM64 AMIs (for t4g Graviton instances)
 get_ami_for_region() {
@@ -54,8 +64,6 @@ if [ -z "$AMI_ID" ]; then
   echo "Supported regions: us-east-1, us-east-2, us-west-1, us-west-2, eu-west-1, eu-central-1"
   exit 1
 fi
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "========================================"
 echo "Deploying $APP_NAME to AWS EC2"
@@ -117,6 +125,58 @@ else
 fi
 
 # ==========================================
+# Create/get IAM role for S3 access
+# ==========================================
+
+echo ""
+echo "Setting up IAM role for S3 access..."
+
+if ! aws iam get-role --role-name "$IAM_ROLE_NAME" &>/dev/null; then
+  echo "Creating IAM role..."
+  aws iam create-role \
+    --role-name "$IAM_ROLE_NAME" \
+    --assume-role-policy-document '{
+      "Version": "2012-10-17",
+      "Statement": [
+        {
+          "Effect": "Allow",
+          "Principal": {"Service": "ec2.amazonaws.com"},
+          "Action": "sts:AssumeRole"
+        }
+      ]
+    }' > /dev/null
+
+  aws iam put-role-policy \
+    --role-name "$IAM_ROLE_NAME" \
+    --policy-name "${APP_NAME}-s3-access" \
+    --policy-document "{
+      \"Version\": \"2012-10-17\",
+      \"Statement\": [
+        {
+          \"Effect\": \"Allow\",
+          \"Action\": [\"s3:GetObject\", \"s3:PutObject\", \"s3:DeleteObject\", \"s3:ListBucket\"],
+          \"Resource\": [\"arn:aws:s3:::${S3_BUCKET}\", \"arn:aws:s3:::${S3_BUCKET}/*\"]
+        }
+      ]
+    }"
+  echo "IAM role created: $IAM_ROLE_NAME"
+else
+  echo "Using existing IAM role: $IAM_ROLE_NAME"
+fi
+
+if ! aws iam get-instance-profile --instance-profile-name "$INSTANCE_PROFILE_NAME" &>/dev/null; then
+  echo "Creating instance profile..."
+  aws iam create-instance-profile --instance-profile-name "$INSTANCE_PROFILE_NAME" > /dev/null
+  aws iam add-role-to-instance-profile \
+    --instance-profile-name "$INSTANCE_PROFILE_NAME" \
+    --role-name "$IAM_ROLE_NAME"
+  sleep 10
+  echo "Instance profile created: $INSTANCE_PROFILE_NAME"
+else
+  echo "Using existing instance profile: $INSTANCE_PROFILE_NAME"
+fi
+
+# ==========================================
 # Launch instance
 # ==========================================
 
@@ -129,6 +189,7 @@ INSTANCE_ID=$(aws ec2 run-instances \
   --instance-type "$INSTANCE_TYPE" \
   --key-name "$KEY_NAME" \
   --security-group-ids "$SG_ID" \
+  --iam-instance-profile "Name=$INSTANCE_PROFILE_NAME" \
   --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=$APP_NAME}]" \
   --block-device-mappings '[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":20,"VolumeType":"gp3"}}]' \
   --query 'Instances[0].InstanceId' \
@@ -163,20 +224,40 @@ for i in {1..30}; do
 done
 
 # ==========================================
-# Setup server via SSH
+# Install system dependencies and setup swap
 # ==========================================
 
 echo ""
-echo "Installing dependencies on server..."
+echo "Installing system dependencies..."
 
 ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no ubuntu@"$PUBLIC_IP" << 'REMOTE_SCRIPT'
 set -e
 
 # Update and install base packages
 sudo apt-get update
-sudo apt-get install -y python3-pip python3-venv git curl
+sudo apt-get upgrade -y
+sudo apt-get install -y python3-pip python3-venv git curl ffmpeg
 
-# Remove conflicting Node.js packages and install Node 18
+# Install Chrome dependencies for Remotion
+sudo apt-get install -y \
+  libatk1.0-0 \
+  libatk-bridge2.0-0 \
+  libcups2 \
+  libdrm2 \
+  libxkbcommon0 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
+  libxrandr2 \
+  libgbm1 \
+  libasound2 \
+  libpango-1.0-0 \
+  libcairo2 \
+  libnss3 \
+  libnspr4 \
+  libx11-xcb1
+
+# Install Node.js 18
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get purge -y nodejs libnode72 libnode-dev 2>/dev/null || true
 sudo apt-get autoremove -y
@@ -184,7 +265,83 @@ sudo apt-get install -y nodejs
 
 echo "Node version: $(node --version)"
 echo "npm version: $(npm --version)"
+
+# ---- Setup swap for instances with < 2GB RAM ----
+TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$TOTAL_MEM" -lt 2048 ]; then
+  echo "Low memory detected (${TOTAL_MEM}MB). Setting up 2GB swap..."
+  if [ ! -f /swapfile ]; then
+    sudo fallocate -l 2G /swapfile
+    sudo chmod 600 /swapfile
+    sudo mkswap /swapfile
+    sudo swapon /swapfile
+    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+    echo "Swap added!"
+  else
+    sudo swapon /swapfile 2>/dev/null || true
+    echo "Swap already exists"
+  fi
+fi
+echo "Memory: $(free -m | awk '/^Mem:/{print $2}')MB RAM, $(free -m | awk '/^Swap:/{print $2}')MB swap"
 REMOTE_SCRIPT
+
+# ==========================================
+# Build frontend locally
+# ==========================================
+
+echo ""
+echo "Building frontend locally..."
+
+cd "$PROJECT_ROOT/webapp/frontend"
+
+if [ ! -d "node_modules" ]; then
+  echo "Installing frontend dependencies..."
+  npm install
+fi
+
+npm run build
+
+rm -rf "$PROJECT_ROOT/webapp/backend/static"
+cp -r dist "$PROJECT_ROOT/webapp/backend/static"
+echo "Frontend built!"
+
+cd "$PROJECT_ROOT"
+
+# ==========================================
+# Copy all credentials
+# ==========================================
+
+echo ""
+echo "Copying credentials..."
+
+# Create credentials directory
+ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no ubuntu@"$PUBLIC_IP" \
+  "mkdir -p /home/ubuntu/yt-news-generator/credentials"
+
+# Copy env.production as .env
+if [ -f "$PROJECT_ROOT/credentials/env.production" ]; then
+  scp -i "$KEY_PATH" -o StrictHostKeyChecking=no \
+    "$PROJECT_ROOT/credentials/env.production" \
+    ubuntu@"$PUBLIC_IP":/home/ubuntu/yt-news-generator/.env
+  echo "  - env.production -> .env"
+fi
+
+# Copy YouTube OAuth credentials
+if [ -f "$PROJECT_ROOT/credentials/client_secrets.json" ]; then
+  scp -i "$KEY_PATH" -o StrictHostKeyChecking=no \
+    "$PROJECT_ROOT/credentials/client_secrets.json" \
+    ubuntu@"$PUBLIC_IP":/home/ubuntu/yt-news-generator/credentials/
+  echo "  - client_secrets.json"
+fi
+
+if [ -f "$PROJECT_ROOT/credentials/token.json" ]; then
+  scp -i "$KEY_PATH" -o StrictHostKeyChecking=no \
+    "$PROJECT_ROOT/credentials/token.json" \
+    ubuntu@"$PUBLIC_IP":/home/ubuntu/yt-news-generator/credentials/
+  echo "  - token.json"
+fi
+
+echo "Credentials copied!"
 
 # ==========================================
 # Copy project files
@@ -200,27 +357,38 @@ rsync -avz --progress \
   --exclude '.git' \
   --exclude 'credentials' \
   --exclude '*.pem' \
+  --exclude 'output' \
+  --exclude 'storage' \
   -e "ssh -i $KEY_PATH -o StrictHostKeyChecking=no" \
-  "$SCRIPT_DIR/" ubuntu@"$PUBLIC_IP":/home/ubuntu/yt-news-generator/
+  "$PROJECT_ROOT/" ubuntu@"$PUBLIC_IP":/home/ubuntu/yt-news-generator/
 
 # ==========================================
-# Setup Python environment and start server
+# Install Python/NPM dependencies and start server
 # ==========================================
 
 echo ""
-echo "Setting up Python environment..."
+echo "Setting up Python environment and dependencies..."
 
 ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no ubuntu@"$PUBLIC_IP" << 'REMOTE_SCRIPT'
 set -e
 cd /home/ubuntu/yt-news-generator
 
-# Create Python venv and install requirements
+# Create Python venv and install all requirements
 python3 -m venv venv
 source venv/bin/activate
+pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r webapp/backend/requirements.txt
+pip install boto3 elevenlabs
 
-# Create .env if not exists
+# Install Remotion NPM dependencies
+echo ""
+echo "Installing Remotion dependencies..."
+cd remotion
+npm install
+cd ..
+
+# Create default .env if none exists
 if [ ! -f .env ]; then
   cat > .env << 'EOF'
 export OPENAI_API_KEY=your_openai_key
@@ -229,6 +397,11 @@ export PERPLEXITY_API_KEY=your_perplexity_key
 export AUTH_PASSWORD=admin123
 export HOST=0.0.0.0
 export PORT=8000
+
+# S3 Storage (uses IAM role for credentials)
+export STORAGE_BACKEND=s3
+export S3_BUCKET=yt-news-generator
+export S3_REGION=us-east-1
 EOF
   echo "Created .env template - update with your API keys"
 fi
@@ -242,9 +415,17 @@ if pgrep -f uvicorn > /dev/null; then
   echo "Webapp started successfully!"
 else
   echo "ERROR: Webapp failed to start. Check /tmp/webapp.log"
+  tail -20 /tmp/webapp.log
   exit 1
 fi
 REMOTE_SCRIPT
+
+# ==========================================
+# Update sync script with new IP
+# ==========================================
+
+sed -i.bak "s/PUBLIC_IP=\"\${1:-[^}]*}\"/PUBLIC_IP=\"\${1:-${PUBLIC_IP}}\"/" "$SCRIPT_DIR/sync-ec2.sh"
+rm -f "$SCRIPT_DIR/sync-ec2.sh.bak"
 
 # ==========================================
 # Done
@@ -260,12 +441,6 @@ echo "Public IP:   $PUBLIC_IP"
 echo "Region:      $REGION"
 echo ""
 echo "Webapp: http://${PUBLIC_IP}:8000"
-echo "Password: admin123"
 echo ""
 echo "SSH: ssh -i $KEY_PATH ubuntu@${PUBLIC_IP}"
-echo ""
-echo "To update API keys:"
-echo "  ssh -i $KEY_PATH ubuntu@${PUBLIC_IP}"
-echo "  nano /home/ubuntu/yt-news-generator/.env"
-echo "  pkill uvicorn && cd /home/ubuntu/yt-news-generator && source .env && source venv/bin/activate && nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &"
 echo ""

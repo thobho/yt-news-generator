@@ -11,24 +11,42 @@ import argparse
 import base64
 import json
 import sys
+import tempfile
 from pathlib import Path
+from typing import Union
 
 import requests
 from openai import OpenAI
 
 from logging_config import get_logger
+from storage import StorageBackend
 
 logger = get_logger(__name__)
 
 
-def load_json(path: Path) -> dict:
-    """Load JSON file."""
+def load_json(path: Union[Path, str], storage: StorageBackend = None) -> dict:
+    """Load JSON file.
+
+    Args:
+        path: Path to JSON file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        content = storage.read_text(str(path))
+        return json.loads(content)
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def load_prompt(prompt_path: Path) -> str:
-    """Load prompt template from markdown file."""
+def load_prompt(prompt_path: Union[Path, str], storage: StorageBackend = None) -> str:
+    """Load prompt template from markdown file.
+
+    Args:
+        prompt_path: Path to prompt file
+        storage: Optional storage backend. If None, reads from local filesystem.
+    """
+    if storage is not None:
+        return storage.read_text(str(prompt_path))
     with open(prompt_path, "r", encoding="utf-8") as f:
         return f.read()
 
@@ -71,13 +89,23 @@ Generate image prompts for this debate video. Create 4 images total:
 
 
 def generate_image_prompts(
-    dialogue_path: Path,
-    prompt_path: Path,
-    model: str = "gpt-4o"
+    dialogue_path: Union[Path, str],
+    prompt_path: Union[Path, str],
+    model: str = "gpt-4o",
+    dialogue_storage: StorageBackend = None,
+    prompt_storage: StorageBackend = None
 ) -> dict:
-    """Generate image prompts using ChatGPT."""
-    dialogue_data = load_json(dialogue_path)
-    system_prompt = load_prompt(prompt_path)
+    """Generate image prompts using ChatGPT.
+
+    Args:
+        dialogue_path: Path to dialogue JSON file
+        prompt_path: Path to image prompt file
+        model: OpenAI model to use
+        dialogue_storage: Optional storage backend for dialogue file
+        prompt_storage: Optional storage backend for prompt file
+    """
+    dialogue_data = load_json(dialogue_path, dialogue_storage)
+    system_prompt = load_prompt(prompt_path, prompt_storage)
     user_message = build_user_message(dialogue_data)
 
     client = OpenAI()
@@ -96,8 +124,20 @@ def generate_image_prompts(
     return json.loads(content)
 
 
-def generate_image(client: OpenAI, prompt: str, output_path: Path) -> None:
-    """Generate a single image using DALL-E and save it."""
+def generate_image(
+    client: OpenAI,
+    prompt: str,
+    output_path: Union[Path, str],
+    storage: StorageBackend = None
+) -> None:
+    """Generate a single image using DALL-E and save it.
+
+    Args:
+        client: OpenAI client
+        prompt: Image generation prompt
+        output_path: Path to save the image
+        storage: Optional storage backend. If None, saves to local filesystem.
+    """
     response = client.images.generate(
         model="dall-e-3",
         prompt=prompt,
@@ -107,21 +147,35 @@ def generate_image(client: OpenAI, prompt: str, output_path: Path) -> None:
         response_format="url",
     )
 
-    # Download and save the image
+    # Download the image
     image_url = response.data[0].url
     image_response = requests.get(image_url)
     image_response.raise_for_status()
 
-    with open(output_path, "wb") as f:
-        f.write(image_response.content)
+    if storage is not None:
+        storage.write_bytes(str(output_path), image_response.content)
+    else:
+        with open(output_path, "wb") as f:
+            f.write(image_response.content)
 
 
 def generate_all_images(
     prompts_data: dict,
-    output_dir: Path,
+    output_dir: Union[Path, str],
+    storage: StorageBackend = None
 ) -> dict:
-    """Generate all images from prompts and save to output directory."""
-    output_dir.mkdir(parents=True, exist_ok=True)
+    """Generate all images from prompts and save to output directory.
+
+    Args:
+        prompts_data: Dict containing image prompts
+        output_dir: Directory to save images (or key prefix for S3)
+        storage: Optional storage backend. If None, uses local filesystem.
+    """
+    if storage is not None:
+        storage.makedirs(str(output_dir))
+    else:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     client = OpenAI()
     images = prompts_data.get("images", [])
@@ -131,14 +185,18 @@ def generate_all_images(
     for i, image_info in enumerate(images):
         image_id = image_info["id"]
         prompt = image_info["prompt"]
-        output_path = output_dir / f"{image_id}.png"
+
+        if storage is not None:
+            output_path = f"{output_dir}/{image_id}.png"
+        else:
+            output_path = output_dir / f"{image_id}.png"
 
         logger.info("[%d/%d] Generating %s...", i + 1, len(images), image_id)
         logger.debug("Prompt: %s", prompt[:100])
 
         try:
-            generate_image(client, prompt, output_path)
-            image_info["file"] = str(output_path.name)
+            generate_image(client, prompt, output_path, storage)
+            image_info["file"] = f"{image_id}.png"
             logger.debug("Saved: %s", output_path)
         except Exception as e:
             logger.error("Failed to generate %s: %s", image_id, e)
