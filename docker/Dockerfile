@@ -1,38 +1,38 @@
 # Chatterbox TTS Docker Image for RunPod
-# Pre-installs chatterbox-tts and downloads model for fast startup
+# Uses lightweight CUDA base + installs only what's needed
 
-FROM runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04
+FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV DEBIAN_FRONTEND=noninteractive
 ENV HF_HOME=/root/.cache/huggingface
 
-# Install system dependencies
+# Install Python 3.10 and system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.10 \
+    python3-pip \
+    python3.10-venv \
     ffmpeg \
     libsndfile1 \
+    openssh-server \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages
 RUN pip install --no-cache-dir \
-    chatterbox-tts \
-    soundfile \
-    numpy \
-    scipy
+    torch torchaudio --index-url https://download.pytorch.org/whl/cu118
 
-# Pre-download the Chatterbox model by running a minimal inference
-# This caches the model in the image (~1.5GB)
+RUN pip install --no-cache-dir \
+    chatterbox-tts \
+    soundfile
+
+# Pre-download the Chatterbox model (~1.5GB cached in image)
 RUN python3 -c "\
 from chatterbox.tts import ChatterboxTTS; \
-import torch; \
 print('Downloading Chatterbox model...'); \
 model = ChatterboxTTS.from_pretrained(device='cpu'); \
 print('Model cached successfully!'); \
 "
 
-# Create workspace directory
 WORKDIR /workspace
-
-# Default command (RunPod will override this)
 CMD ["python3", "-c", "print('Chatterbox TTS ready!')"]
