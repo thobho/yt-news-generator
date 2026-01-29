@@ -1,7 +1,12 @@
 name: Build Chatterbox TTS Image
 
 on:
-  workflow_dispatch:  # Manual trigger only
+  push:
+    branches: [new-voice-ai, main]
+    paths:
+      - 'docker/**'
+      - '.github/workflows/build-chatterbox-image.yml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -33,7 +38,6 @@ jobs:
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Print image URL
         run: |
