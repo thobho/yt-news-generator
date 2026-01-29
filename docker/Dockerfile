@@ -1,4 +1,4 @@
-# Chatterbox TTS Docker Image for RunPod
+# Chatterbox TTS Docker Image for RunPod Serverless
 # Uses lightweight CUDA base + installs only what's needed
 
 FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
@@ -15,7 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10-venv \
     ffmpeg \
     libsndfile1 \
-    openssh-server \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages
@@ -24,15 +23,18 @@ RUN pip install --no-cache-dir \
 
 RUN pip install --no-cache-dir \
     chatterbox-tts \
-    soundfile
+    soundfile \
+    runpod
 
-# Pre-download the Chatterbox model (~1.5GB cached in image)
+# Pre-download the Multilingual Chatterbox model (~1.5GB cached in image)
 RUN python3 -c "\
-from chatterbox.tts import ChatterboxTTS; \
-print('Downloading Chatterbox model...'); \
-model = ChatterboxTTS.from_pretrained(device='cpu'); \
+from chatterbox.mtl_tts import ChatterboxMultilingualTTS; \
+print('Downloading Chatterbox Multilingual model...'); \
+model = ChatterboxMultilingualTTS.from_pretrained(device='cpu'); \
 print('Model cached successfully!'); \
 "
 
 WORKDIR /workspace
-CMD ["python3", "-c", "print('Chatterbox TTS ready!')"]
+COPY handler.py /workspace/handler.py
+
+CMD ["python3", "/workspace/handler.py"]

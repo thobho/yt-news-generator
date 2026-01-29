@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Generate audio from dialogue JSON using Chatterbox TTS on RunPod.
+Generate audio from dialogue JSON using Chatterbox TTS on RunPod Serverless.
 
-This module creates a RunPod GPU pod, installs Chatterbox TTS,
-generates audio, downloads the result, and terminates the pod.
+This module calls a RunPod Serverless endpoint running Chatterbox TTS,
+generates audio segments, merges them locally, and creates a timeline.
 
 No quota approval needed - just sign up at runpod.io and add credits.
 
@@ -12,16 +12,18 @@ Usage:
 
 Environment variables:
     RUNPOD_API_KEY: Your RunPod API key (required)
+    RUNPOD_ENDPOINT_ID: Your RunPod serverless endpoint ID (required)
 
 The interface is identical to generate_audio.py for easy swapping.
 """
 
 import argparse
+import base64
 import json
 import os
 import subprocess
-import time
 import re
+import tempfile
 from pathlib import Path
 from typing import Union, Optional
 
@@ -41,33 +43,9 @@ DEFAULT_VOICE_A = "neutral"
 DEFAULT_VOICE_B = "neutral"
 PAUSE_BETWEEN_SEGMENTS_MS = 150  # Short pause between dialog segments
 
-# RunPod Configuration
-# GPU types to try in order of preference (16GB+ VRAM for Chatterbox)
-RUNPOD_GPU_TYPES = [
-    "NVIDIA GeForce RTX 4090",      # 24GB, fastest
-    "NVIDIA RTX A5000",             # 24GB
-    "NVIDIA GeForce RTX 3090",      # 24GB
-    "NVIDIA RTX A4000",             # 16GB
-    "NVIDIA GeForce RTX 4080",      # 16GB
-]
-RUNPOD_GPU_TYPE = os.environ.get("RUNPOD_GPU_TYPE")  # Override if set
-
-# Docker image - use custom image with Chatterbox pre-installed for faster startup
-# Set RUNPOD_IMAGE env var to your Docker Hub image (e.g., "yourusername/chatterbox-tts:latest")
-RUNPOD_IMAGE = os.environ.get("RUNPOD_IMAGE", "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04")
-RUNPOD_DISK_SIZE = 50  # GB
-RUNPOD_VOLUME_SIZE = 0  # GB (no persistent volume needed)
-
-# SSH key for RunPod access
-def get_ssh_public_key() -> str:
-    """Get the user's SSH public key."""
-    for key_file in ["~/.ssh/id_ed25519.pub", "~/.ssh/id_rsa.pub"]:
-        path = Path(key_file).expanduser()
-        if path.exists():
-            return path.read_text().strip()
-    return ""
-
-RUNPOD_SSH_PUBLIC_KEY = os.environ.get("RUNPOD_PUBLIC_KEY", get_ssh_public_key())
+# RunPod Serverless Configuration
+RUNPOD_ENDPOINT_ID = os.environ.get("RUNPOD_ENDPOINT_ID")
+RUNPOD_REQUEST_TIMEOUT = int(os.environ.get("RUNPOD_REQUEST_TIMEOUT", "120"))
 
 # Chatterbox Configuration
 CHATTERBOX_SAMPLE_RATE = 24000
@@ -235,269 +213,58 @@ def merge_audio(files: list[Path], output: Path, pause_ms: int):
 
 
 # ==========================
-# RUNPOD MANAGEMENT
+# RUNPOD SERVERLESS CLIENT
 # ==========================
 
-class RunPodChatterboxInstance:
-    """Manages a RunPod pod running Chatterbox TTS."""
+def _call_serverless_tts(
+    endpoint: runpod.Endpoint,
+    text: str,
+    voice_ref_b64: Optional[str] = None,
+) -> tuple[bytes, int]:
+    """Call the RunPod serverless endpoint for a single TTS segment.
 
-    def __init__(self):
-        api_key = os.environ.get("RUNPOD_API_KEY")
-        if not api_key:
-            raise RuntimeError("RUNPOD_API_KEY environment variable not set")
-        runpod.api_key = api_key
-        self.pod_id: Optional[str] = None
-        self.ssh_host: Optional[str] = None
-        self.ssh_port: Optional[int] = None
-        self._setup_complete = False
+    Args:
+        endpoint: RunPod Endpoint instance
+        text: Text to synthesize
+        voice_ref_b64: Optional base64-encoded voice reference WAV
 
-    def launch(self) -> str:
-        """Launch a new RunPod pod for TTS generation."""
-        if not RUNPOD_SSH_PUBLIC_KEY:
-            raise RuntimeError(
-                "No SSH public key found. Either:\n"
-                "  1. Generate one: ssh-keygen -t ed25519\n"
-                "  2. Set RUNPOD_PUBLIC_KEY environment variable"
-            )
+    Returns:
+        Tuple of (wav_bytes, duration_ms)
 
-        # Try each GPU type until one works
-        gpu_types = [RUNPOD_GPU_TYPE] if RUNPOD_GPU_TYPE else RUNPOD_GPU_TYPES
-        last_error = None
+    Raises:
+        RuntimeError: If the job fails or times out
+    """
+    payload = {
+        "text": text,
+        "language_id": "pl",
+        "cfg_weight": CHATTERBOX_CFG_WEIGHT,
+        "exaggeration": CHATTERBOX_EXAGGERATION,
+    }
+    if voice_ref_b64:
+        payload["voice_ref_base64"] = voice_ref_b64
 
-        for gpu_type in gpu_types:
-            logger.info("Trying to launch RunPod pod (GPU: %s)", gpu_type)
-            try:
-                pod = runpod.create_pod(
-                    name="chatterbox-tts-worker",
-                    image_name=RUNPOD_IMAGE,
-                    gpu_type_id=gpu_type,
-                    cloud_type="COMMUNITY",  # Cheaper than SECURE
-                    container_disk_in_gb=RUNPOD_DISK_SIZE,
-                    volume_in_gb=RUNPOD_VOLUME_SIZE,
-                    ports="22/tcp",  # Enable SSH
-                    docker_args="",
-                    env={
-                        "PUBLIC_KEY": RUNPOD_SSH_PUBLIC_KEY,
-                    }
-                )
-                logger.info("Successfully created pod with GPU: %s", gpu_type)
-                break
-            except Exception as e:
-                logger.warning("Failed to create pod with %s: %s", gpu_type, e)
-                last_error = e
-                continue
-        else:
-            raise RuntimeError(f"Could not create pod with any GPU type. Last error: {last_error}")
+    job = endpoint.run({"input": payload})
+    logger.debug("Submitted job %s for text: %s...", job.job_id, text[:50])
 
-        self.pod_id = pod["id"]
-        logger.info("Pod created: %s", self.pod_id)
-
-        return self.pod_id
-
-    def wait_for_running(self, timeout: int = 300):
-        """Wait for the pod to be in running state."""
-        logger.info("Waiting for pod to be running...")
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            pod = runpod.get_pod(self.pod_id)
-            status = pod.get("desiredStatus")
-            runtime = pod.get("runtime")
-
-            if status == "RUNNING" and runtime:
-                # Extract SSH connection info
-                ports = runtime.get("ports", [])
-                for port in ports:
-                    if port.get("privatePort") == 22:
-                        self.ssh_host = port.get("ip")
-                        self.ssh_port = port.get("publicPort")
-                        break
-
-                if self.ssh_host and self.ssh_port:
-                    logger.info("Pod running - SSH: %s:%s", self.ssh_host, self.ssh_port)
-                    return
-
-            logger.debug("Pod status: %s, waiting...", status)
-            time.sleep(5)
-
-        raise TimeoutError(f"Pod not running after {timeout} seconds")
-
-    def wait_for_ssh(self, timeout: int = 120):
-        """Wait for SSH to become available."""
-        logger.info("Waiting for SSH to be available...")
-        start_time = time.time()
-
-        while time.time() - start_time < timeout:
-            if self._check_ssh():
-                logger.info("SSH is available")
-                return
-            time.sleep(5)
-
-        raise TimeoutError(f"SSH not available after {timeout} seconds")
-
-    def _get_ssh_key_path(self) -> str:
-        """Get the path to the SSH private key."""
-        for key_file in ["~/.ssh/id_ed25519", "~/.ssh/id_rsa"]:
-            path = Path(key_file).expanduser()
-            if path.exists():
-                return str(path)
-        return ""
-
-    def _check_ssh(self) -> bool:
-        """Check if SSH is available."""
+    try:
+        output = job.output(timeout=RUNPOD_REQUEST_TIMEOUT)
+    except TimeoutError:
+        logger.error("Job timed out after %ds for: %s...", RUNPOD_REQUEST_TIMEOUT, text[:50])
         try:
-            ssh_cmd = [
-                "ssh", "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=5",
-                "-o", "BatchMode=yes",
-                "-o", "UserKnownHostsFile=/dev/null",
-                "-p", str(self.ssh_port),
-            ]
-            key_path = self._get_ssh_key_path()
-            if key_path:
-                ssh_cmd.extend(["-i", key_path])
-            ssh_cmd.extend([f"root@{self.ssh_host}", "echo 'SSH OK'"])
+            job.cancel()
+        except Exception:
+            pass
+        raise RuntimeError(f"TTS generation timed out for: {text[:50]}...")
 
-            result = subprocess.run(ssh_cmd, capture_output=True, timeout=10)
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, Exception):
-            return False
+    if output is None:
+        status = job.status()
+        raise RuntimeError(f"TTS job failed with status: {status}")
 
-    def setup_chatterbox(self):
-        """Install Chatterbox TTS on the pod (skipped if using pre-built image)."""
-        # Check if chatterbox is already installed (custom image)
-        check_result = self._ssh_exec("python3 -c 'import chatterbox' 2>/dev/null && echo 'INSTALLED'", timeout=30)
+    audio_b64 = output["audio_base64"]
+    duration_ms = output["duration_ms"]
+    wav_bytes = base64.b64decode(audio_b64)
 
-        if "INSTALLED" in check_result:
-            logger.info("Chatterbox TTS already installed (using pre-built image)")
-            self._setup_complete = True
-            return
-
-        logger.info("Installing Chatterbox TTS...")
-
-        setup_script = """
-set -e
-pip install --quiet chatterbox-tts
-pip install --quiet soundfile
-echo 'SETUP_COMPLETE'
-"""
-        result = self._ssh_exec(setup_script, timeout=300)
-
-        if "SETUP_COMPLETE" not in result:
-            raise RuntimeError(f"Chatterbox setup failed: {result}")
-
-        logger.info("Chatterbox TTS installed successfully")
-        self._setup_complete = True
-
-    def _ssh_exec(self, command: str, timeout: int = 300) -> str:
-        """Execute a command on the pod via SSH."""
-        ssh_cmd = [
-            "ssh", "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=10",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-p", str(self.ssh_port),
-        ]
-        key_path = self._get_ssh_key_path()
-        if key_path:
-            ssh_cmd.extend(["-i", key_path])
-        ssh_cmd.extend([f"root@{self.ssh_host}", command])
-
-        result = subprocess.run(ssh_cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode != 0:
-            logger.error("SSH command failed: %s", result.stderr)
-        return result.stdout + result.stderr
-
-    def _scp_upload(self, local_path: Path, remote_path: str):
-        """Upload a file to the pod."""
-        scp_cmd = [
-            "scp", "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-P", str(self.ssh_port),
-        ]
-        key_path = self._get_ssh_key_path()
-        if key_path:
-            scp_cmd.extend(["-i", key_path])
-        scp_cmd.extend([str(local_path), f"root@{self.ssh_host}:{remote_path}"])
-
-        subprocess.run(scp_cmd, check=True, capture_output=True)
-
-    def _scp_download(self, remote_path: str, local_path: Path):
-        """Download a file from the pod."""
-        scp_cmd = [
-            "scp", "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=/dev/null",
-            "-P", str(self.ssh_port),
-        ]
-        key_path = self._get_ssh_key_path()
-        if key_path:
-            scp_cmd.extend(["-i", key_path])
-        scp_cmd.extend([f"root@{self.ssh_host}:{remote_path}", str(local_path)])
-
-        subprocess.run(scp_cmd, check=True, capture_output=True)
-
-    def generate_audio_segment(self, text: str, output_path: Path, voice_ref: Optional[str] = None):
-        """Generate audio for a text segment using Chatterbox TTS.
-
-        Args:
-            text: Text to synthesize
-            output_path: Local path to save the audio
-            voice_ref: Optional path to voice reference WAV for cloning (on remote pod)
-        """
-        # Escape text for Python string
-        escaped_text = text.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
-
-        # Build generate() call with parameters
-        generate_params = [
-            'text',
-            'language_id="pl"',
-            f'cfg_weight={CHATTERBOX_CFG_WEIGHT}',
-            f'exaggeration={CHATTERBOX_EXAGGERATION}',
-        ]
-
-        # Add voice reference for cloning if provided
-        if voice_ref:
-            generate_params.append(f'audio_prompt_path="{voice_ref}"')
-
-        generate_call = f"model.generate({', '.join(generate_params)})"
-
-        script = f'''
-import torch
-import torchaudio
-from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = ChatterboxMultilingualTTS.from_pretrained(device=device)
-
-text = """{escaped_text}"""
-wav = {generate_call}
-torchaudio.save("/tmp/output.wav", wav, model.sr)
-print("GENERATION_COMPLETE")
-'''
-
-        # Execute generation (first run downloads model, so needs longer timeout)
-        result = self._ssh_exec(f"python3 -c '{script}'", timeout=300)
-
-        if "GENERATION_COMPLETE" not in result:
-            raise RuntimeError(f"Audio generation failed: {result}")
-
-        # Download the generated audio
-        self._scp_download("/tmp/output.wav", output_path)
-
-    def terminate(self):
-        """Terminate the RunPod pod."""
-        if self.pod_id:
-            logger.info("Terminating pod: %s", self.pod_id)
-            try:
-                runpod.terminate_pod(self.pod_id)
-            except Exception as e:
-                logger.warning("Failed to terminate pod: %s", e)
-            self.pod_id = None
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.terminate()
+    return wav_bytes, duration_ms
 
 
 # ==========================
@@ -554,7 +321,7 @@ def generate_audio(
     voice_b: str,
     storage: StorageBackend = None
 ):
-    """Generate audio from dialogue using Chatterbox TTS on RunPod.
+    """Generate audio from dialogue using Chatterbox TTS on RunPod Serverless.
 
     Args:
         dialogue_path: Path to dialogue JSON file
@@ -566,62 +333,71 @@ def generate_audio(
     """
     logger.info("Generating audio from dialogue: %s", dialogue_path)
 
+    # Validate config
+    api_key = os.environ.get("RUNPOD_API_KEY")
+    if not api_key:
+        raise RuntimeError("RUNPOD_API_KEY environment variable not set")
+    if not RUNPOD_ENDPOINT_ID:
+        raise RuntimeError(
+            "RUNPOD_ENDPOINT_ID environment variable not set.\n"
+            "Create a serverless endpoint at https://www.runpod.io/console/serverless"
+        )
+
+    runpod.api_key = api_key
+    endpoint = runpod.Endpoint(RUNPOD_ENDPOINT_ID)
+
     data = load_dialogue(dialogue_path, storage)
     segments, speakers = extract_segments(data)
     logger.info("Found %d segments with speakers: %s", len(segments), speakers)
 
+    # Pre-encode voice reference files as base64 (done once, reused for all segments)
     voices = [voice_ref(voice_a), voice_ref(voice_b)]
     voice_map = {s: voices[i % 2] for i, s in enumerate(speakers)}
 
-    with RunPodChatterboxInstance() as pod:
-        # Launch and wait for pod
-        pod.launch()
-        pod.wait_for_running()
-        pod.wait_for_ssh()
-        pod.setup_chatterbox()
+    voice_b64_map = {}
+    for speaker, local_path in voice_map.items():
+        if local_path and Path(local_path).exists():
+            wav_bytes = Path(local_path).read_bytes()
+            voice_b64_map[speaker] = base64.b64encode(wav_bytes).decode("utf-8")
+            logger.info("Encoded voice reference for %s: %s (%d bytes)",
+                        speaker, local_path, len(wav_bytes))
+        else:
+            voice_b64_map[speaker] = None
 
-        # Upload voice reference files to the pod
-        remote_voice_map = {}
-        for speaker, local_path in voice_map.items():
-            if local_path and Path(local_path).exists():
-                remote_path = f"/tmp/voice_{speaker}.wav"
-                logger.info("Uploading voice reference for %s: %s", speaker, local_path)
-                pod._scp_upload(Path(local_path), remote_path)
-                remote_voice_map[speaker] = remote_path
-            else:
-                remote_voice_map[speaker] = None
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        audio_files = []
+        durations = []
 
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmp:
-            tmp = Path(tmp)
-            audio_files = []
-            durations = []
+        for i, (speaker, text, _emphasis, _source) in enumerate(segments):
+            out = tmp / f"seg_{i:03}.wav"
+            logger.info("Generating segment %d/%d: %s...",
+                        i + 1, len(segments), text[:50])
 
-            for i, (speaker, text, _emphasis, _source) in enumerate(segments):
-                out = tmp / f"seg_{i:03}.wav"
-                logger.info("Generating segment %d/%d: %s...", i + 1, len(segments), text[:50])
-                pod.generate_audio_segment(text, out, remote_voice_map[speaker])
-                dur = get_audio_duration_ms(out)
-                audio_files.append(out)
-                durations.append(dur)
+            wav_bytes, dur = _call_serverless_tts(
+                endpoint, text, voice_b64_map[speaker]
+            )
 
-            logger.info("Merging %d audio segments", len(audio_files))
+            out.write_bytes(wav_bytes)
+            audio_files.append(out)
+            durations.append(dur)
 
-            # Create temp output for merging
-            temp_output = tmp / "merged.mp3"
-            merge_audio(audio_files, temp_output, PAUSE_BETWEEN_SEGMENTS_MS)
+        logger.info("Merging %d audio segments", len(audio_files))
 
-            # Copy to final destination
-            if storage is not None:
-                storage.copy_from_local(temp_output, str(output))
-            else:
-                import shutil
-                output = Path(output)
-                output.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(temp_output, output)
+        # Create temp output for merging
+        temp_output = tmp / "merged.mp3"
+        merge_audio(audio_files, temp_output, PAUSE_BETWEEN_SEGMENTS_MS)
 
-    # Pod is terminated automatically via context manager
+        # Copy to final destination
+        if storage is not None:
+            storage.copy_from_local(temp_output, str(output))
+        else:
+            import shutil
+            output = Path(output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(temp_output, output)
 
+    # Build timeline
     timeline_segments = []
     t = 0
 

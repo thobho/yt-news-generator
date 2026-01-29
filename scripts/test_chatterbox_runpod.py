@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script for Chatterbox TTS on RunPod.
+Test script for Chatterbox TTS on RunPod Serverless.
 
 Prerequisites:
     1. RunPod account with credits: https://runpod.io
     2. API key set: export RUNPOD_API_KEY=your_key
+    3. Serverless endpoint created and ID set: export RUNPOD_ENDPOINT_ID=your_endpoint_id
 
 Usage:
     python scripts/test_chatterbox_runpod.py
@@ -28,6 +29,14 @@ def check_prerequisites():
         print("  Then run: export RUNPOD_API_KEY=your_key")
         return False
     print("✓ RUNPOD_API_KEY found")
+
+    # Check RunPod Endpoint ID
+    if not os.environ.get("RUNPOD_ENDPOINT_ID"):
+        print("✗ RUNPOD_ENDPOINT_ID not set")
+        print("  Create a serverless endpoint at: https://www.runpod.io/console/serverless")
+        print("  Then run: export RUNPOD_ENDPOINT_ID=your_endpoint_id")
+        return False
+    print("✓ RUNPOD_ENDPOINT_ID found")
 
     return True
 
@@ -93,7 +102,7 @@ def run_test():
 
 def main():
     print("=" * 60)
-    print("Chatterbox TTS on RunPod - Test Script")
+    print("Chatterbox TTS on RunPod Serverless - Test Script")
     print("=" * 60)
     print()
 
