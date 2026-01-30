@@ -26,12 +26,18 @@ RUN pip install --no-cache-dir \
     soundfile \
     runpod
 
-# Pre-download the Multilingual Chatterbox model (~1.5GB cached in image)
+# Pre-download model files into HF cache (download only, no loading -
+# the CI runner has no GPU and the checkpoint contains CUDA tensors)
 RUN python3 -c "\
-from chatterbox.mtl_tts import ChatterboxMultilingualTTS; \
-print('Downloading Chatterbox Multilingual model...'); \
-model = ChatterboxMultilingualTTS.from_pretrained(device='cpu'); \
-print('Model cached successfully!'); \
+from huggingface_hub import snapshot_download; \
+print('Downloading Chatterbox model files...'); \
+snapshot_download( \
+    repo_id='ResembleAI/chatterbox', \
+    repo_type='model', \
+    revision='main', \
+    allow_patterns=['ve.pt', 't3_mtl23ls_v2.safetensors', 's3gen.pt', 'grapheme_mtl_merged_expanded_v1.json', 'conds.pt', 'Cangjie5_TC.json'], \
+); \
+print('Model files cached successfully!'); \
 "
 
 WORKDIR /workspace
