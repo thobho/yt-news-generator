@@ -48,6 +48,7 @@ export interface RunSummary {
   has_video: boolean;
   has_audio: boolean;
   has_images: boolean;
+  has_youtube: boolean;
   image_count: number;
 }
 

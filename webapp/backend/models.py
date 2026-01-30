@@ -11,6 +11,7 @@ class RunSummary(BaseModel):
     has_video: bool
     has_audio: bool
     has_images: bool
+    has_youtube: bool
     image_count: int
 
 

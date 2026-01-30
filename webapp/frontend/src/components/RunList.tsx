@@ -25,12 +25,6 @@ function MediaIcons({ run }: { run: RunSummary }) {
   return (
     <div style={{ display: 'flex', gap: '8px' }}>
       <span
-        className={`icon ${run.has_video ? 'icon-active' : 'icon-inactive'}`}
-        title={run.has_video ? 'Video available' : 'No video'}
-      >
-        🎬
-      </span>
-      <span
         className={`icon ${run.has_audio ? 'icon-active' : 'icon-inactive'}`}
         title={run.has_audio ? 'Audio available' : 'No audio'}
       >
@@ -40,7 +34,19 @@ function MediaIcons({ run }: { run: RunSummary }) {
         className={`icon ${run.has_images ? 'icon-active' : 'icon-inactive'}`}
         title={run.has_images ? `${run.image_count} images` : 'No images'}
       >
-        🖼️ {run.image_count > 0 && <small>({run.image_count})</small>}
+        🖼️
+      </span>
+      <span
+        className={`icon ${run.has_video ? 'icon-active' : 'icon-inactive'}`}
+        title={run.has_video ? 'Video available' : 'No video'}
+      >
+        🎬
+      </span>
+      <span
+        className={`icon ${run.has_youtube ? 'icon-active' : 'icon-inactive'}`}
+        title={run.has_youtube ? 'Uploaded to YouTube' : 'Not uploaded'}
+      >
+        ▶️
       </span>
     </div>
   )

@@ -7,7 +7,6 @@ import {
   updatePrompt,
   deletePrompt,
   setActivePrompt,
-  migratePrompts,
   PromptTypeInfo,
   PromptType,
 } from '../api/client';
@@ -28,7 +27,6 @@ export default function SettingsPage() {
   const [expandedType, setExpandedType] = useState<PromptType | null>(null);
   const [editingPrompt, setEditingPrompt] = useState<EditingPrompt | null>(null);
   const [saving, setSaving] = useState(false);
-  const [migrating, setMigrating] = useState(false);
 
   useEffect(() => {
     loadPrompts();
@@ -44,30 +42,6 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to load prompts');
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleMigrate() {
-    if (!confirm('This will migrate old prompts to the new structure. Continue?')) {
-      return;
-    }
-    try {
-      setMigrating(true);
-      const result = await migratePrompts();
-      const migrated = Object.entries(result.migrated)
-        .filter(([_, prompts]) => prompts.length > 0)
-        .map(([type, prompts]) => `${type}: ${prompts.join(', ')}`)
-        .join('\n');
-      if (migrated) {
-        alert(`Migrated prompts:\n${migrated}`);
-      } else {
-        alert('No prompts needed migration.');
-      }
-      await loadPrompts();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Migration failed');
-    } finally {
-      setMigrating(false);
     }
   }
 
@@ -187,13 +161,6 @@ export default function SettingsPage() {
           </Link>
           <h1>Prompt Settings</h1>
         </div>
-        <button
-          onClick={handleMigrate}
-          disabled={migrating}
-          className="migrate-btn"
-        >
-          {migrating ? 'Migrating...' : 'Migrate Old Prompts'}
-        </button>
       </div>
 
       <div className="prompt-types">

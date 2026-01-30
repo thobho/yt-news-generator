@@ -118,6 +118,7 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str]) -> RunSummary 
     has_images = "images/images.json" in run_keys
     has_dialogue = "dialogue.json" in run_keys
     has_yt_metadata = "yt_metadata.md" in run_keys
+    has_youtube = "yt_upload.json" in run_keys
 
     # Determine status from available files
     if has_video and has_audio and has_dialogue and has_images:
@@ -143,6 +144,7 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str]) -> RunSummary 
         has_video=has_video,
         has_audio=has_audio,
         has_images=has_images,
+        has_youtube=has_youtube,
         image_count=image_count,
     )
 
@@ -195,6 +197,7 @@ async def list_runs():
                 has_video=run_storage.exists("video.mp4"),
                 has_audio=run_storage.exists("audio.mp3"),
                 has_images=run_storage.exists("images/images.json"),
+                has_youtube=run_storage.exists("yt_upload.json"),
                 image_count=count_images_for_run(entry.name),
             )
             runs.append(run_summary)
