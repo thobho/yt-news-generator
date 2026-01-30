@@ -1,0 +1,133 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+          cache-dependency-path: webapp/frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: webapp/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Copy frontend build to backend static
+        run: |
+          rm -rf webapp/backend/static
+          cp -r webapp/frontend/dist webapp/backend/static
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Write credentials
+        run: |
+          mkdir -p /tmp/deploy-credentials
+          echo '${{ secrets.ENV_PRODUCTION }}' > /tmp/deploy-credentials/env.production
+          echo '${{ secrets.YT_CLIENT_SECRETS }}' > /tmp/deploy-credentials/client_secrets.json
+          echo '${{ secrets.YT_TOKEN }}' > /tmp/deploy-credentials/token.json
+
+      - name: Sync project files to EC2
+        run: |
+          rsync -azq --delete \
+            --exclude 'node_modules' \
+            --exclude 'venv' \
+            --exclude '__pycache__' \
+            --exclude '.git' \
+            --exclude 'credentials' \
+            --exclude '*.pem' \
+            --exclude 'output' \
+            --exclude 'storage' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            ./ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/
+
+      - name: Copy credentials to EC2
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/deploy-credentials/env.production \
+            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/.env
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ubuntu@${{ secrets.EC2_HOST }} \
+            "mkdir -p /home/ubuntu/yt-news-generator/credentials"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/deploy-credentials/client_secrets.json \
+            /tmp/deploy-credentials/token.json \
+            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/credentials/
+
+      - name: Install dependencies and restart
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ubuntu@${{ secrets.EC2_HOST }} << 'REMOTE_SCRIPT'
+          set -e
+          cd /home/ubuntu/yt-news-generator
+
+          # Swap setup for low-memory instances
+          TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
+          SWAP_TOTAL=$(free -m | awk '/^Swap:/{print $2}')
+          if [ "$TOTAL_MEM" -lt 2048 ] && [ "$SWAP_TOTAL" -lt 1024 ]; then
+            echo "Setting up swap..."
+            if [ ! -f /swapfile ]; then
+              sudo fallocate -l 2G /swapfile
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+              echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+            else
+              sudo swapon /swapfile 2>/dev/null || true
+            fi
+          fi
+
+          # Python dependencies
+          source venv/bin/activate
+          pip install -q -r requirements.txt
+          pip install -q -r webapp/backend/requirements.txt
+
+          # Remotion NPM dependencies
+          cd remotion
+          if [ ! -d "node_modules" ]; then
+            npm install
+          else
+            npm install --prefer-offline
+          fi
+          cd ..
+
+          # Restart webapp
+          source .env
+          pkill -f uvicorn 2>/dev/null || true
+          sleep 1
+          nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
+          sleep 2
+
+          if pgrep -f uvicorn > /dev/null; then
+            echo "Webapp restarted successfully!"
+          else
+            echo "ERROR: Webapp failed to start"
+            tail -20 /tmp/webapp.log
+            exit 1
+          fi
+          REMOTE_SCRIPT
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf /tmp/deploy-credentials
+          rm -f ~/.ssh/deploy_key
