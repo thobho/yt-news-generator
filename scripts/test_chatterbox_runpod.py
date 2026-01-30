@@ -79,25 +79,21 @@ def run_test():
     output_dir = project_root / "output/chatterbox_test"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_audio = output_dir / "test_audio_runpod.mp3"
-    output_timeline = output_dir / "test_timeline_runpod.json"
+    output_audio = output_dir / "test_audio_runpod.wav"
 
     print(f"\nGenerating audio...")
     print(f"  Dialogue: {dialogue_path}")
     print(f"  Output: {output_audio}")
-    print(f"  Timeline: {output_timeline}")
 
     generate_audio(
         dialogue_path=dialogue_path,
         output=output_audio,
-        timeline=output_timeline,
         voice_a="neutral",
         voice_b="neutral"
     )
 
     print(f"\n✓ Audio generated successfully!")
     print(f"  Audio file: {output_audio}")
-    print(f"  Timeline: {output_timeline}")
 
 
 def main():

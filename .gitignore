@@ -47,6 +47,9 @@ npm-debug.log*
 *.tmp
 *.temp
 
+# Voice reference audio files
+data/voices/
+
 # Credentials (API keys, SSH keys, tokens)
 credentials/
 *.pem
