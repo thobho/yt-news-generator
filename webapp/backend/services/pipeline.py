@@ -532,6 +532,35 @@ def upload_to_youtube(run_dir: Path) -> dict:
     return upload_to_youtube_for_run(run_dir.name)
 
 
+def delete_youtube_for_run(run_id: str) -> dict:
+    """Delete video from YouTube and remove yt_upload.json."""
+    logger.info("Deleting YouTube video for run: %s", run_id)
+    from upload_youtube import delete_from_youtube
+
+    run_storage = get_run_storage(run_id)
+    keys = get_run_keys()
+
+    if not run_storage.exists(keys["yt_upload"]):
+        raise FileNotFoundError("No YouTube upload found for this run.")
+
+    # Read upload info to get video_id
+    upload_content = run_storage.read_text(keys["yt_upload"])
+    upload_info = json.loads(upload_content)
+    video_id = upload_info.get("video_id")
+
+    if not video_id:
+        raise ValueError("No video_id found in upload info.")
+
+    # Delete from YouTube
+    delete_from_youtube(video_id)
+
+    # Remove yt_upload.json
+    run_storage.delete(keys["yt_upload"])
+
+    logger.info("YouTube video deleted for run %s: %s", run_id, video_id)
+    return {"deleted_video_id": video_id}
+
+
 def update_images_metadata_for_run(run_id: str, images_data: dict) -> dict:
     """Update images.json for a run."""
     run_storage = get_run_storage(run_id)
@@ -723,11 +752,12 @@ def get_workflow_state_for_run(run_id: str) -> dict:
     has_images = run_storage.exists(keys["images_json"])
     has_video = run_storage.exists(keys["video"])
     has_yt_metadata = run_storage.exists(keys["yt_metadata"])
+    has_yt_upload = run_storage.exists(keys["yt_upload"])
 
     # Determine current step and available actions
     if has_video and has_yt_metadata:
         current_step = "ready_to_upload"
-        can_upload = True
+        can_upload = not has_yt_upload
     elif has_audio and has_images:
         current_step = "ready_for_video"
         can_upload = False
@@ -756,7 +786,8 @@ def get_workflow_state_for_run(run_id: str) -> dict:
         "can_edit_dialogue": has_dialogue,  # Always allow editing dialogue
         "can_generate_audio": has_dialogue and not has_audio,
         "can_generate_video": has_audio and has_images and not has_video,
-        "can_upload": has_video and has_yt_metadata,
+        "can_upload": can_upload,
+        "can_delete_youtube": has_yt_upload,
         # Regeneration options
         "can_drop_audio": has_audio,
         "can_drop_images": has_images,

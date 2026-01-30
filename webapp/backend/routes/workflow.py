@@ -63,6 +63,7 @@ class WorkflowState(BaseModel):
     can_generate_audio: bool
     can_generate_video: bool
     can_upload: bool
+    can_delete_youtube: bool = False
     # Regeneration options
     can_drop_audio: bool = False
     can_drop_images: bool = False
@@ -332,6 +333,22 @@ async def upload_youtube(
     background_tasks.add_task(run_task)
 
     return {"task_id": task_id, "status": "started"}
+
+
+@router.delete("/{run_id}/youtube")
+async def delete_youtube(run_id: str):
+    """Delete uploaded video from YouTube and remove upload record."""
+    validate_run_exists(run_id)
+
+    state = pipeline.get_workflow_state_for_run(run_id)
+    if not state["can_delete_youtube"]:
+        raise HTTPException(
+            status_code=400,
+            detail="No YouTube upload to delete"
+        )
+
+    result = pipeline.delete_youtube_for_run(run_id)
+    return {"status": "deleted", **result}
 
 
 @router.get("/task/{task_id}", response_model=TaskStatus)

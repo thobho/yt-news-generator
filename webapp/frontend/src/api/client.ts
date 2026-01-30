@@ -103,6 +103,7 @@ export interface WorkflowState {
   can_generate_audio: boolean;
   can_generate_video: boolean;
   can_upload: boolean;
+  can_delete_youtube?: boolean;
   // Regeneration options
   can_drop_audio?: boolean;
   can_drop_images?: boolean;
@@ -422,6 +423,17 @@ export async function dropImages(runId: string): Promise<{ status: string; delet
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to drop images');
+  }
+  return response.json();
+}
+
+export async function deleteYoutube(runId: string): Promise<{ status: string; deleted_video_id: string }> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/youtube`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete YouTube video');
   }
   return response.json();
 }

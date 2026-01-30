@@ -242,6 +242,15 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> 
     return video_id
 
 
+def delete_from_youtube(video_id: str) -> None:
+    """Delete a video from YouTube by its video ID."""
+    logger.info("Deleting video from YouTube: %s", video_id)
+    creds = authenticate()
+    youtube = build("youtube", "v3", credentials=creds)
+    youtube.videos().delete(id=video_id).execute()
+    logger.info("Video deleted from YouTube: %s", video_id)
+
+
 def upload_to_youtube(
     video_path: Union[Path, str],
     metadata_path: Union[Path, str],

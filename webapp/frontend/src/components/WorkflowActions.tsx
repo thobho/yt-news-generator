@@ -9,6 +9,7 @@ import {
   dropAudio,
   dropVideo,
   dropImages,
+  deleteYoutube,
   fetchRunningTasksForRun,
   ScheduleOption,
 } from '../api/client'
@@ -134,8 +135,31 @@ export default function WorkflowActions({
   const handleDropVideo = () => handleDrop(dropVideo, 'Video')
   const handleDropImages = () => handleDrop(dropImages, 'Images')
 
+  const handleDeleteYoutube = async () => {
+    if (!confirm('Are you sure you want to remove this video from YouTube? This cannot be undone.')) {
+      return
+    }
+    setIsRunning(true)
+    setError(null)
+    setStatus('Removing from YouTube...')
+
+    try {
+      await deleteYoutube(runId)
+      setStatus('Removed from YouTube!')
+      setTimeout(() => {
+        setStatus(null)
+        onRefresh()
+      }, 1000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setIsRunning(false)
+    }
+  }
+
   // Determine current step for display
   const getStepIndicator = () => {
+    if (workflow.can_delete_youtube) return { step: 5, text: 'Uploaded to YouTube' }
     if (workflow.can_upload) return { step: 5, text: 'Ready to upload' }
     if (workflow.can_generate_video) return { step: 4, text: 'Ready for video' }
     if (workflow.can_generate_audio) return { step: 3, text: 'Ready for audio' }
@@ -220,7 +244,7 @@ export default function WorkflowActions({
       </div>
 
       {/* Drop/Regenerate section */}
-      {(workflow.can_drop_audio || workflow.can_drop_images || workflow.can_drop_video) && (
+      {(workflow.can_drop_audio || workflow.can_drop_images || workflow.can_drop_video || workflow.can_delete_youtube) && (
         <div className="workflow-drop-section">
           <span className="drop-label">Drop to regenerate:</span>
           <div className="drop-buttons">
@@ -237,6 +261,11 @@ export default function WorkflowActions({
             {workflow.can_drop_video && (
               <button onClick={handleDropVideo} disabled={isRunning} className="danger small">
                 Drop Video
+              </button>
+            )}
+            {workflow.can_delete_youtube && (
+              <button onClick={handleDeleteYoutube} disabled={isRunning} className="danger small">
+                Remove from YouTube
               </button>
             )}
           </div>
