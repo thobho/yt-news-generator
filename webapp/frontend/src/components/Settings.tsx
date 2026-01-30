@@ -90,47 +90,13 @@ export default function Settings({ onClose }: SettingsProps) {
       {error && <div className="error" style={{ marginBottom: '12px' }}>{error}</div>}
 
       <div className="settings-section">
-        <label className="settings-label">Dialogue Prompt Version</label>
-        <div className="settings-description">
-          Select which prompt template to use for dialogue generation
-        </div>
-
-        <div className="prompt-version-options">
-          {available?.prompt_versions.map((pv) => (
-            <label
-              key={pv.version}
-              className={`prompt-version-option ${
-                settings?.prompt_version === pv.version ? 'selected' : ''
-              }`}
-            >
-              <input
-                type="radio"
-                name="prompt_version"
-                value={pv.version}
-                checked={settings?.prompt_version === pv.version}
-                onChange={(e) => handleSettingChange({ prompt_version: e.target.value })}
-                disabled={saving}
-              />
-              <span className="option-content">
-                <span className="option-label">{pv.label}</span>
-                <span className="option-files">
-                  {pv.files.main}, {pv.files.refine}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        {saving && <div className="saving-indicator">Saving...</div>}
-      </div>
-
-      <div className="settings-section">
         <label className="settings-label">TTS Engine</label>
         <div className="settings-description">
           Select which text-to-speech engine to use for audio generation
         </div>
 
         <div className="prompt-version-options">
+          {saving && <div className="saving-indicator">Saving...</div>}
           {available?.tts_engines.map((engine) => (
             <label
               key={engine.id}
