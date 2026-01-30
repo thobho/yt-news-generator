@@ -28,14 +28,14 @@ export default function Settings({ onClose }: SettingsProps) {
       .finally(() => setLoading(false))
   }, [])
 
-  const handlePromptVersionChange = async (version: string) => {
+  const handleSettingChange = async (update: Partial<SettingsType>) => {
     if (!settings) return
 
     setSaving(true)
     setError(null)
 
     try {
-      const updated = await updateSettings({ prompt_version: version })
+      const updated = await updateSettings(update)
       setSettings(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -108,7 +108,7 @@ export default function Settings({ onClose }: SettingsProps) {
                 name="prompt_version"
                 value={pv.version}
                 checked={settings?.prompt_version === pv.version}
-                onChange={(e) => handlePromptVersionChange(e.target.value)}
+                onChange={(e) => handleSettingChange({ prompt_version: e.target.value })}
                 disabled={saving}
               />
               <span className="option-content">
@@ -122,6 +122,37 @@ export default function Settings({ onClose }: SettingsProps) {
         </div>
 
         {saving && <div className="saving-indicator">Saving...</div>}
+      </div>
+
+      <div className="settings-section">
+        <label className="settings-label">TTS Engine</label>
+        <div className="settings-description">
+          Select which text-to-speech engine to use for audio generation
+        </div>
+
+        <div className="prompt-version-options">
+          {available?.tts_engines.map((engine) => (
+            <label
+              key={engine.id}
+              className={`prompt-version-option ${
+                settings?.tts_engine === engine.id ? 'selected' : ''
+              }`}
+            >
+              <input
+                type="radio"
+                name="tts_engine"
+                value={engine.id}
+                checked={settings?.tts_engine === engine.id}
+                onChange={(e) => handleSettingChange({ tts_engine: e.target.value })}
+                disabled={saving}
+              />
+              <span className="option-content">
+                <span className="option-label">{engine.label}</span>
+                <span className="option-files">{engine.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   )

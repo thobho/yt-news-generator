@@ -2,6 +2,8 @@
 Settings routes - API endpoints for global settings.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -12,10 +14,12 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 class SettingsResponse(BaseModel):
     prompt_version: str
+    tts_engine: str
 
 
 class SettingsUpdateRequest(BaseModel):
-    prompt_version: str
+    prompt_version: Optional[str] = None
+    tts_engine: Optional[str] = None
 
 
 class PromptVersionInfo(BaseModel):
@@ -24,40 +28,66 @@ class PromptVersionInfo(BaseModel):
     files: dict[str, str]
 
 
+class TTSEngineInfo(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
 class AvailableSettingsResponse(BaseModel):
     prompt_versions: list[PromptVersionInfo]
+    tts_engines: list[TTSEngineInfo]
 
 
 @router.get("", response_model=SettingsResponse)
 async def get_settings():
     """Get current settings."""
     current = settings_service.load_settings()
-    return SettingsResponse(prompt_version=current.prompt_version)
+    return SettingsResponse(
+        prompt_version=current.prompt_version,
+        tts_engine=current.tts_engine,
+    )
 
 
 @router.put("", response_model=SettingsResponse)
 async def update_settings(request: SettingsUpdateRequest):
     """Update settings."""
-    # Validate prompt version
-    available = [v["version"] for v in settings_service.get_available_prompt_versions()]
-    if request.prompt_version not in available:
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid prompt version. Available: {available}"
-        )
-
     current = settings_service.load_settings()
-    current.prompt_version = request.prompt_version  # type: ignore
+
+    if request.prompt_version is not None:
+        available = [v["version"] for v in settings_service.get_available_prompt_versions()]
+        if request.prompt_version not in available:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid prompt version. Available: {available}"
+            )
+        current.prompt_version = request.prompt_version  # type: ignore
+
+    if request.tts_engine is not None:
+        valid_engines = [e["id"] for e in settings_service.get_available_tts_engines()]
+        if request.tts_engine not in valid_engines:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid TTS engine. Available: {valid_engines}"
+            )
+        current.tts_engine = request.tts_engine  # type: ignore
+
     settings_service.save_settings(current)
 
-    return SettingsResponse(prompt_version=current.prompt_version)
+    return SettingsResponse(
+        prompt_version=current.prompt_version,
+        tts_engine=current.tts_engine,
+    )
 
 
 @router.get("/available", response_model=AvailableSettingsResponse)
 async def get_available_settings():
     """Get available setting options."""
     versions = settings_service.get_available_prompt_versions()
+    engines = settings_service.get_available_tts_engines()
     return AvailableSettingsResponse(
-        prompt_versions=[PromptVersionInfo(**v) for v in versions]
+        prompt_versions=[PromptVersionInfo(**v) for v in versions],
+        tts_engines=[TTSEngineInfo(**e) for e in engines],
     )

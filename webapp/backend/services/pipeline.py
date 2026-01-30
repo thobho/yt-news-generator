@@ -248,8 +248,9 @@ def update_dialogue(run_dir: Path, dialogue_data: dict) -> dict:
 
 def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "Bella") -> dict:
     """Generate audio from dialogue."""
-    logger.info("Starting audio generation for run: %s", run_id)
-    from generate_audio import generate_audio as gen_audio
+    settings = settings_service.load_settings()
+    tts_engine = settings.tts_engine
+    logger.info("Starting audio generation for run: %s (engine=%s)", run_id, tts_engine)
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -257,18 +258,31 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
     if not run_storage.exists(keys["dialogue"]):
         raise FileNotFoundError("Dialogue not found. Generate dialogue first.")
 
-    gen_audio(
-        keys["dialogue"],
-        keys["audio"],
-        keys["timeline"],
-        voice_a,
-        voice_b,
-        storage=run_storage,
-    )
+    if tts_engine == "chatterbox":
+        from generate_audio_runpod import generate_audio as gen_audio
+        gen_audio(
+            keys["dialogue"],
+            keys["audio"],
+            voice_a="male",
+            voice_b="female",
+            storage=run_storage,
+        )
+    else:
+        from generate_audio import generate_audio as gen_audio
+        gen_audio(
+            keys["dialogue"],
+            keys["audio"],
+            keys["timeline"],
+            voice_a,
+            voice_b,
+            storage=run_storage,
+        )
 
-    # Return timeline data
-    timeline_content = run_storage.read_text(keys["timeline"])
-    return json.loads(timeline_content)
+    # Return timeline data (chatterbox doesn't produce timeline)
+    if run_storage.exists(keys["timeline"]):
+        timeline_content = run_storage.read_text(keys["timeline"])
+        return json.loads(timeline_content)
+    return {}
 
 
 def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella") -> dict:

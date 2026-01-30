@@ -26,10 +26,11 @@ from tts_client import TTSClient
 
 logger = get_logger(__name__)
 
-DEFAULT_VOICE = "neutral"
+DEFAULT_VOICE = "male"
 
 VOICE_REFS = {
-    "neutral": "data/voices/polish_native_cleaned.wav",
+    "male": "data/voices/male.wav",
+    "female": "data/voices/female.wav",
 }
 
 

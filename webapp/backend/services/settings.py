@@ -24,6 +24,21 @@ SETTINGS_KEY = "settings.json"
 PROMPT_VERSIONS = ["5", "6", "7"]
 PromptVersion = Literal["5", "6", "7"]
 
+# Available TTS engines
+TTSEngine = Literal["elevenlabs", "chatterbox"]
+TTS_ENGINES = [
+    {
+        "id": "elevenlabs",
+        "label": "ElevenLabs",
+        "description": "Cloud TTS via ElevenLabs API (eleven_multilingual_v2)",
+    },
+    {
+        "id": "chatterbox",
+        "label": "Chatterbox",
+        "description": "Chatterbox TTS on RunPod Serverless (voice cloning)",
+    },
+]
+
 # Starting episode number for DYSKUSJA counter
 DEFAULT_EPISODE_NUMBER = 6
 
@@ -32,6 +47,7 @@ class Settings(BaseModel):
     """Global webapp settings."""
     prompt_version: PromptVersion = "7"
     episode_counter: int = DEFAULT_EPISODE_NUMBER
+    tts_engine: TTSEngine = "elevenlabs"
 
 
 def get_default_settings() -> Settings:
@@ -96,6 +112,11 @@ def get_prompt_paths(version: PromptVersion) -> tuple[Path, Path]:
     main_prompt = data_dir / f"prompt-{version}.md"
     refine_prompt = data_dir / f"prompt-{version}-step-2.md"
     return main_prompt, refine_prompt
+
+
+def get_available_tts_engines() -> list[dict]:
+    """Get list of available TTS engines."""
+    return TTS_ENGINES
 
 
 def get_available_prompt_versions() -> list[dict]:
