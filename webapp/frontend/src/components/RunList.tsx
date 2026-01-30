@@ -116,7 +116,7 @@ export default function RunList() {
   return (
     <div>
       <div className="page-header">
-        <h1>YT News Generator Dashboard</h1>
+        <h1>&#x1F4F0; YT News Generator</h1>
         <div className="header-actions">
           <Link to="/settings" className="settings-toggle">
             Prompt Settings
