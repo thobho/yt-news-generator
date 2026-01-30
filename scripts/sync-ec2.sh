@@ -130,7 +130,6 @@ echo "Installing Python dependencies..."
 source venv/bin/activate
 pip install -q -r requirements.txt
 pip install -q -r webapp/backend/requirements.txt
-pip install -q boto3 elevenlabs
 
 # ---- NPM dependencies for Remotion ----
 echo ""

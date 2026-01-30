@@ -379,7 +379,6 @@ source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install -r webapp/backend/requirements.txt
-pip install boto3 elevenlabs
 
 # Install Remotion NPM dependencies
 echo ""
