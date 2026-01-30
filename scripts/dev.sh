@@ -1,21 +1,40 @@
 #!/bin/bash
 #
 # YT News Generator - Development Runner
-# Runs backend and frontend with hot-reloading
+# Runs backend and frontend with hot-reloading using local storage.
+#
+# Before first run, sync S3 data:
+#   ./scripts/dump-s3.sh
 #
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_DIR"
 
 # Colors
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
 NC='\033[0m'
 
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+# Force local storage for development
+export STORAGE_BACKEND=local
+
+# Check for local storage data
+if [ ! -d "storage/data" ]; then
+    log_warn "No local storage data found."
+    log_warn "Run ./scripts/dump-s3.sh to sync data from S3 first."
+    exit 1
+fi
 
 # Setup Python if needed
 if [ ! -d "venv" ]; then
@@ -41,7 +60,8 @@ if [ ! -d "remotion/node_modules" ]; then
     (cd remotion && npm install)
 fi
 
-mkdir -p output
+# Ensure local storage directories exist
+mkdir -p storage/data storage/output
 
 # Function to cleanup background processes
 cleanup() {
@@ -54,7 +74,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM
 
 # Start backend
-log_info "Starting backend on http://localhost:8000"
+log_info "Starting backend on http://localhost:8000 (STORAGE_BACKEND=local)"
 uvicorn webapp.backend.main:app --reload --port 8000 &
 BACKEND_PID=$!
 

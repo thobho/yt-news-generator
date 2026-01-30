@@ -7,9 +7,9 @@ Web application for generating YouTube Shorts news videos with AI-generated dial
 - Browse and manage video generation runs
 - Generate dialogue from news topics using AI
 - Create images with DALL-E
-- Generate audio with ElevenLabs TTS
+- Generate audio with ElevenLabs or Chatterbox TTS
 - Render videos with Remotion
-- Upload directly to YouTube
+- Upload directly to YouTube with scheduling
 
 ## Requirements
 
@@ -19,6 +19,7 @@ Web application for generating YouTube Shorts news videos with AI-generated dial
 - **Node.js**: 18+
 - **npm**: 9+
 - **FFmpeg**: Required for video rendering (install via `brew install ffmpeg` on macOS)
+- **AWS CLI**: Required for syncing S3 data locally (`brew install awscli` on macOS)
 
 ### Environment Variables
 
@@ -32,6 +33,11 @@ The following environment variables must be set:
 | `AUTH_PASSWORD` | Password for dashboard authentication | Yes |
 | `HOST` | Server host (default: `0.0.0.0`) | No |
 | `PORT` | Server port (default: `8000`) | No |
+| `STORAGE_BACKEND` | `local` or `s3` (auto-detected: `local` on macOS, `s3` on Linux) | No |
+| `S3_BUCKET` | S3 bucket name (default: `yt-news-generator`) | No |
+| `S3_REGION` | AWS region (default: `us-east-1`) | No |
+| `RUNPOD_API_KEY` | RunPod API key for Chatterbox TTS | No |
+| `RUNPOD_ENDPOINT_ID` | RunPod serverless endpoint ID | No |
 
 ### Authentication
 
@@ -39,7 +45,6 @@ The dashboard requires password authentication to protect all API endpoints.
 
 **Setup:**
 ```bash
-# Set a strong password
 export AUTH_PASSWORD="your-secure-password"
 ```
 
@@ -47,13 +52,6 @@ export AUTH_PASSWORD="your-secure-password"
 - All `/api/*` endpoints require authentication (except `/api/auth/*`)
 - Session is stored in an HTTP-only cookie (24-hour expiration)
 - Login page is shown automatically when not authenticated
-- Use the "Logout" button in the dashboard header to end session
-
-**Security features:**
-- Constant-time password comparison (prevents timing attacks)
-- HTTP-only cookies (prevents XSS token theft)
-- SameSite=Strict cookies (prevents CSRF)
-- Sessions stored in memory (cleared on server restart)
 
 ### Google OAuth Credentials (for YouTube Upload)
 
@@ -68,26 +66,64 @@ To enable YouTube upload functionality:
 
 On first YouTube upload, you'll be prompted to authorize the application in your browser.
 
-## Installation
+## Local Development
 
-### Quick Start (Production)
+### 1. Sync S3 data
+
+Download prompts, media, and settings from S3 to local `storage/` directory:
 
 ```bash
-# Set environment variables
+# Data only (prompts, media, settings)
+./scripts/dump-s3.sh
+
+# Include generated runs (can be large)
+./scripts/dump-s3.sh --with-runs
+```
+
+This creates the `storage/` directory that mirrors the S3 bucket structure:
+
+```
+storage/
+├── data/
+│   ├── prompts/          # Dialogue, image, research, yt-metadata prompts
+│   ├── media/            # Channel logo and static assets
+│   └── settings.json     # App configuration
+└── output/               # Generated runs (with --with-runs)
+    └── run_YYYY-MM-DD_HH-MM-SS/
+```
+
+### 2. Set environment variables
+
+```bash
+export OPENAI_API_KEY="your-key"
+export ELEVENLABS_API_KEY="your-key"
+export PERPLEXITY_API_KEY="your-key"
+export AUTH_PASSWORD="your-password"
+```
+
+### 3. Run development servers
+
+```bash
+./scripts/dev.sh
+```
+
+This starts:
+- Backend on `http://localhost:8000` (with hot-reload)
+- Frontend on `http://localhost:5173` (with HMR)
+
+The dev script automatically sets `STORAGE_BACKEND=local` so data is read from `storage/` instead of S3.
+
+## Production
+
+### Quick Start
+
+```bash
 export OPENAI_API_KEY="your-openai-key"
 export ELEVENLABS_API_KEY="your-elevenlabs-key"
 export PERPLEXITY_API_KEY="your-perplexity-key"
 
-# Run the application
 ./run.sh
 ```
-
-The script will:
-1. Check all required dependencies and environment variables
-2. Create Python virtual environment if needed
-3. Install Python and Node.js dependencies
-4. Build the frontend for production
-5. Start the server
 
 ### Manual Setup
 
@@ -103,10 +139,7 @@ pip install -r webapp/backend/requirements.txt
 #### 2. Node.js Dependencies
 
 ```bash
-# Remotion (video rendering)
 cd remotion && npm install && cd ..
-
-# Frontend
 cd webapp/frontend && npm install && cd ..
 ```
 
@@ -117,78 +150,71 @@ cd webapp/frontend
 npm run build
 cd ../..
 
-# Copy to backend static folder
 mkdir -p webapp/backend/static
 cp -r webapp/frontend/dist/* webapp/backend/static/
 ```
 
-## Running
-
-### Production Mode
+#### 4. Run
 
 ```bash
-./run.sh
-```
-
-Or manually:
-
-```bash
-source venv/bin/activate
 uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000
 ```
 
 Access the dashboard at `http://localhost:8000`
 
-### Development Mode
+## Storage
 
-Run backend and frontend separately for hot-reloading:
+The app uses a storage abstraction layer that supports local filesystem and S3.
 
-**Terminal 1 - Backend:**
-```bash
-source venv/bin/activate
-cd webapp/backend
-uvicorn main:app --reload --port 8000
-```
+| Mode | Config | Data Path | Runs Path |
+|------|--------|-----------|-----------|
+| Local | `STORAGE_BACKEND=local` | `storage/data/` | `storage/output/` |
+| S3 | `STORAGE_BACKEND=s3` | `s3://{bucket}/data/` | `s3://{bucket}/output/` |
 
-**Terminal 2 - Frontend:**
-```bash
-cd webapp/frontend
-npm run dev
-```
+**Auto-detection**: macOS defaults to `local`, Linux defaults to `s3`.
 
-Access the dashboard at `http://localhost:5173`
+Prompts are managed through the webapp Settings UI and stored in `prompts/` within the data storage.
 
 ## Project Structure
 
 ```
 yt-centric-generator/
-├── run.sh                    # Production runner script
-├── deploy-ec2.sh             # Deploy to new EC2 instance
-├── sync-ec2.sh               # Sync changes to existing EC2
+├── scripts/
+│   ├── dev.sh                # Local development runner
+│   ├── dump-s3.sh            # Sync S3 data to local storage
+│   ├── deploy-ec2.sh         # Deploy to new EC2 instance
+│   └── run.sh                # Production runner
 ├── requirements.txt          # Python dependencies (core)
 ├── credentials/              # SSH keys & OAuth (gitignored)
-│   └── client_secrets.json   # Google OAuth for YouTube
 ├── data/
-│   ├── dialogue-prompt/      # Dialogue generation prompts
-│   └── media/                # Static media assets
-├── output/                   # Generated video runs
+│   ├── media/                # Static media assets
+│   └── voices/               # TTS voice references (gitignored)
+├── storage/                  # Local storage mirror of S3 (gitignored)
+│   ├── data/                 # Prompts, media, settings
+│   └── output/               # Generated runs
 ├── remotion/                 # Video rendering (React/Remotion)
 ├── src/                      # Core Python scripts
 │   ├── generate_audio.py     # ElevenLabs TTS
+│   ├── generate_audio_runpod.py # Chatterbox TTS via RunPod
 │   ├── generate_dialogue.py  # GPT-4 dialogue
 │   ├── generate_images.py    # DALL-E images
 │   ├── generate_video.py     # Remotion rendering
 │   ├── perplexity_search.py  # News research
+│   ├── storage.py            # Storage abstraction (Local/S3)
+│   ├── storage_config.py     # Storage factory functions
 │   └── upload_youtube.py     # YouTube upload
-└── webapp/
-    ├── backend/              # FastAPI backend
-    │   ├── main.py
-    │   ├── routes/
-    │   ├── services/
-    │   └── requirements.txt
-    └── frontend/             # React frontend
-        ├── src/
-        └── package.json
+├── webapp/
+│   ├── backend/              # FastAPI backend
+│   │   ├── main.py
+│   │   ├── routes/
+│   │   ├── services/
+│   │   └── requirements.txt
+│   └── frontend/             # React frontend
+│       ├── src/
+│       └── package.json
+└── .github/
+    └── workflows/
+        └── deploy.yml        # CD: deploy to EC2 on push to main
 ```
 
 ## API Endpoints
@@ -210,120 +236,45 @@ yt-centric-generator/
 | `/api/workflow/{id}/generate-audio` | POST | Generate audio + images |
 | `/api/workflow/{id}/generate-video` | POST | Render video |
 | `/api/workflow/{id}/upload-youtube` | POST | Upload to YouTube |
+| `/api/workflow/{id}/youtube` | DELETE | Remove from YouTube |
 | `/api/settings` | GET/PUT | Global settings |
+| `/api/prompts` | GET | List all prompts |
 | `/health` | GET | Health check |
 
-## Troubleshooting
+## Deployment
 
-### FFmpeg not found
+Production deployment uses GitHub Actions CD. On push to `main`, the workflow:
+
+1. Builds the frontend
+2. Syncs files to EC2 via rsync
+3. Copies credentials from GitHub Secrets
+4. Installs dependencies and restarts uvicorn
+
+### GitHub Secrets Required
+
+| Secret | Description |
+|--------|-------------|
+| `EC2_SSH_KEY` | SSH private key for EC2 |
+| `EC2_HOST` | EC2 instance IP address |
+| `ENV_PRODUCTION` | Production `.env` file contents |
+| `YT_CLIENT_SECRETS` | Google OAuth client secrets JSON |
+| `YT_TOKEN` | Google OAuth token JSON |
+
+### First-Time EC2 Setup
+
 ```bash
-# macOS
-brew install ffmpeg
-
-# Ubuntu/Debian
-sudo apt install ffmpeg
+./scripts/deploy-ec2.sh
 ```
 
-### Permission denied on run.sh
+### Troubleshooting
+
+**FFmpeg not found:**
 ```bash
-chmod +x run.sh
+brew install ffmpeg        # macOS
+sudo apt install ffmpeg    # Ubuntu
 ```
 
-### Port already in use
-```bash
-# Use a different port
-PORT=3000 ./run.sh
-```
-
-### YouTube upload fails
+**YouTube upload fails:**
 - Ensure `credentials/client_secrets.json` exists
 - Delete `credentials/token.json` to re-authenticate
 - Check YouTube Data API is enabled in Google Cloud Console
-
-## EC2 Deployment
-
-Deploy the application to AWS EC2 for production use.
-
-### Prerequisites
-
-1. **AWS CLI** installed and configured
-2. **AWS credentials** set as environment variables:
-   ```bash
-   export AWS_ACCESS_KEY_ID=your_access_key
-   export AWS_SECRET_ACCESS_KEY=your_secret_key
-   export AWS_DEFAULT_REGION=us-east-1  # optional
-   ```
-3. **SSH key pair** in `credentials/yt-news-generator-key.pem`
-
-### First-Time Deployment
-
-```bash
-# Deploy new EC2 instance
-./deploy-ec2.sh
-```
-
-This script will:
-1. Launch a t4g.nano instance (Ubuntu 22.04 ARM64)
-2. Create security group (ports 22, 8000)
-3. Wait for SSH to be ready
-4. Install Node.js 18 and Python dependencies
-5. Copy project files via rsync
-6. Set up Python venv and install requirements
-7. Create `.env` template
-8. Start the webapp server
-
-**Output:**
-```
-Instance ID: i-xxxxxxxxx
-Public IP:   x.x.x.x
-Webapp: http://x.x.x.x:8000
-Password: admin123
-```
-
-### Syncing Changes
-
-After making local changes, sync to the existing instance:
-
-```bash
-# Sync to default IP (saved from last deploy)
-./sync-ec2.sh
-
-# Or specify IP explicitly
-./sync-ec2.sh 100.53.141.50
-```
-
-This script will:
-1. Copy changed files via rsync (excludes node_modules, venv, .git)
-2. Restart the uvicorn server
-
-### Updating API Keys
-
-```bash
-# SSH into the instance
-ssh -i credentials/yt-news-generator-key.pem ubuntu@<PUBLIC_IP>
-
-# Edit environment file
-nano /home/ubuntu/yt-news-generator/.env
-
-# Restart the server
-pkill uvicorn
-cd /home/ubuntu/yt-news-generator
-source .env && source venv/bin/activate
-nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
-```
-
-### Deployment Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `deploy-ec2.sh` | Create new EC2 instance from scratch |
-| `sync-ec2.sh` | Sync local changes to existing instance |
-
-### Supported Regions
-
-- us-east-1 (default)
-- us-east-2
-- us-west-1
-- us-west-2
-- eu-west-1
-- eu-central-1
