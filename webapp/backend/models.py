@@ -34,6 +34,7 @@ class WorkflowState(BaseModel):
     can_generate_audio: bool
     can_generate_video: bool
     can_upload: bool
+    can_delete_youtube: bool = False
     # Regeneration options
     can_drop_audio: bool = False
     can_drop_images: bool = False
