@@ -24,30 +24,10 @@ function StatusBadge({ status }: { status: string }) {
 function MediaIcons({ run }: { run: RunSummary }) {
   return (
     <div style={{ display: 'flex', gap: '8px' }}>
-      <span
-        className={`icon ${run.has_audio ? 'icon-active' : 'icon-inactive'}`}
-        title={run.has_audio ? 'Audio available' : 'No audio'}
-      >
-        🔊
-      </span>
-      <span
-        className={`icon ${run.has_images ? 'icon-active' : 'icon-inactive'}`}
-        title={run.has_images ? `${run.image_count} images` : 'No images'}
-      >
-        🖼️
-      </span>
-      <span
-        className={`icon ${run.has_video ? 'icon-active' : 'icon-inactive'}`}
-        title={run.has_video ? 'Video available' : 'No video'}
-      >
-        🎬
-      </span>
-      <span
-        className={`icon ${run.has_youtube ? 'icon-active' : 'icon-inactive'}`}
-        title={run.has_youtube ? 'Uploaded to YouTube' : 'Not uploaded'}
-      >
-        ▶️
-      </span>
+      {run.has_audio && <span className="icon icon-active" title="Audio available">🔊</span>}
+      {run.has_images && <span className="icon icon-active" title={`${run.image_count} images`}>🖼️</span>}
+      {run.has_video && <span className="icon icon-active" title="Video available">🎬</span>}
+      {run.has_youtube && <span className="icon icon-active" title="Uploaded to YouTube">▶️</span>}
     </div>
   )
 }
