@@ -155,42 +155,66 @@ export default function RunList() {
           <p>No runs found. Click "New Run" to create your first video.</p>
         </div>
       ) : (
-        <table className="runs-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Title</th>
-              <th>Status</th>
-              <th>Media</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          <table className="runs-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Media</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => {
+                const processingInfo = getRunningTaskInfo(run.id)
+                return (
+                  <tr key={run.id} className={processingInfo ? 'processing' : ''}>
+                    <td>
+                      <Link to={`/runs/${run.id}`}>{formatDate(run.timestamp)}</Link>
+                    </td>
+                    <td>
+                      <Link to={`/runs/${run.id}`}>
+                        {run.title || <em style={{ color: '#999' }}>No title</em>}
+                      </Link>
+                      {processingInfo && (
+                        <div className="processing-indicator">
+                          <span className="spinner small"></span>
+                          <span className="processing-text">{processingInfo}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <StatusBadge status={run.status} />
+                    </td>
+                    <td>
+                      <MediaIcons run={run} />
+                    </td>
+                    <td>
+                      <button
+                        className="delete-btn small"
+                        onClick={() => handleDeleteRun(run.id, run.title)}
+                        title="Delete run"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          <div className="runs-cards">
             {runs.map((run) => {
               const processingInfo = getRunningTaskInfo(run.id)
               return (
-                <tr key={run.id} className={processingInfo ? 'processing' : ''}>
-                  <td>
-                    <Link to={`/runs/${run.id}`}>{formatDate(run.timestamp)}</Link>
-                  </td>
-                  <td>
-                    <Link to={`/runs/${run.id}`}>
+                <div key={run.id} className={`run-card ${processingInfo ? 'processing' : ''}`}>
+                  <div className="run-card-header">
+                    <Link to={`/runs/${run.id}`} className="run-card-title">
                       {run.title || <em style={{ color: '#999' }}>No title</em>}
                     </Link>
-                    {processingInfo && (
-                      <div className="processing-indicator">
-                        <span className="spinner small"></span>
-                        <span className="processing-text">{processingInfo}</span>
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <StatusBadge status={run.status} />
-                  </td>
-                  <td>
-                    <MediaIcons run={run} />
-                  </td>
-                  <td>
                     <button
                       className="delete-btn small"
                       onClick={() => handleDeleteRun(run.id, run.title)}
@@ -198,12 +222,23 @@ export default function RunList() {
                     >
                       🗑️
                     </button>
-                  </td>
-                </tr>
+                  </div>
+                  {processingInfo && (
+                    <div className="processing-indicator">
+                      <span className="spinner small"></span>
+                      <span className="processing-text">{processingInfo}</span>
+                    </div>
+                  )}
+                  <div className="run-card-footer">
+                    <span className="run-card-date">{formatDate(run.timestamp)}</span>
+                    <StatusBadge status={run.status} />
+                    <MediaIcons run={run} />
+                  </div>
+                </div>
               )
             })}
-          </tbody>
-        </table>
+          </div>
+        </>
       )}
     </div>
   )

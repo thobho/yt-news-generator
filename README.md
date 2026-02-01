@@ -274,7 +274,27 @@ brew install ffmpeg        # macOS
 sudo apt install ffmpeg    # Ubuntu
 ```
 
-**YouTube upload fails:**
-- Ensure `credentials/client_secrets.json` exists
-- Delete `credentials/token.json` to re-authenticate
-- Check YouTube Data API is enabled in Google Cloud Console
+**YouTube upload fails with `invalid_grant: Token has been expired or revoked`:**
+
+The OAuth2 refresh token has expired. This happens every **7 days** if the Google Cloud app is in "Testing" mode (publish the app to avoid this).
+
+1. Delete the old token and re-authenticate (opens browser):
+   ```bash
+   rm credentials/token.json
+   source venv/bin/activate
+   python3 -c "import sys; sys.path.insert(0, 'src'); from upload_youtube import authenticate; authenticate(); print('Done')"
+   ```
+2. Update the `YT_TOKEN` GitHub secret with the new token:
+   ```bash
+   cat credentials/token.json
+   ```
+   Copy the output → GitHub repo **Settings** > **Secrets and variables** > **Actions** > edit `YT_TOKEN` → paste → **Update secret**
+3. Also update `YT_CLIENT_SECRETS` if you regenerated the OAuth client:
+   ```bash
+   cat credentials/client_secrets.json
+   ```
+
+**Other YouTube upload issues:**
+- Ensure `credentials/client_secrets.json` exists and is a **Desktop** app type (not Web)
+- Check YouTube Data API v3 is enabled in Google Cloud Console
+- To stop token expiry: Google Cloud Console > OAuth consent screen > **Publish App**

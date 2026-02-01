@@ -1139,6 +1139,65 @@ button.small {
   border-width: 2px;
 }
 
+/* Mobile card layout - hidden on desktop */
+.runs-cards {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .runs-table {
+    display: none;
+  }
+
+  .runs-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .run-card {
+    background: white;
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  .run-card.processing {
+    background: #fff8e1;
+  }
+
+  .run-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .run-card-title {
+    font-weight: 600;
+    font-size: 15px;
+    color: #1565c0;
+    text-decoration: none;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .run-card-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .run-card-date {
+    font-size: 13px;
+    color: #777;
+  }
+}
+
 /* Settings Page */
 .settings-page {
   max-width: 900px;
