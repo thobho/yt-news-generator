@@ -451,6 +451,38 @@ export async function deleteRun(runId: string): Promise<{ status: string; delete
   return response.json();
 }
 
+// InfoPigula types and functions
+
+export interface InfoPigulaSource {
+  name: string
+  url: string
+}
+
+export interface InfoPigulaNewsItem {
+  id: string
+  title: string | null
+  content: string
+  category: string
+  rating: number
+  total_votes: number
+  source: InfoPigulaSource
+}
+
+export interface InfoPigulaNewsResponse {
+  title: string
+  publish_date: string
+  items: InfoPigulaNewsItem[]
+}
+
+export async function fetchInfoPigulaNews(): Promise<InfoPigulaNewsResponse> {
+  const response = await fetch(`${API_BASE}/infopigula/news`)
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to fetch news')
+  }
+  return response.json()
+}
+
 // Prompts types and functions
 
 export type PromptType = 'dialogue' | 'image' | 'research' | 'yt-metadata';

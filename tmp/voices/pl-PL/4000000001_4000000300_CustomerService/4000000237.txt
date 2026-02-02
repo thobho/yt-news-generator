@@ -1,0 +1,1 @@
+Nastąpił problem, transakcja nie została sfinalizowana.

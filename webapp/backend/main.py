@@ -15,7 +15,7 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-from .routes import runs, workflow, settings, auth, prompts
+from .routes import runs, workflow, settings, auth, prompts, infopigula
 from .services import auth as auth_service
 
 # Static files directory (built frontend)
@@ -88,6 +88,7 @@ app.include_router(runs.router)
 app.include_router(workflow.router)
 app.include_router(settings.router)
 app.include_router(prompts.router)
+app.include_router(infopigula.router)
 
 
 @app.get("/health")

@@ -1,0 +1,1 @@
+Jeżeli kwota jest drobna lub bank prowadzi dla klienta rachunek bankowy, to dostarczenie dodatkowych dokumentów może nie być konieczne.

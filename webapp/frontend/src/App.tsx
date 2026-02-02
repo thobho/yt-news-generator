@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import RunList from './components/RunList'
 import RunDetail from './components/RunDetail'
+import NewRunPage from './components/NewRunPage'
 import SettingsPage from './components/SettingsPage'
 import Login from './components/Login'
 
@@ -25,6 +26,7 @@ function AppContent() {
     <div className="container">
       <Routes>
         <Route path="/" element={<RunList />} />
+        <Route path="/new-run" element={<NewRunPage />} />
         <Route path="/runs/:runId" element={<RunDetail />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>

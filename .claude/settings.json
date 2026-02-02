@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd can_delete_youtube to WorkflowState in models.py\n\nThe runs detail endpoint uses models.py WorkflowState \\(not the one\nin workflow.py routes\\), so the field was being silently stripped.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import NewRunDialog from './NewRunDialog'
 import Settings from './Settings'
 
 function formatDate(timestamp: string): string {
@@ -37,7 +36,6 @@ export default function RunList() {
   const [runningTasks, setRunningTasks] = useState<AllRunningTasks>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isNewRunOpen, setIsNewRunOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const { logout, isAuthEnabled } = useAuth()
 
@@ -107,9 +105,9 @@ export default function RunList() {
           >
             Quick Settings
           </button>
-          <button className="primary new-run-btn" onClick={() => setIsNewRunOpen(true)}>
+          <Link to="/new-run" className="new-run-btn">
             + New Run
-          </button>
+          </Link>
           {isAuthEnabled && (
             <button className="logout-btn" onClick={logout}>
               Logout
@@ -121,14 +119,6 @@ export default function RunList() {
       {isSettingsOpen && (
         <Settings onClose={() => setIsSettingsOpen(false)} />
       )}
-
-      <NewRunDialog
-        isOpen={isNewRunOpen}
-        onClose={() => {
-          setIsNewRunOpen(false)
-          loadRuns()
-        }}
-      />
 
       {runs.length === 0 ? (
         <div className="card empty-state">
