@@ -37,8 +37,8 @@ logger = get_logger(__name__)
 
 # Defaults
 DEFAULT_LANGUAGE_ID = "pl"
-DEFAULT_CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.6"))
-DEFAULT_EXAGGERATION = float(os.environ.get("CHATTERBOX_EXAGGERATION", "0.9"))
+DEFAULT_CFG_WEIGHT = float(os.environ.get("CHATTERBOX_CFG_WEIGHT", "0.4"))
+DEFAULT_EXAGGERATION = float(os.environ.get("CHATTERBOX_EXAGGERATION", "0.7"))
 DEFAULT_TIMEOUT = int(os.environ.get("RUNPOD_REQUEST_TIMEOUT", "300"))
 
 
