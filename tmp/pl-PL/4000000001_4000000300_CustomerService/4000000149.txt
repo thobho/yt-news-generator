@@ -1,0 +1,1 @@
+Program otworzy się automatycznie po zainstalowaniu.

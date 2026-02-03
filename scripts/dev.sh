@@ -73,18 +73,23 @@ cleanup() {
 
 trap cleanup SIGINT SIGTERM
 
+# Allow host/port overrides to avoid IPv6 bind issues
+DEV_HOST="${DEV_HOST:-127.0.0.1}"
+BACKEND_PORT="${BACKEND_PORT:-8000}"
+FRONTEND_PORT="${FRONTEND_PORT:-5173}"
+
 # Start backend
-log_info "Starting backend on http://localhost:8000 (STORAGE_BACKEND=local)"
-uvicorn webapp.backend.main:app --reload --port 8000 &
+log_info "Starting backend on http://${DEV_HOST}:${BACKEND_PORT} (STORAGE_BACKEND=local)"
+uvicorn webapp.backend.main:app --reload --host "${DEV_HOST}" --port "${BACKEND_PORT}" &
 BACKEND_PID=$!
 
 # Start frontend
-log_info "Starting frontend on http://localhost:5173"
-(cd webapp/frontend && npm run dev) &
+log_info "Starting frontend on http://${DEV_HOST}:${FRONTEND_PORT}"
+(cd webapp/frontend && npm run dev -- --host "${DEV_HOST}" --port "${FRONTEND_PORT}") &
 FRONTEND_PID=$!
 
 log_info "Development servers running. Press Ctrl+C to stop."
-log_info "Open http://localhost:5173 in your browser"
+log_info "Open http://${DEV_HOST}:${FRONTEND_PORT} in your browser"
 
 # Wait for processes
 wait

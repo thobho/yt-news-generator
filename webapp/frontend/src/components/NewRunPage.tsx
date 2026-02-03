@@ -3,6 +3,9 @@ import { useNavigate, Link } from 'react-router-dom'
 import {
   fetchInfoPigulaNews,
   createSeed,
+  generateDialogue,
+  pollTaskUntilDone,
+  TaskStatus,
   InfoPigulaNewsItem,
 } from '../api/client'
 
@@ -44,6 +47,7 @@ export default function NewRunPage() {
   // Shared submit state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitStatus, setSubmitStatus] = useState<string | null>(null)
 
   useEffect(() => {
     fetchInfoPigulaNews()
@@ -83,8 +87,46 @@ export default function NewRunPage() {
     setIsSubmitting(true)
     setSubmitError(null)
     try {
-      const { run_id } = await createSeed(seedText)
-      navigate(`/runs/${run_id}`)
+      if (activeTab === 'browse') {
+        const selected = newsItems.filter((item) => selectedIds.has(item.id))
+        const total = selected.length
+        for (let index = 0; index < total; index += 1) {
+          const item = selected[index]
+          const itemSeedText = formatSeedText([item])
+          const itemLabel = item.title || `item ${index + 1}`
+          setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
+          const { run_id } = await createSeed(itemSeedText)
+          setSubmitStatus(`Starting dialogue generation (${index + 1}/${total})...`)
+          const { task_id } = await generateDialogue(run_id)
+          setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
+          const result = await pollTaskUntilDone(task_id, (taskStatus: TaskStatus) => {
+            if (taskStatus.message) {
+              setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
+            }
+          })
+          if (result.status === 'error') {
+            throw new Error(result.message || 'Dialogue generation failed')
+          }
+        }
+        setSubmitStatus('Done!')
+        navigate('/')
+      } else {
+        setSubmitStatus('Creating seed...')
+        const { run_id } = await createSeed(seedText)
+        setSubmitStatus('Starting dialogue generation...')
+        const { task_id } = await generateDialogue(run_id)
+        setSubmitStatus('Generating dialogue (this may take a minute)...')
+        const result = await pollTaskUntilDone(task_id, (taskStatus: TaskStatus) => {
+          if (taskStatus.message) {
+            setSubmitStatus(taskStatus.message)
+          }
+        })
+        if (result.status === 'error') {
+          throw new Error(result.message || 'Dialogue generation failed')
+        }
+        setSubmitStatus('Done!')
+        navigate(`/runs/${run_id}`)
+      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to create seed')
     } finally {
@@ -221,6 +263,12 @@ export default function NewRunPage() {
       )}
 
       {submitError && <div className="error-message">{submitError}</div>}
+      {submitStatus && !submitError && (
+        <div className="status-message">
+          <span className="spinner"></span>
+          {submitStatus}
+        </div>
+      )}
     </div>
   )
 }

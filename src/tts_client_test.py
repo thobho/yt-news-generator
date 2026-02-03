@@ -8,12 +8,16 @@ from pathlib import Path
 from tts_client import TTSClient
 
 # -------- INPUT --------
-TEXT = "Od początku roku złoto, licząc w dolarach, podrożało o około 27 proc. Podobnych lub większych miesięcznych zwyżek cen kruszcu w minionym stuleciu było tylko kilka. Ostatnia, z 1980 r., była zapowiedzią przesilenia na tym rynku. Jedną z przyczyn przeceny złota, która się wtedy rozpoczęła, widać także dzisiaj."
-VOICE_REF_PATH = "data/voices/sample_3.wav"
+TEXT = """
+Polski oficer jest sądzony za przypadkowe postrzelenie syryjskiego imigranta wadliwą bronią podczas pościgu na granicy z Białorusią.
+Podporucznik ranił Syryjczyka w kręgosłup, gdy potknął się w lesie podczas pogoni. Biegły sądowy orzekł, że pistolet PM dziewięćdziesiat osiem ma wady i nie jest zabezpieczony przed wystrzałem przy upadku.
+Grożą mu trzy lat więzienia, a Syryjczyk domaga się od żołnierza odszkodowania. Otrzymał azyl w Polsce.
+"""
+VOICE_REF_PATH = "tmp/voices/male-3.wav"
 OUT_DIR = Path("outputs")
 
-CFG_WEIGHTS = [0.3, 0.5]
-EXAGGERATIONS = [0.5, 0.55]
+CFG_WEIGHTS = [0.2]
+EXAGGERATIONS = [0.8]
 # -----------------------
 
 def main():
