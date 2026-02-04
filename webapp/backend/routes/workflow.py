@@ -61,6 +61,7 @@ class WorkflowState(BaseModel):
     can_generate_dialogue: bool
     can_edit_dialogue: bool
     can_generate_audio: bool
+    can_generate_images: bool = False
     can_generate_video: bool
     can_upload: bool
     can_delete_youtube: bool = False
@@ -221,29 +222,50 @@ async def generate_audio(run_id: str, background_tasks: BackgroundTasks):
 
     def run_task():
         try:
-            # Generate audio
             pipeline.generate_audio_for_run(run_id)
-
-            # Also generate images after audio
-            _tasks[task_id] = TaskStatus(
-                status="running",
-                message="Generating images..."
-            )
-            pipeline.generate_images_for_run(run_id)
-
-            # Generate YT metadata
-            _tasks[task_id] = TaskStatus(
-                status="running",
-                message="Generating YouTube metadata..."
-            )
-            pipeline.generate_yt_metadata_for_run(run_id)
-
             _tasks[task_id] = TaskStatus(
                 status="completed",
-                message="Audio, images, and metadata generated successfully"
+                message="Audio generated successfully"
             )
         except Exception as e:
-            logger.exception("Audio/images generation failed")
+            logger.exception("Audio generation failed")
+            _tasks[task_id] = TaskStatus(
+                status="error",
+                message=str(e)
+            )
+
+    background_tasks.add_task(run_task)
+
+    return {"task_id": task_id, "status": "started"}
+
+
+@router.post("/{run_id}/generate-images")
+async def generate_images(run_id: str, background_tasks: BackgroundTasks):
+    """Start image generation (runs in background)."""
+    validate_run_exists(run_id)
+
+    state = pipeline.get_workflow_state_for_run(run_id)
+    if not state["can_generate_images"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot generate images at this stage"
+        )
+
+    task_id = f"{run_id}:images"
+    if task_id in _tasks and _tasks[task_id].status == "running":
+        raise HTTPException(status_code=409, detail="Task already running")
+
+    _tasks[task_id] = TaskStatus(status="running", message="Generating images...")
+
+    def run_task():
+        try:
+            pipeline.generate_images_for_run(run_id)
+            _tasks[task_id] = TaskStatus(
+                status="completed",
+                message="Images generated successfully"
+            )
+        except Exception as e:
+            logger.exception("Image generation failed")
             _tasks[task_id] = TaskStatus(
                 status="error",
                 message=str(e)
@@ -275,9 +297,16 @@ async def generate_video(run_id: str, background_tasks: BackgroundTasks):
     def run_task():
         try:
             video_key = pipeline.generate_video_for_run(run_id)
+
+            _tasks[task_id] = TaskStatus(
+                status="running",
+                message="Generating YouTube metadata..."
+            )
+            pipeline.generate_yt_metadata_for_run(run_id)
+
             _tasks[task_id] = TaskStatus(
                 status="completed",
-                message="Video rendered successfully",
+                message="Video and metadata generated successfully",
                 result={"video_path": video_key}
             )
         except Exception as e:

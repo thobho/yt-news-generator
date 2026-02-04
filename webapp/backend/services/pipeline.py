@@ -263,6 +263,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
         gen_audio(
             keys["dialogue"],
             keys["audio"],
+            keys["timeline"],
             voice_a="male",
             voice_b="female",
             storage=run_storage,
@@ -278,7 +279,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
             storage=run_storage,
         )
 
-    # Return timeline data (chatterbox doesn't produce timeline)
+    # Return timeline data
     if run_storage.exists(keys["timeline"]):
         timeline_content = run_storage.read_text(keys["timeline"])
         return json.loads(timeline_content)
@@ -762,7 +763,7 @@ def get_workflow_state_for_run(run_id: str) -> dict:
         current_step = "ready_for_video"
         can_upload = False
     elif has_audio:
-        current_step = "generating_images"
+        current_step = "ready_for_images"
         can_upload = False
     elif has_dialogue:
         current_step = "ready_for_audio"
@@ -785,6 +786,7 @@ def get_workflow_state_for_run(run_id: str) -> dict:
         "can_generate_dialogue": has_seed and not has_dialogue,
         "can_edit_dialogue": has_dialogue,  # Always allow editing dialogue
         "can_generate_audio": has_dialogue and not has_audio,
+        "can_generate_images": has_audio and not has_images,
         "can_generate_video": has_audio and has_images and not has_video,
         "can_upload": can_upload,
         "can_delete_youtube": has_yt_upload,

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   WorkflowState,
   generateAudio,
+  generateImages,
   generateVideo,
   uploadToYoutube,
   pollTaskUntilDone,
@@ -100,6 +101,7 @@ export default function WorkflowActions({
   }
 
   const handleGenerateAudio = () => runTask(generateAudio, 'Audio generation')
+  const handleGenerateImages = () => runTask(generateImages, 'Image generation')
   const handleGenerateVideo = () => runTask(generateVideo, 'Video rendering')
   const handleUploadYoutube = () => runTask(
     (id: string) => uploadToYoutube(id, scheduleOption),
@@ -159,9 +161,10 @@ export default function WorkflowActions({
 
   // Determine current step for display
   const getStepIndicator = () => {
-    if (workflow.can_delete_youtube) return { step: 5, text: 'Uploaded to YouTube' }
-    if (workflow.can_upload) return { step: 5, text: 'Ready to upload' }
-    if (workflow.can_generate_video) return { step: 4, text: 'Ready for video' }
+    if (workflow.can_delete_youtube) return { step: 6, text: 'Uploaded to YouTube' }
+    if (workflow.can_upload) return { step: 6, text: 'Ready to upload' }
+    if (workflow.can_generate_video) return { step: 5, text: 'Ready for video' }
+    if (workflow.can_generate_images) return { step: 4, text: 'Ready for images' }
     if (workflow.can_generate_audio) return { step: 3, text: 'Ready for audio' }
     if (workflow.has_dialogue) return { step: 2, text: 'Dialogue ready' }
     if (workflow.has_seed) return { step: 1, text: 'Seed created' }
@@ -174,7 +177,7 @@ export default function WorkflowActions({
     <div className="workflow-actions">
       <div className="workflow-progress">
         <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${(step / 5) * 100}%` }} />
+          <div className="progress-fill" style={{ width: `${(step / 6) * 100}%` }} />
         </div>
         <span className="progress-text">{text}</span>
       </div>
@@ -195,7 +198,13 @@ export default function WorkflowActions({
 
         {workflow.can_generate_audio && (
           <button onClick={handleGenerateAudio} disabled={isRunning} className="primary">
-            Generate Audio & Images
+            Generate Audio
+          </button>
+        )}
+
+        {workflow.can_generate_images && (
+          <button onClick={handleGenerateImages} disabled={isRunning} className="primary">
+            Generate Images
           </button>
         )}
 

@@ -101,6 +101,7 @@ export interface WorkflowState {
   can_generate_dialogue: boolean;
   can_edit_dialogue: boolean;
   can_generate_audio: boolean;
+  can_generate_images?: boolean;
   can_generate_video: boolean;
   can_upload: boolean;
   can_delete_youtube?: boolean;
@@ -216,6 +217,17 @@ export async function generateAudio(runId: string): Promise<{ task_id: string }>
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to start audio generation');
+  }
+  return response.json();
+}
+
+export async function generateImages(runId: string): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/workflow/${runId}/generate-images`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to start image generation');
   }
   return response.json();
 }

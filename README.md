@@ -104,14 +104,18 @@ export AUTH_PASSWORD="your-password"
 ### 3. Run development servers
 
 ```bash
+# Local storage (default) - reads from storage/ directory
 ./scripts/dev.sh
+
+# S3 storage - reads/writes directly to S3 (requires AWS credentials)
+./scripts/dev.sh --s3
 ```
 
 This starts:
 - Backend on `http://localhost:8000` (with hot-reload)
 - Frontend on `http://localhost:5173` (with HMR)
 
-The dev script automatically sets `STORAGE_BACKEND=local` so data is read from `storage/` instead of S3.
+By default the dev script uses `STORAGE_BACKEND=local` so data is read from `storage/`. Use `--s3` to work directly against S3 (useful for testing production data or when local sync is stale).
 
 ## Production
 
@@ -233,8 +237,9 @@ yt-centric-generator/
 | `/api/runs/{id}` | GET | Get run details |
 | `/api/workflow/create-seed` | POST | Create new run |
 | `/api/workflow/{id}/generate-dialogue` | POST | Generate dialogue |
-| `/api/workflow/{id}/generate-audio` | POST | Generate audio + images |
-| `/api/workflow/{id}/generate-video` | POST | Render video |
+| `/api/workflow/{id}/generate-audio` | POST | Generate audio + timeline |
+| `/api/workflow/{id}/generate-images` | POST | Generate images |
+| `/api/workflow/{id}/generate-video` | POST | Render video + YT metadata |
 | `/api/workflow/{id}/upload-youtube` | POST | Upload to YouTube |
 | `/api/workflow/{id}/youtube` | DELETE | Remove from YouTube |
 | `/api/settings` | GET/PUT | Global settings |

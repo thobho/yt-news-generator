@@ -1,9 +1,13 @@
 #!/bin/bash
 #
 # YT News Generator - Development Runner
-# Runs backend and frontend with hot-reloading using local storage.
+# Runs backend and frontend with hot-reloading.
 #
-# Before first run, sync S3 data:
+# Usage:
+#   ./scripts/dev.sh          # Local storage (default)
+#   ./scripts/dev.sh --s3     # S3 storage (requires AWS credentials)
+#
+# Before first run with local storage, sync S3 data:
 #   ./scripts/dump-s3.sh
 #
 
@@ -26,14 +30,25 @@ log_warn() {
     echo -e "${YELLOW}[WARN]${NC} $1"
 }
 
-# Force local storage for development
-export STORAGE_BACKEND=local
+# Parse arguments
+if [ "$1" = "--s3" ] || [ "$1" = "-s3" ]; then
+    export STORAGE_BACKEND=s3
+else
+    export STORAGE_BACKEND=local
+fi
 
-# Check for local storage data
-if [ ! -d "storage/data" ]; then
-    log_warn "No local storage data found."
-    log_warn "Run ./scripts/dump-s3.sh to sync data from S3 first."
-    exit 1
+# Validate storage setup
+if [ "$STORAGE_BACKEND" = "s3" ]; then
+    if [ -z "$AWS_ACCESS_KEY_ID" ] && [ ! -f "$HOME/.aws/credentials" ]; then
+        log_warn "No AWS credentials found. Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or configure ~/.aws/credentials."
+        exit 1
+    fi
+else
+    if [ ! -d "storage/data" ]; then
+        log_warn "No local storage data found."
+        log_warn "Run ./scripts/dump-s3.sh to sync data from S3 first, or use --s3 for direct S3 access."
+        exit 1
+    fi
 fi
 
 # Setup Python if needed
@@ -79,7 +94,7 @@ BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5173}"
 
 # Start backend
-log_info "Starting backend on http://${DEV_HOST}:${BACKEND_PORT} (STORAGE_BACKEND=local)"
+log_info "Starting backend on http://${DEV_HOST}:${BACKEND_PORT} (STORAGE_BACKEND=${STORAGE_BACKEND})"
 uvicorn webapp.backend.main:app --reload --host "${DEV_HOST}" --port "${BACKEND_PORT}" &
 BACKEND_PID=$!
 
