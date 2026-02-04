@@ -1,16 +1,16 @@
-name: Build Chatterbox TTS Image
+name: Build FLUX Schnell Image
 
 on:
   push:
-    branches: [new-voice-ai, main]
+    branches: [main]
     paths:
-      - 'docker-chatterbox/**'
-      - '.github/workflows/build-chatterbox-image.yml'
+      - 'docker-flux/**'
+      - '.github/workflows/build-flux-image.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/chatterbox-tts
+  IMAGE_NAME: ${{ github.repository_owner }}/flux-schnell
 
 jobs:
   build:
@@ -41,8 +41,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./docker-chatterbox
-          file: ./docker-chatterbox/Dockerfile
+          context: ./docker-flux
+          file: ./docker-flux/Dockerfile
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
@@ -58,4 +58,4 @@ jobs:
           echo "To use as a RunPod Serverless endpoint:"
           echo "  1. Create endpoint at https://www.runpod.io/console/serverless"
           echo "  2. Use image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          echo "  3. Set env var: export RUNPOD_ENDPOINT_ID=\"your-endpoint-id\""
+          echo "  3. Set env var: export FLUX_ENDPOINT_ID=\"your-endpoint-id\""

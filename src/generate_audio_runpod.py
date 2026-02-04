@@ -19,6 +19,7 @@ Environment variables:
 import argparse
 import json
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Union
@@ -27,7 +28,6 @@ from generate_audio import (
     PAUSE_BETWEEN_SEGMENTS_MS,
     chunk_segment,
     extract_segments,
-    merge_audio,
 )
 from logging_config import get_logger
 from storage import StorageBackend
@@ -43,6 +43,76 @@ VOICE_REFS = {
     "male": "voices/male.wav",
     "female": "voices/female.wav",
 }
+
+# Target format for merging – must match between segments and silence
+_MERGE_SAMPLE_RATE = 44100
+_FADE_MS = 15  # fade-in/out at segment edges to eliminate TTS edge noise
+
+
+def _normalize_and_merge(wav_files: list[Path], output: Path, pause_ms: int):
+    """Merge WAV segments into MP3 with silence gaps.
+
+    Unlike the shared merge_audio(), this function first normalizes every
+    segment to a common sample rate / channel layout and applies short
+    fade-in / fade-out to each segment.  This prevents the "bzzzt" artifact
+    caused by concatenating files with mismatched formats via the ffmpeg
+    concat demuxer.
+    """
+    temp = wav_files[0].parent
+    fade_sec = _FADE_MS / 1000
+
+    # 1. Normalize each WAV: resample, mono, 16-bit PCM, fade edges
+    #    Fade-out trick: reverse → fade-in → reverse (no need to know duration)
+    normalized: list[Path] = []
+    for i, wav in enumerate(wav_files):
+        norm = temp / f"norm_{i:03}.wav"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", str(wav),
+                "-ar", str(_MERGE_SAMPLE_RATE), "-ac", "1",
+                "-af", (
+                    f"afade=t=in:d={fade_sec},"
+                    f"areverse,afade=t=in:d={fade_sec},areverse"
+                ),
+                str(norm),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        normalized.append(norm)
+
+    # 2. Generate silence in the exact same WAV format
+    silence = temp / "silence.wav"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "lavfi",
+            "-i", f"anullsrc=r={_MERGE_SAMPLE_RATE}:cl=mono",
+            "-t", str(pause_ms / 1000),
+            str(silence),
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    # 3. Build concat list (all files are now identical format)
+    concat = temp / "concat.txt"
+    with open(concat, "w") as f:
+        for i, norm in enumerate(normalized):
+            f.write(f"file '{norm}'\n")
+            if i < len(normalized) - 1:
+                f.write(f"file '{silence}'\n")
+
+    # 4. Concat → MP3
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+            "-i", str(concat),
+            "-c:a", "libmp3lame", "-q:a", "2",
+            str(output),
+        ],
+        capture_output=True,
+        check=True,
+    )
 
 
 def load_dialogue(path: Union[Path, str], storage: StorageBackend = None) -> dict:
@@ -114,9 +184,9 @@ def generate_audio(
 
         logger.info("Merging %d audio segments", len(audio_files))
 
-        # Merge WAV segments into MP3 with silence gaps
+        # Normalize all WAVs to common format, apply fades, merge with silence
         temp_output = tmp / "merged.mp3"
-        merge_audio(audio_files, temp_output, PAUSE_BETWEEN_SEGMENTS_MS)
+        _normalize_and_merge(audio_files, temp_output, PAUSE_BETWEEN_SEGMENTS_MS)
 
         # Copy to final destination
         if storage is not None:

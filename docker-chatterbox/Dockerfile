@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir \
 
 RUN pip install --no-cache-dir \
     chatterbox-tts \
+    huggingface_hub \
     soundfile \
     runpod
 
