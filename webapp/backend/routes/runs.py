@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sys
 from datetime import datetime
@@ -107,7 +108,7 @@ def count_images(run_path: Path) -> int:
     return count_images_for_run(run_path.name)
 
 
-def _build_run_summary_from_keys(run_id: str, run_keys: set[str]) -> RunSummary | None:
+def _build_run_summary_from_keys(run_id: str, run_keys: set[str], title: Optional[str] = None) -> RunSummary | None:
     """Build RunSummary using pre-fetched key list (avoids extra S3 calls)."""
     timestamp = parse_run_timestamp(run_id)
     if not timestamp:
@@ -117,7 +118,6 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str]) -> RunSummary 
     has_audio = "audio.mp3" in run_keys
     has_images = "images/images.json" in run_keys
     has_dialogue = "dialogue.json" in run_keys
-    has_yt_metadata = "yt_metadata.md" in run_keys
     has_youtube = "yt_upload.json" in run_keys
 
     # Determine status from available files
@@ -127,11 +127,6 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str]) -> RunSummary 
         status = "partial"
     else:
         status = "error"
-
-    # Get title - only fetch if metadata exists (lazy, one call max)
-    title = None
-    if has_yt_metadata or has_dialogue:
-        title = get_run_title_for_run(run_id)
 
     # Count images from key list instead of reading JSON
     image_count = sum(1 for k in run_keys if k.startswith("images/") and k.endswith(".png"))
@@ -157,7 +152,7 @@ async def list_runs():
 
     if is_s3_enabled():
         # List ALL keys once (single S3 call)
-        all_keys = output_storage.list_keys("")
+        all_keys = await asyncio.to_thread(output_storage.list_keys, "")
 
         # Group keys by run_id
         run_keys_map: dict[str, set[str]] = {}
@@ -170,9 +165,23 @@ async def list_runs():
                 if len(parts) > 1:
                     run_keys_map[run_id].add(parts[1])
 
-        # Build summaries using cached keys (minimal S3 calls)
+        # Identify runs that need titles fetched
+        runs_needing_titles = [
+            run_id for run_id, keys in run_keys_map.items()
+            if "yt_metadata.md" in keys or "dialogue.json" in keys
+        ]
+
+        # Fetch all titles in parallel
+        titles = await asyncio.gather(*[
+            asyncio.to_thread(get_run_title_for_run, run_id)
+            for run_id in runs_needing_titles
+        ])
+        title_map = dict(zip(runs_needing_titles, titles))
+
+        # Build summaries using cached keys and pre-fetched titles
         for run_id, run_keys in run_keys_map.items():
-            run_summary = _build_run_summary_from_keys(run_id, run_keys)
+            title = title_map.get(run_id)
+            run_summary = _build_run_summary_from_keys(run_id, run_keys, title=title)
             if run_summary:
                 runs.append(run_summary)
     else:
@@ -180,19 +189,25 @@ async def list_runs():
         if not _get_output_dir().exists():
             return []
 
-        for entry in _get_output_dir().iterdir():
-            if not entry.is_dir() or not entry.name.startswith("run_"):
-                continue
+        # Collect valid run directories
+        run_entries = [
+            entry for entry in _get_output_dir().iterdir()
+            if entry.is_dir() and entry.name.startswith("run_") and parse_run_timestamp(entry.name)
+        ]
 
+        # Fetch all titles in parallel
+        titles = await asyncio.gather(*[
+            asyncio.to_thread(get_run_title_for_run, entry.name)
+            for entry in run_entries
+        ])
+
+        for entry, title in zip(run_entries, titles):
             timestamp = parse_run_timestamp(entry.name)
-            if not timestamp:
-                continue
-
             run_storage = get_run_storage(entry.name)
             run_summary = RunSummary(
                 id=entry.name,
                 timestamp=timestamp,
-                title=get_run_title_for_run(entry.name),
+                title=title,
                 status=get_run_status_for_run(entry.name),
                 has_video=run_storage.exists("video.mp4"),
                 has_audio=run_storage.exists("audio.mp3"),
@@ -207,13 +222,36 @@ async def list_runs():
     return runs
 
 
+def _read_json_file(run_storage, key: str) -> Optional[dict]:
+    """Read and parse a JSON file from storage."""
+    try:
+        if run_storage.exists(key):
+            return json.loads(run_storage.read_text(key))
+    except (json.JSONDecodeError, Exception):
+        pass
+    return None
+
+
+def _read_text_file(run_storage, key: str) -> Optional[str]:
+    """Read a text file from storage."""
+    try:
+        if run_storage.exists(key):
+            return run_storage.read_text(key)
+    except Exception:
+        pass
+    return None
+
+
 @router.get("/{run_id}", response_model=RunDetail)
 async def get_run(run_id: str):
     """Get full run details."""
     run_storage = get_run_storage(run_id)
 
     # Check if run exists by looking for any file
-    if not run_storage.exists("seed.json") and not run_storage.exists("dialogue.json"):
+    exists_seed = await asyncio.to_thread(run_storage.exists, "seed.json")
+    exists_dialogue = await asyncio.to_thread(run_storage.exists, "dialogue.json")
+
+    if not exists_seed and not exists_dialogue:
         # For local mode, also check if directory exists
         if not is_s3_enabled():
             run_path = _get_output_dir() / run_id
@@ -226,55 +264,42 @@ async def get_run(run_id: str):
     if not timestamp:
         raise HTTPException(status_code=400, detail="Invalid run ID format")
 
-    # Load JSON files
-    dialogue = None
-    if run_storage.exists("dialogue.json"):
-        try:
-            dialogue = json.loads(run_storage.read_text("dialogue.json"))
-        except (json.JSONDecodeError, Exception):
-            pass
+    # Fetch all files in parallel
+    (
+        dialogue,
+        timeline,
+        images_meta,
+        yt_metadata,
+        yt_upload_data,
+        news_data,
+    ) = await asyncio.gather(
+        asyncio.to_thread(_read_json_file, run_storage, "dialogue.json"),
+        asyncio.to_thread(_read_json_file, run_storage, "timeline.json"),
+        asyncio.to_thread(_read_json_file, run_storage, "images/images.json"),
+        asyncio.to_thread(_read_text_file, run_storage, "yt_metadata.md"),
+        asyncio.to_thread(_read_json_file, run_storage, "yt_upload.json"),
+        asyncio.to_thread(_read_json_file, run_storage, "downloaded_news_data.json"),
+    )
 
-    timeline = None
-    if run_storage.exists("timeline.json"):
-        try:
-            timeline = json.loads(run_storage.read_text("timeline.json"))
-        except (json.JSONDecodeError, Exception):
-            pass
-
-    images_meta = None
-    if run_storage.exists("images/images.json"):
-        try:
-            images_meta = json.loads(run_storage.read_text("images/images.json"))
-        except (json.JSONDecodeError, Exception):
-            pass
-
-    yt_metadata = None
-    if run_storage.exists("yt_metadata.md"):
-        try:
-            yt_metadata = run_storage.read_text("yt_metadata.md")
-        except Exception:
-            pass
-
+    # Parse yt_upload
     yt_upload = None
-    if run_storage.exists("yt_upload.json"):
+    if yt_upload_data:
         try:
-            yt_upload_data = json.loads(run_storage.read_text("yt_upload.json"))
             yt_upload = YouTubeUpload(**yt_upload_data)
-        except (json.JSONDecodeError, ValueError, Exception):
+        except (ValueError, Exception):
             pass
 
-    news_data = None
-    if run_storage.exists("downloaded_news_data.json"):
-        try:
-            news_data = json.loads(run_storage.read_text("downloaded_news_data.json"))
-        except (json.JSONDecodeError, Exception):
-            pass
+    # Check for media files in parallel
+    exists_video, exists_audio = await asyncio.gather(
+        asyncio.to_thread(run_storage.exists, "video.mp4"),
+        asyncio.to_thread(run_storage.exists, "audio.mp3"),
+    )
 
     # Build file URLs
     files = RunFiles()
-    if run_storage.exists("video.mp4"):
+    if exists_video:
         files.video = f"/api/runs/{run_id}/video"
-    if run_storage.exists("audio.mp3"):
+    if exists_audio:
         files.audio = f"/api/runs/{run_id}/audio"
 
     # Get image files from images metadata
@@ -284,7 +309,7 @@ async def get_run(run_id: str):
                 files.images.append(f"/api/runs/{run_id}/images/{img['file']}")
 
     # Get workflow state
-    workflow_state = pipeline.get_workflow_state_for_run(run_id)
+    workflow_state = await asyncio.to_thread(pipeline.get_workflow_state_for_run, run_id)
 
     return RunDetail(
         id=run_id,
