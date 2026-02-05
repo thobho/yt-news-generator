@@ -55,9 +55,13 @@ export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: Di
                 <option value="Adam">Adam</option>
                 <option value="Bella">Bella</option>
               </select>
-              {item.source && (
-                <span className="source-badge" title={item.source.text}>
-                  {item.source.name}
+              {item.sources && item.sources.length > 0 && (
+                <span className="source-badges">
+                  {item.sources.map((src, srcIdx) => (
+                    <span key={srcIdx} className="source-badge" title={src.text}>
+                      {src.name}
+                    </span>
+                  ))}
                 </span>
               )}
             </div>

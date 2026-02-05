@@ -83,9 +83,13 @@ function DialogueTab({
               {item.speaker ?? 'Unknown'}
             </div>
             <div className="dialogue-text">{item.text ?? ''}</div>
-            {item.source && (
-              <div className="dialogue-source">
-                <strong>{item.source.name}:</strong> {item.source.text}
+            {item.sources && item.sources.length > 0 && (
+              <div className="dialogue-sources">
+                {item.sources.map((source, srcIdx) => (
+                  <div key={srcIdx} className="dialogue-source">
+                    <strong>{source.name}:</strong> {source.text}
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -47,6 +47,7 @@ CONNECTORS = {
 
 MIN_WORDS = 2
 MAX_WORDS = 6
+MIN_SOURCE_DURATION_MS = 5000  # Minimum 5 seconds per source display
 
 
 # ==========================
@@ -81,13 +82,72 @@ def semantic_chunks(text: str) -> list[str]:
     return chunks
 
 
+def distribute_sources(sources: list, start_ms: int, end_ms: int) -> list[dict]:
+    """
+    Distribute sources evenly across a time range.
+
+    Each source gets at least MIN_SOURCE_DURATION_MS. If there are too many
+    sources to fit, drop the last ones until all remaining sources have
+    sufficient display time.
+
+    Returns list of dicts with source data and time ranges:
+    [{"source": {...}, "start_ms": ..., "end_ms": ...}, ...]
+    """
+    if not sources:
+        return []
+
+    duration = end_ms - start_ms
+    if duration <= 0:
+        return []
+
+    # Calculate how many sources can fit with minimum duration
+    max_sources = duration // MIN_SOURCE_DURATION_MS
+    if max_sources == 0:
+        # Not enough time for even one source at minimum duration
+        # Still show the first source for the entire duration
+        return [{"source": sources[0], "start_ms": start_ms, "end_ms": end_ms}]
+
+    # Take only as many sources as can fit
+    usable_sources = sources[:max_sources]
+
+    # Distribute evenly
+    time_per_source = duration // len(usable_sources)
+    result = []
+    current_time = start_ms
+
+    for i, source in enumerate(usable_sources):
+        source_end = current_time + time_per_source
+        # Last source gets any remaining time
+        if i == len(usable_sources) - 1:
+            source_end = end_ms
+        result.append({
+            "source": source,
+            "start_ms": current_time,
+            "end_ms": source_end
+        })
+        current_time = source_end
+
+    return result
+
+
+def get_source_for_time(source_ranges: list[dict], time_ms: int) -> dict | None:
+    """Get the source that should be displayed at a given time."""
+    for sr in source_ranges:
+        if sr["start_ms"] <= time_ms < sr["end_ms"]:
+            return sr["source"]
+    return None
+
+
 def chunk_segment(segment: dict) -> list[dict]:
     chunks = semantic_chunks(segment["text"])
     start = segment["start_ms"]
     end = segment["end_ms"]
     duration = end - start
     emphasis = segment.get("emphasis", [])
-    source = segment.get("source")
+    sources = segment.get("sources", [])
+
+    # Distribute sources across the segment duration
+    source_ranges = distribute_sources(sources, start, end)
 
     lengths = [len(c.split()) for c in chunks]
     total_words = sum(lengths)
@@ -97,11 +157,12 @@ def chunk_segment(segment: dict) -> list[dict]:
 
     for chunk, words in zip(chunks, lengths):
         part = int(duration * (words / total_words))
+        chunk_end = current_time + part
         chunk_data = {
             "speaker": segment["speaker"],
             "text": chunk,
             "start_ms": current_time,
-            "end_ms": current_time + part,
+            "end_ms": chunk_end,
             "chunk": True
         }
         # Add emphasis words that appear in this chunk
@@ -109,10 +170,15 @@ def chunk_segment(segment: dict) -> list[dict]:
             chunk_emphasis = [w for w in emphasis if w.lower() in chunk.lower()]
             if chunk_emphasis:
                 chunk_data["emphasis"] = chunk_emphasis
-        if source:
-            chunk_data["source"] = source
+
+        # Find the source active at the midpoint of this chunk
+        chunk_midpoint = current_time + part // 2
+        active_source = get_source_for_time(source_ranges, chunk_midpoint)
+        if active_source:
+            chunk_data["source"] = active_source
+
         result.append(chunk_data)
-        current_time += part
+        current_time = chunk_end
 
     if result:
         result[-1]["end_ms"] = end
@@ -205,9 +271,10 @@ def load_dialogue(path: Union[Path, str], storage: StorageBackend = None) -> dic
 
 
 def extract_segments(data: dict):
-    """Extract segments with emphasis and source data.
+    """Extract segments with emphasis and sources data.
 
-    Returns list of (speaker, text, emphasis, source) tuples and list of speakers.
+    Returns list of (speaker, text, emphasis, sources) tuples and list of speakers.
+    Sources is now an array of source objects.
     """
     segments = []
     speakers = []
@@ -219,13 +286,13 @@ def extract_segments(data: dict):
 
     for d in data.get("script", []):
         emphasis = d.get("emphasis", [])
-        source = d.get("source")
-        segments.append((track(d["speaker"]), d["text"], emphasis, source))
+        sources = d.get("sources", [])
+        segments.append((track(d["speaker"]), d["text"], emphasis, sources))
 
     for d in data.get("cooldown", []):
         emphasis = d.get("emphasis", [])
-        source = d.get("source")
-        segments.append((track(d["speaker"]), d["text"], emphasis, source))
+        sources = d.get("sources", [])
+        segments.append((track(d["speaker"]), d["text"], emphasis, sources))
 
     return segments, speakers
 
@@ -272,7 +339,7 @@ def generate_audio(
         audio_files = []
         durations = []
 
-        for i, (speaker, text, _emphasis, _source) in enumerate(segments):
+        for i, (speaker, text, _emphasis, _sources) in enumerate(segments):
             out = tmp / f"seg_{i:03}.mp3"
             logger.debug("Generating segment %d/%d: %s...", i + 1, len(segments), text[:50])
             dur = generate_audio_segment(eleven_client, text, voice_map[speaker], out)
@@ -299,16 +366,15 @@ def generate_audio(
 
     output_name = Path(output).name if isinstance(output, (str, Path)) else output
 
-    for i, ((speaker, text, emphasis, source), dur) in enumerate(zip(segments, durations)):
+    for i, ((speaker, text, emphasis, sources), dur) in enumerate(zip(segments, durations)):
         base = {
             "speaker": speaker,
             "text": text,
             "start_ms": t,
             "end_ms": t + dur,
-            "emphasis": emphasis
+            "emphasis": emphasis,
+            "sources": sources,
         }
-        if source:
-            base["source"] = source
 
         timeline_segments.extend(chunk_segment(base))
         t += dur

@@ -58,14 +58,16 @@ export interface RunFiles {
   images: string[];
 }
 
+export interface DialogueSource {
+  name: string;
+  text: string;
+}
+
 export interface DialogueItem {
   speaker: string;
   text: string;
   emphasis?: string[];
-  source?: {
-    name: string;
-    text: string;
-  };
+  sources?: DialogueSource[];
 }
 
 export interface Dialogue {
