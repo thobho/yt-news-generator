@@ -20,6 +20,7 @@ from storage_config import get_run_storage, get_storage_dir, is_s3_enabled
 logger = get_logger(__name__)
 
 from ..services import pipeline
+from ..services.cache import get_cache
 
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
 
@@ -141,6 +142,9 @@ async def create_seed(request: CreateSeedRequest):
 
     run_id, seed_key = pipeline.create_seed(request.news_text)
 
+    # Invalidate runs list cache (new run added)
+    get_cache().invalidate_runs_list()
+
     return CreateSeedResponse(
         run_id=run_id,
         seed_path=seed_key
@@ -180,6 +184,9 @@ async def generate_dialogue(run_id: str, background_tasks: BackgroundTasks):
                 status="error",
                 message=str(e)
             )
+        finally:
+            # Invalidate cache after task completes
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -199,6 +206,10 @@ async def update_dialogue(run_id: str, request: DialogueUpdateRequest):
         )
 
     result = pipeline.update_dialogue_for_run(run_id, request.dialogue)
+
+    # Invalidate cache
+    get_cache().invalidate_run(run_id)
+
     return {"status": "updated", "dialogue": result}
 
 
@@ -233,6 +244,8 @@ async def generate_audio(run_id: str, background_tasks: BackgroundTasks):
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -270,6 +283,8 @@ async def generate_images(run_id: str, background_tasks: BackgroundTasks):
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -315,6 +330,8 @@ async def generate_video(run_id: str, background_tasks: BackgroundTasks):
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -358,6 +375,8 @@ async def upload_youtube(
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -377,6 +396,9 @@ async def delete_youtube(run_id: str):
         )
 
     result = pipeline.delete_youtube_for_run(run_id)
+
+    get_cache().invalidate_run(run_id)
+
     return {"status": "deleted", **result}
 
 
@@ -411,6 +433,9 @@ async def update_images(run_id: str, request: ImagesUpdateRequest):
     validate_run_exists(run_id)
 
     result = pipeline.update_images_metadata_for_run(run_id, request.images)
+
+    get_cache().invalidate_run(run_id)
+
     return {"status": "updated", "images": result}
 
 
@@ -439,6 +464,8 @@ async def regenerate_image(run_id: str, image_id: str, background_tasks: Backgro
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
 
     background_tasks.add_task(run_task)
 
@@ -458,6 +485,9 @@ async def drop_audio(run_id: str):
         )
 
     result = pipeline.drop_audio_for_run(run_id)
+
+    get_cache().invalidate_run(run_id)
+
     return {"status": "dropped", **result}
 
 
@@ -474,6 +504,9 @@ async def drop_video(run_id: str):
         )
 
     result = pipeline.drop_video_for_run(run_id)
+
+    get_cache().invalidate_run(run_id)
+
     return {"status": "dropped", **result}
 
 
@@ -490,4 +523,7 @@ async def drop_images(run_id: str):
         )
 
     result = pipeline.drop_images_for_run(run_id)
+
+    get_cache().invalidate_run(run_id)
+
     return {"status": "dropped", **result}

@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 
 from ..models import RunSummary, RunDetail, RunFiles, WorkflowState, YouTubeUpload
 from ..services import pipeline
+from ..services.cache import get_cache
 
 # Add src to path for storage imports
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -147,6 +148,13 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str], title: Optiona
 @router.get("", response_model=list[RunSummary])
 async def list_runs():
     """List all runs with summary info."""
+    cache = get_cache()
+
+    # Check cache first
+    cached = cache.get("runs_list")
+    if cached is not None:
+        return cached
+
     output_storage = get_output_storage()
     runs = []
 
@@ -219,6 +227,10 @@ async def list_runs():
 
     # Sort by timestamp, newest first
     runs.sort(key=lambda r: r.timestamp, reverse=True)
+
+    # Cache the result
+    cache.set("runs_list", runs)
+
     return runs
 
 
@@ -245,6 +257,13 @@ def _read_text_file(run_storage, key: str) -> Optional[str]:
 @router.get("/{run_id}", response_model=RunDetail)
 async def get_run(run_id: str):
     """Get full run details."""
+    cache = get_cache()
+
+    # Check cache first
+    cached = cache.get(f"run:{run_id}")
+    if cached is not None:
+        return cached
+
     run_storage = get_run_storage(run_id)
 
     # Check if run exists by looking for any file
@@ -311,7 +330,7 @@ async def get_run(run_id: str):
     # Get workflow state
     workflow_state = await asyncio.to_thread(pipeline.get_workflow_state_for_run, run_id)
 
-    return RunDetail(
+    result = RunDetail(
         id=run_id,
         timestamp=timestamp,
         dialogue=dialogue,
@@ -323,6 +342,11 @@ async def get_run(run_id: str):
         files=files,
         workflow=WorkflowState(**workflow_state),
     )
+
+    # Cache the result
+    cache.set(f"run:{run_id}", result)
+
+    return result
 
 
 @router.get("/{run_id}/video")
@@ -399,4 +423,8 @@ async def delete_run(run_id: str):
             raise HTTPException(status_code=404, detail="Run not found")
 
     result = pipeline.delete_run_for_run(run_id)
+
+    # Invalidate cache
+    get_cache().invalidate_run(run_id)
+
     return {"status": "deleted", **result}
