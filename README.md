@@ -303,3 +303,11 @@ The OAuth2 refresh token has expired. This happens every **7 days** if the Googl
 - Ensure `credentials/client_secrets.json` exists and is a **Desktop** app type (not Web)
 - Check YouTube Data API v3 is enabled in Google Cloud Console
 - To stop token expiry: Google Cloud Console > OAuth consent screen > **Publish App**
+
+
+## Costs management
+1. https://fal.ai/dashboard/usage-billing/credits
+2. https://console.runpod.io/user/billing
+3. https://elevenlabs.io/app/developers/usage
+4. https://platform.openai.com/usage
+5. https://claude.ai/settings/billing
