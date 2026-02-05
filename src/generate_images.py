@@ -12,6 +12,7 @@ import base64
 import json
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Union
 
@@ -159,7 +160,7 @@ def generate_all_images(
     output_dir: Union[Path, str],
     storage: StorageBackend = None
 ) -> dict:
-    """Generate all images from prompts and save to output directory.
+    """Generate all images from prompts and save to output directory (parallel).
 
     Args:
         prompts_data: Dict containing image prompts
@@ -174,10 +175,12 @@ def generate_all_images(
 
     client = OpenAI()
     images = prompts_data.get("images", [])
+    n_images = len(images)
 
-    logger.info("Generating %d images with DALL-E...", len(images))
+    logger.info("Generating %d images in parallel with DALL-E...", n_images)
 
-    for i, image_info in enumerate(images):
+    def process_image(idx_and_info):
+        idx, image_info = idx_and_info
         image_id = image_info["id"]
         prompt = image_info["prompt"]
 
@@ -186,17 +189,28 @@ def generate_all_images(
         else:
             output_path = output_dir / f"{image_id}.png"
 
-        logger.info("[%d/%d] Generating %s...", i + 1, len(images), image_id)
-        logger.debug("Prompt: %s", prompt[:100])
+        logger.info("[%d/%d] Generating %s...", idx + 1, n_images, image_id)
 
         try:
             generate_image(client, prompt, output_path, storage)
-            image_info["file"] = f"{image_id}.png"
-            logger.debug("Saved: %s", output_path)
+            return image_id, f"{image_id}.png", None
         except Exception as e:
             logger.error("Failed to generate %s: %s", image_id, e)
-            image_info["file"] = None
-            image_info["error"] = str(e)
+            return image_id, None, str(e)
+
+    # Run all image generations in parallel
+    with ThreadPoolExecutor(max_workers=n_images) as executor:
+        futures = {executor.submit(process_image, (i, img)): img for i, img in enumerate(images)}
+
+        for future in as_completed(futures):
+            image_info = futures[future]
+            image_id, file, error = future.result()
+            if error:
+                image_info["file"] = None
+                image_info["error"] = error
+            else:
+                image_info["file"] = file
+                logger.debug("Saved: %s", file)
 
     return prompts_data
 
