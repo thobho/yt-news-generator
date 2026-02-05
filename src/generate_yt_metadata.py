@@ -98,7 +98,8 @@ def assemble_description(summary: str, hashtags: list[str], source_links: list[d
         parts.append("")
         parts.append("📰 Źródła:")
         for link in source_links:
-            parts.append(f"  ▸ {link['name']}: {link['url']}")
+            parts.append(f"▸ {link['name']}:")
+            parts.append(link['url'])
 
     # 4. Hashtags
     parts.append("")
