@@ -322,6 +322,7 @@ export interface Settings {
   prompt_version: string;
   tts_engine: string;
   image_engine: string;
+  fal_model: string;
 }
 
 export interface PromptVersionInfo {
@@ -345,10 +346,17 @@ export interface ImageEngineInfo {
   description: string;
 }
 
+export interface FalModelInfo {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface AvailableSettings {
   prompt_versions: PromptVersionInfo[];
   tts_engines: TTSEngineInfo[];
   image_engines: ImageEngineInfo[];
+  fal_models: FalModelInfo[];
 }
 
 export async function fetchSettings(): Promise<Settings> {

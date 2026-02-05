@@ -329,11 +329,14 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     )
 
     # Generate actual images
-    prompts_data = generate_all_images(
-        prompts_data,
-        keys["images_dir"],
-        storage=run_storage,
-    )
+    generate_kwargs = {
+        "prompts_data": prompts_data,
+        "output_dir": keys["images_dir"],
+        "storage": run_storage,
+    }
+    if image_engine == "fal":
+        generate_kwargs["model"] = settings.fal_model
+    prompts_data = generate_all_images(**generate_kwargs)
 
     # Assign segment indices
     prompts_data = assign_segment_indices_for_run(prompts_data, run_id)
@@ -617,7 +620,7 @@ def regenerate_single_image_for_run(run_id: str, image_id: str) -> dict:
 
     if image_engine == "fal":
         from generate_images_fal import generate_image
-        generate_image(target_image["prompt"], output_key, storage=run_storage)
+        generate_image(target_image["prompt"], output_key, storage=run_storage, model=settings.fal_model)
     else:
         from generate_images import generate_image
         from openai import OpenAI

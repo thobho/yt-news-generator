@@ -16,12 +16,14 @@ class SettingsResponse(BaseModel):
     prompt_version: str
     tts_engine: str
     image_engine: str
+    fal_model: str
 
 
 class SettingsUpdateRequest(BaseModel):
     prompt_version: Optional[str] = None
     tts_engine: Optional[str] = None
     image_engine: Optional[str] = None
+    fal_model: Optional[str] = None
 
 
 class PromptVersionInfo(BaseModel):
@@ -42,10 +44,17 @@ class ImageEngineInfo(BaseModel):
     description: str
 
 
+class FalModelInfo(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
 class AvailableSettingsResponse(BaseModel):
     prompt_versions: list[PromptVersionInfo]
     tts_engines: list[TTSEngineInfo]
     image_engines: list[ImageEngineInfo]
+    fal_models: list[FalModelInfo]
 
 
 @router.get("", response_model=SettingsResponse)
@@ -56,6 +65,7 @@ async def get_settings():
         prompt_version=current.prompt_version,
         tts_engine=current.tts_engine,
         image_engine=current.image_engine,
+        fal_model=current.fal_model,
     )
 
 
@@ -94,12 +104,23 @@ async def update_settings(request: SettingsUpdateRequest):
             )
         current.image_engine = request.image_engine  # type: ignore
 
+    if request.fal_model is not None:
+        valid_models = [m["id"] for m in settings_service.get_available_fal_models()]
+        if request.fal_model not in valid_models:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid fal model. Available: {valid_models}"
+            )
+        current.fal_model = request.fal_model
+
     settings_service.save_settings(current)
 
     return SettingsResponse(
         prompt_version=current.prompt_version,
         tts_engine=current.tts_engine,
         image_engine=current.image_engine,
+        fal_model=current.fal_model,
     )
 
 
@@ -109,8 +130,10 @@ async def get_available_settings():
     versions = settings_service.get_available_prompt_versions()
     tts_engines = settings_service.get_available_tts_engines()
     image_engines = settings_service.get_available_image_engines()
+    fal_models = settings_service.get_available_fal_models()
     return AvailableSettingsResponse(
         prompt_versions=[PromptVersionInfo(**v) for v in versions],
         tts_engines=[TTSEngineInfo(**e) for e in tts_engines],
         image_engines=[ImageEngineInfo(**e) for e in image_engines],
+        fal_models=[FalModelInfo(**m) for m in fal_models],
     )

@@ -50,7 +50,31 @@ IMAGE_ENGINES = [
     {
         "id": "fal",
         "label": "FLUX (fal.ai)",
-        "description": "fal.ai FLUX Schnell fast image generation",
+        "description": "fal.ai FLUX image generation",
+    },
+]
+
+# Available fal.ai FLUX models
+FAL_MODELS = [
+    {
+        "id": "fal-ai/flux-2-pro",
+        "label": "FLUX.2 Pro",
+        "description": "High-quality professional model",
+    },
+    {
+        "id": "fal-ai/flux-2-max",
+        "label": "FLUX.2 Max",
+        "description": "Maximum quality model",
+    },
+    {
+        "id": "fal-ai/flux-2",
+        "label": "FLUX.2 Dev",
+        "description": "Development model",
+    },
+    {
+        "id": "fal-ai/flux-2-flex",
+        "label": "FLUX.2 Flex",
+        "description": "Flexible model",
     },
 ]
 
@@ -64,6 +88,7 @@ class Settings(BaseModel):
     episode_counter: int = DEFAULT_EPISODE_NUMBER
     tts_engine: TTSEngine = "elevenlabs"
     image_engine: ImageEngine = "dalle"
+    fal_model: str = "fal-ai/flux-2-pro"
 
 
 def get_default_settings() -> Settings:
@@ -138,6 +163,11 @@ def get_available_tts_engines() -> list[dict]:
 def get_available_image_engines() -> list[dict]:
     """Get list of available image engines."""
     return IMAGE_ENGINES
+
+
+def get_available_fal_models() -> list[dict]:
+    """Get list of available fal.ai FLUX models."""
+    return FAL_MODELS
 
 
 def get_available_prompt_versions() -> list[dict]:

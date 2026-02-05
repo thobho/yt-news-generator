@@ -151,6 +151,32 @@ export default function Settings({ onClose }: SettingsProps) {
             </label>
           ))}
         </div>
+
+        {settings?.image_engine === 'fal' && available?.fal_models && (
+          <div style={{ marginTop: '12px' }}>
+            <label className="settings-label">FLUX Model</label>
+            <select
+              value={settings.fal_model}
+              onChange={(e) => handleSettingChange({ fal_model: e.target.value })}
+              disabled={saving}
+              style={{
+                width: '100%',
+                padding: '8px',
+                borderRadius: '4px',
+                border: '1px solid var(--border-color, #ccc)',
+                background: 'var(--input-bg, #fff)',
+                color: 'var(--text-color, #333)',
+                fontSize: '14px',
+              }}
+            >
+              {available.fal_models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label} — {model.description}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
     </div>
   )

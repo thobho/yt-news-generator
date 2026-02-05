@@ -1,5 +1,5 @@
 """
-Generate images using fal.ai FLUX Schnell model.
+Generate images using fal.ai FLUX 2 Pro model.
 
 Uses the same prompt generation as DALL-E (from generate_images.py),
 but calls the fal.ai API for image creation.
@@ -17,13 +17,14 @@ from storage import StorageBackend
 
 logger = get_logger(__name__)
 
-FAL_API_URL = "https://fal.run/fal-ai/flux/schnell"
+DEFAULT_FAL_MODEL = "fal-ai/flux-2-pro"
 
 
 def generate_image(
     prompt: str,
     output_path: Union[Path, str],
     storage: StorageBackend = None,
+    model: str = DEFAULT_FAL_MODEL,
 ) -> None:
     """Generate a single image using fal.ai FLUX and save it.
 
@@ -31,13 +32,16 @@ def generate_image(
         prompt: Image generation prompt
         output_path: Path to save the image
         storage: Optional storage backend. If None, saves to local filesystem.
+        model: fal.ai model identifier (e.g. "fal-ai/flux-2-pro")
     """
     token = os.environ.get("FAL_TOKEN")
     if not token:
         raise ValueError("FAL_TOKEN environment variable is not set")
 
+    api_url = f"https://fal.run/{model}"
+
     response = requests.post(
-        FAL_API_URL,
+        api_url,
         headers={
             "Authorization": f"Key {token}",
             "Content-Type": "application/json",
@@ -69,6 +73,7 @@ def generate_all_images(
     prompts_data: dict,
     output_dir: Union[Path, str],
     storage: StorageBackend = None,
+    model: str = DEFAULT_FAL_MODEL,
 ) -> dict:
     """Generate all images from prompts using fal.ai FLUX.
 
@@ -76,6 +81,7 @@ def generate_all_images(
         prompts_data: Dict containing image prompts
         output_dir: Directory to save images (or key prefix for S3)
         storage: Optional storage backend. If None, uses local filesystem.
+        model: fal.ai model identifier (e.g. "fal-ai/flux-2-pro")
     """
     if storage is not None:
         storage.makedirs(str(output_dir))
@@ -85,7 +91,7 @@ def generate_all_images(
 
     images = prompts_data.get("images", [])
 
-    logger.info("Generating %d images with fal.ai FLUX...", len(images))
+    logger.info("Generating %d images with fal.ai FLUX (%s)...", len(images), model)
 
     for i, image_info in enumerate(images):
         image_id = image_info["id"]
@@ -100,7 +106,7 @@ def generate_all_images(
         logger.debug("Prompt: %s", prompt[:100])
 
         try:
-            generate_image(prompt, output_path, storage)
+            generate_image(prompt, output_path, storage, model=model)
             image_info["file"] = f"{image_id}.png"
             logger.debug("Saved: %s", output_path)
         except Exception as e:
