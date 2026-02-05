@@ -406,58 +406,30 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     );
 
   /* =========================
-     IMAGE LOGIC (show every image exactly once, change on speaker switch)
+     IMAGE LOGIC (first switch at 3s, rest distributed evenly)
   ========================= */
 
-  // Find current segment
-  const effectiveSegmentIndex = segments.findIndex(
-    (s) => currentTimeMs < s.end_ms
-  );
-  const safeSegmentIndex = effectiveSegmentIndex >= 0
-    ? effectiveSegmentIndex
-    : segments.length - 1;
-
-  // Count total speaker changes in the entire video
-  const getTotalSpeakerChanges = (): number => {
-    let count = 0;
-    let lastSpeaker: string | undefined;
-    for (const seg of segments) {
-      if (seg.speaker && seg.speaker !== lastSpeaker) {
-        count++;
-        lastSpeaker = seg.speaker;
-      }
-    }
-    return Math.max(1, count);
-  };
-
-  // Count speaker changes up to current segment
-  const getCurrentSpeakerChangeCount = (): number => {
-    let changeCount = 0;
-    let lastSpeaker: string | undefined;
-
-    for (let i = 0; i <= safeSegmentIndex; i++) {
-      const seg = segments[i];
-      if (seg.speaker && seg.speaker !== lastSpeaker) {
-        changeCount++;
-        lastSpeaker = seg.speaker;
-      }
-    }
-
-    return Math.max(0, changeCount - 1); // First speaker is change 0
-  };
-
-  const totalSpeakerChanges = getTotalSpeakerChanges();
-  const currentSpeakerChange = getCurrentSpeakerChangeCount();
-
-  // Distribute images evenly: image i shows at speaker change floor(i * totalChanges / numImages)
+  const FIRST_SWITCH_MS = 3000;
+  const lastSegment = segments[segments.length - 1];
+  const totalDurationMs = lastSegment ? lastSegment.end_ms : 0;
   const numImages = images.length;
+
+  // Build switch times: image 0 at 0ms, image 1 at 3000ms,
+  // remaining images evenly from 3s to end
+  const getImageSwitchTimeMs = (idx: number): number => {
+    if (idx <= 0) return 0;
+    if (idx === 1) return FIRST_SWITCH_MS;
+    if (numImages <= 2) return FIRST_SWITCH_MS;
+    const remainingTime = totalDurationMs - FIRST_SWITCH_MS;
+    const remainingImages = numImages - 1; // images after the first
+    return FIRST_SWITCH_MS + remainingTime * (idx - 1) / remainingImages;
+  };
+
   const getCurrentImageIndex = (): number => {
     if (numImages === 0) return 0;
-
-    for (let imgIdx = numImages - 1; imgIdx >= 0; imgIdx--) {
-      const startAtChange = Math.floor(imgIdx * totalSpeakerChanges / numImages);
-      if (currentSpeakerChange >= startAtChange) {
-        return imgIdx;
+    for (let i = numImages - 1; i >= 0; i--) {
+      if (currentTimeMs >= getImageSwitchTimeMs(i)) {
+        return i;
       }
     }
     return 0;
@@ -470,57 +442,17 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
      IMAGE TIMING (for motion effects)
   ========================= */
 
-  // Find when the current image started (at its designated speaker change)
-  const getImageStartFrame = (): number => {
-    const imageStartAtChange = Math.floor(currentImageIndex * totalSpeakerChanges / numImages);
-    let changeCount = 0;
-    let lastSpeaker: string | undefined;
+  const imageStartFrame = Math.floor(
+    (getImageSwitchTimeMs(currentImageIndex) / 1000) * fps
+  );
 
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      if (seg.speaker && seg.speaker !== lastSpeaker) {
-        if (changeCount === imageStartAtChange) {
-          return Math.floor((seg.start_ms / 1000) * fps);
-        }
-        changeCount++;
-        lastSpeaker = seg.speaker;
-      }
+  const imageEndFrame = (() => {
+    const nextIndex = currentImageIndex + 1;
+    if (nextIndex >= numImages) {
+      return Math.floor((totalDurationMs / 1000) * fps);
     }
-
-    return 0;
-  };
-
-  const imageStartFrame = getImageStartFrame();
-
-  // Calculate when the current image ends (next image starts or end of video)
-  const getImageEndFrame = (): number => {
-    const nextImageIndex = currentImageIndex + 1;
-    if (nextImageIndex >= numImages) {
-      // Last image - goes to end of video
-      const lastSegment = segments[segments.length - 1];
-      return Math.floor((lastSegment.end_ms / 1000) * fps);
-    }
-    // Next image starts at this speaker change
-    const nextImageStartAtChange = Math.floor(nextImageIndex * totalSpeakerChanges / numImages);
-    let changeCount = 0;
-    let lastSpeaker: string | undefined;
-
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i];
-      if (seg.speaker && seg.speaker !== lastSpeaker) {
-        if (changeCount === nextImageStartAtChange) {
-          return Math.floor((seg.start_ms / 1000) * fps);
-        }
-        changeCount++;
-        lastSpeaker = seg.speaker;
-      }
-    }
-    // Fallback to end of video
-    const lastSegment = segments[segments.length - 1];
-    return Math.floor((lastSegment.end_ms / 1000) * fps);
-  };
-
-  const imageEndFrame = getImageEndFrame();
+    return Math.floor((getImageSwitchTimeMs(nextIndex) / 1000) * fps);
+  })();
 
   /* =========================
      BACKGROUND MOTION (cinematic push-in + parallax pan)
