@@ -120,6 +120,38 @@ export default function Settings({ onClose }: SettingsProps) {
           ))}
         </div>
       </div>
+
+      <div className="settings-section">
+        <label className="settings-label">Image Engine</label>
+        <div className="settings-description">
+          Select which image generation engine to use
+        </div>
+
+        <div className="prompt-version-options">
+          {saving && <div className="saving-indicator">Saving...</div>}
+          {available?.image_engines.map((engine) => (
+            <label
+              key={engine.id}
+              className={`prompt-version-option ${
+                settings?.image_engine === engine.id ? 'selected' : ''
+              }`}
+            >
+              <input
+                type="radio"
+                name="image_engine"
+                value={engine.id}
+                checked={settings?.image_engine === engine.id}
+                onChange={(e) => handleSettingChange({ image_engine: e.target.value })}
+                disabled={saving}
+              />
+              <span className="option-content">
+                <span className="option-label">{engine.label}</span>
+                <span className="option-files">{engine.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

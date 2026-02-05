@@ -1,0 +1,111 @@
+"""
+Generate images using fal.ai FLUX Schnell model.
+
+Uses the same prompt generation as DALL-E (from generate_images.py),
+but calls the fal.ai API for image creation.
+"""
+
+import json
+import os
+from pathlib import Path
+from typing import Union
+
+import requests
+
+from logging_config import get_logger
+from storage import StorageBackend
+
+logger = get_logger(__name__)
+
+FAL_API_URL = "https://fal.run/fal-ai/flux/schnell"
+
+
+def generate_image(
+    prompt: str,
+    output_path: Union[Path, str],
+    storage: StorageBackend = None,
+) -> None:
+    """Generate a single image using fal.ai FLUX and save it.
+
+    Args:
+        prompt: Image generation prompt
+        output_path: Path to save the image
+        storage: Optional storage backend. If None, saves to local filesystem.
+    """
+    token = os.environ.get("FAL_TOKEN")
+    if not token:
+        raise ValueError("FAL_TOKEN environment variable is not set")
+
+    response = requests.post(
+        FAL_API_URL,
+        headers={
+            "Authorization": f"Key {token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "prompt": prompt,
+            "image_size": {"width": 1024, "height": 1792},
+            "num_images": 1,
+            "output_format": "png",
+        },
+    )
+    response.raise_for_status()
+
+    data = response.json()
+    image_url = data["images"][0]["url"]
+
+    # Download the image
+    image_response = requests.get(image_url)
+    image_response.raise_for_status()
+
+    if storage is not None:
+        storage.write_bytes(str(output_path), image_response.content)
+    else:
+        with open(output_path, "wb") as f:
+            f.write(image_response.content)
+
+
+def generate_all_images(
+    prompts_data: dict,
+    output_dir: Union[Path, str],
+    storage: StorageBackend = None,
+) -> dict:
+    """Generate all images from prompts using fal.ai FLUX.
+
+    Args:
+        prompts_data: Dict containing image prompts
+        output_dir: Directory to save images (or key prefix for S3)
+        storage: Optional storage backend. If None, uses local filesystem.
+    """
+    if storage is not None:
+        storage.makedirs(str(output_dir))
+    else:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+    images = prompts_data.get("images", [])
+
+    logger.info("Generating %d images with fal.ai FLUX...", len(images))
+
+    for i, image_info in enumerate(images):
+        image_id = image_info["id"]
+        prompt = image_info["prompt"]
+
+        if storage is not None:
+            output_path = f"{output_dir}/{image_id}.png"
+        else:
+            output_path = output_dir / f"{image_id}.png"
+
+        logger.info("[%d/%d] Generating %s...", i + 1, len(images), image_id)
+        logger.debug("Prompt: %s", prompt[:100])
+
+        try:
+            generate_image(prompt, output_path, storage)
+            image_info["file"] = f"{image_id}.png"
+            logger.debug("Saved: %s", output_path)
+        except Exception as e:
+            logger.error("Failed to generate %s: %s", image_id, e)
+            image_info["file"] = None
+            image_info["error"] = str(e)
+
+    return prompts_data

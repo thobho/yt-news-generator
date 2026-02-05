@@ -293,8 +293,16 @@ def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella")
 
 def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     """Generate images from dialogue."""
-    logger.info("Starting image generation for run: %s", run_id)
-    from generate_images import generate_image_prompts, generate_all_images
+    settings = settings_service.load_settings()
+    image_engine = settings.image_engine
+    logger.info("Starting image generation for run: %s (engine=%s)", run_id, image_engine)
+
+    from generate_images import generate_image_prompts
+
+    if image_engine == "fal":
+        from generate_images_fal import generate_all_images
+    else:
+        from generate_images import generate_all_images
 
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
@@ -581,8 +589,8 @@ def update_images_metadata(run_dir: Path, images_data: dict) -> dict:
 
 def regenerate_single_image_for_run(run_id: str, image_id: str) -> dict:
     """Regenerate a single image by its ID."""
-    from generate_images import generate_image
-    from openai import OpenAI
+    settings = settings_service.load_settings()
+    image_engine = settings.image_engine
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -606,9 +614,15 @@ def regenerate_single_image_for_run(run_id: str, image_id: str) -> dict:
 
     # Generate the image
     output_key = f"{keys['images_dir']}/{image_id}.png"
-    client = OpenAI()
 
-    generate_image(client, target_image["prompt"], output_key, storage=run_storage)
+    if image_engine == "fal":
+        from generate_images_fal import generate_image
+        generate_image(target_image["prompt"], output_key, storage=run_storage)
+    else:
+        from generate_images import generate_image
+        from openai import OpenAI
+        client = OpenAI()
+        generate_image(client, target_image["prompt"], output_key, storage=run_storage)
 
     # Update metadata
     target_image["file"] = f"{image_id}.png"

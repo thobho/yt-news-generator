@@ -39,6 +39,21 @@ TTS_ENGINES = [
     },
 ]
 
+# Available image engines
+ImageEngine = Literal["dalle", "fal"]
+IMAGE_ENGINES = [
+    {
+        "id": "dalle",
+        "label": "DALL-E 3",
+        "description": "OpenAI DALL-E 3 image generation",
+    },
+    {
+        "id": "fal",
+        "label": "FLUX (fal.ai)",
+        "description": "fal.ai FLUX Schnell fast image generation",
+    },
+]
+
 # Starting episode number for DYSKUSJA counter
 DEFAULT_EPISODE_NUMBER = 6
 
@@ -48,6 +63,7 @@ class Settings(BaseModel):
     prompt_version: PromptVersion = "7"
     episode_counter: int = DEFAULT_EPISODE_NUMBER
     tts_engine: TTSEngine = "elevenlabs"
+    image_engine: ImageEngine = "dalle"
 
 
 def get_default_settings() -> Settings:
@@ -117,6 +133,11 @@ def get_prompt_paths(version: PromptVersion) -> tuple[Path, Path]:
 def get_available_tts_engines() -> list[dict]:
     """Get list of available TTS engines."""
     return TTS_ENGINES
+
+
+def get_available_image_engines() -> list[dict]:
+    """Get list of available image engines."""
+    return IMAGE_ENGINES
 
 
 def get_available_prompt_versions() -> list[dict]:

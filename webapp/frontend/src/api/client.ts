@@ -321,6 +321,7 @@ export async function regenerateImage(
 export interface Settings {
   prompt_version: string;
   tts_engine: string;
+  image_engine: string;
 }
 
 export interface PromptVersionInfo {
@@ -338,9 +339,16 @@ export interface TTSEngineInfo {
   description: string;
 }
 
+export interface ImageEngineInfo {
+  id: string;
+  label: string;
+  description: string;
+}
+
 export interface AvailableSettings {
   prompt_versions: PromptVersionInfo[];
   tts_engines: TTSEngineInfo[];
+  image_engines: ImageEngineInfo[];
 }
 
 export async function fetchSettings(): Promise<Settings> {

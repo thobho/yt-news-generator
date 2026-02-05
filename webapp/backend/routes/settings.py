@@ -15,11 +15,13 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 class SettingsResponse(BaseModel):
     prompt_version: str
     tts_engine: str
+    image_engine: str
 
 
 class SettingsUpdateRequest(BaseModel):
     prompt_version: Optional[str] = None
     tts_engine: Optional[str] = None
+    image_engine: Optional[str] = None
 
 
 class PromptVersionInfo(BaseModel):
@@ -34,9 +36,16 @@ class TTSEngineInfo(BaseModel):
     description: str
 
 
+class ImageEngineInfo(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
 class AvailableSettingsResponse(BaseModel):
     prompt_versions: list[PromptVersionInfo]
     tts_engines: list[TTSEngineInfo]
+    image_engines: list[ImageEngineInfo]
 
 
 @router.get("", response_model=SettingsResponse)
@@ -46,6 +55,7 @@ async def get_settings():
     return SettingsResponse(
         prompt_version=current.prompt_version,
         tts_engine=current.tts_engine,
+        image_engine=current.image_engine,
     )
 
 
@@ -74,11 +84,22 @@ async def update_settings(request: SettingsUpdateRequest):
             )
         current.tts_engine = request.tts_engine  # type: ignore
 
+    if request.image_engine is not None:
+        valid_engines = [e["id"] for e in settings_service.get_available_image_engines()]
+        if request.image_engine not in valid_engines:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid image engine. Available: {valid_engines}"
+            )
+        current.image_engine = request.image_engine  # type: ignore
+
     settings_service.save_settings(current)
 
     return SettingsResponse(
         prompt_version=current.prompt_version,
         tts_engine=current.tts_engine,
+        image_engine=current.image_engine,
     )
 
 
@@ -86,8 +107,10 @@ async def update_settings(request: SettingsUpdateRequest):
 async def get_available_settings():
     """Get available setting options."""
     versions = settings_service.get_available_prompt_versions()
-    engines = settings_service.get_available_tts_engines()
+    tts_engines = settings_service.get_available_tts_engines()
+    image_engines = settings_service.get_available_image_engines()
     return AvailableSettingsResponse(
         prompt_versions=[PromptVersionInfo(**v) for v in versions],
-        tts_engines=[TTSEngineInfo(**e) for e in engines],
+        tts_engines=[TTSEngineInfo(**e) for e in tts_engines],
+        image_engines=[ImageEngineInfo(**e) for e in image_engines],
     )
