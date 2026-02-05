@@ -163,9 +163,20 @@ const FilmGrain: React.FC = () => {
 interface CTAProps {
   startFrame: number;
   durationFrames: number;
+  headline?: string;
+  subline?: string;
+  showArrow?: boolean;
+  visibleDurationFrames?: number;
 }
 
-const CallToAction: React.FC<CTAProps> = ({ startFrame, durationFrames }) => {
+const CallToAction: React.FC<CTAProps> = ({
+  startFrame,
+  durationFrames,
+  headline = "Mniej emocji. Więcej debat.",
+  subline = "Źródła w opisie",
+  showArrow = true,
+  visibleDurationFrames,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
@@ -173,6 +184,9 @@ const CallToAction: React.FC<CTAProps> = ({ startFrame, durationFrames }) => {
 
   // Don't render if not yet visible
   if (framesIntoAnimation < 0) return null;
+  if (visibleDurationFrames !== undefined && framesIntoAnimation > visibleDurationFrames) {
+    return null;
+  }
 
   const animationDuration = Math.min(fps * 0.8, durationFrames); // 0.8s animation
 
@@ -233,22 +247,24 @@ const CallToAction: React.FC<CTAProps> = ({ startFrame, durationFrames }) => {
             letterSpacing: "0.02em",
           }}
         >
-          Mniej emocji. Więcej debat.
+          {headline}
         </div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            fontSize: 26,
-            fontWeight: 400,
-            color: "rgba(255, 255, 255, 0.75)",
-            textShadow: "0 2px 8px rgba(0,0,0,0.6)",
-          }}
-        >
-          <span>Źródła w opisie</span>
-          <span style={{ fontSize: 24 }}>↓</span>
-        </div>
+        {subline && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              fontSize: 26,
+              fontWeight: 400,
+              color: "rgba(255, 255, 255, 0.75)",
+              textShadow: "0 2px 8px rgba(0,0,0,0.6)",
+            }}
+          >
+            <span>{subline}</span>
+            {showArrow && <span style={{ fontSize: 24 }}>↓</span>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -722,10 +738,20 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
         const ctaDurationFrames = Math.floor(((totalDurationMs - ctaStartMs) / 1000) * fps);
 
         return (
-          <CallToAction
-            startFrame={ctaStartFrame}
-            durationFrames={ctaDurationFrames}
-          />
+          <>
+            <CallToAction
+              startFrame={Math.floor(5 * fps)}
+              durationFrames={Math.floor(0.8 * fps)}
+              headline="Zajrzyj do źródeł ↓"
+              subline={undefined}
+              showArrow={false}
+              visibleDurationFrames={Math.floor(3 * fps)}
+            />
+            <CallToAction
+              startFrame={ctaStartFrame}
+              durationFrames={ctaDurationFrames}
+            />
+          </>
         );
       })()}
 

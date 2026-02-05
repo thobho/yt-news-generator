@@ -78,19 +78,23 @@ function DialogueTab({
       </div>
 
       <h3 style={{ marginBottom: '16px' }}>Script</h3>
-      {dialogue.script.map((item: DialogueItem, index: number) => (
-        <div key={index} className="dialogue-item">
-          <div className={`dialogue-speaker ${item.speaker.toLowerCase()}`}>
-            {item.speaker}
-          </div>
-          <div className="dialogue-text">{item.text}</div>
-          {item.source && (
-            <div className="dialogue-source">
-              <strong>{item.source.name}:</strong> {item.source.text}
+      {Array.isArray(dialogue.script) && dialogue.script.length > 0 ? (
+        dialogue.script.map((item: DialogueItem, index: number) => (
+          <div key={index} className="dialogue-item">
+            <div className={`dialogue-speaker ${item.speaker?.toLowerCase() ?? ''}`}>
+              {item.speaker ?? 'Unknown'}
             </div>
-          )}
-        </div>
-      ))}
+            <div className="dialogue-text">{item.text ?? ''}</div>
+            {item.source && (
+              <div className="dialogue-source">
+                <strong>{item.source.name}:</strong> {item.source.text}
+              </div>
+            )}
+          </div>
+        ))
+      ) : (
+        <div className="card">No script lines available.</div>
+      )}
 
       <div className="card" style={{ marginTop: '20px' }}>
         <p><strong>Climax:</strong> {dialogue.climax_line}</p>

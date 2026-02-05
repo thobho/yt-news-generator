@@ -32,6 +32,7 @@ class WorkflowState(BaseModel):
     can_generate_dialogue: bool
     can_edit_dialogue: bool
     can_generate_audio: bool
+    can_generate_images: bool = False
     can_generate_video: bool
     can_upload: bool
     can_delete_youtube: bool = False
