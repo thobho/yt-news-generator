@@ -54,30 +54,74 @@ MIN_SOURCE_DURATION_MS = 5000  # Minimum 5 seconds per source display
 # SEMANTIC CHUNKING
 # ==========================
 
+# Punctuation that should attach to the previous word (no space before)
+TRAILING_PUNCT = {".", ",", "!", "?", ":", ";", ")", "]", "}", "…", "—", "-"}
+# Punctuation that should attach to the next word (no space after)
+LEADING_PUNCT = {"(", "[", "{", "„", "\"", "'"}
+
+
 def tokenize(text: str) -> list[str]:
     return re.findall(r"\w+|[^\w\s]", text, re.UNICODE)
 
 
+def join_tokens(tokens: list[str]) -> str:
+    """Join tokens with proper punctuation handling (no space before trailing punct)."""
+    if not tokens:
+        return ""
+
+    result = []
+    prev_token = None
+    for i, token in enumerate(tokens):
+        if i == 0:
+            result.append(token)
+        elif token in TRAILING_PUNCT:
+            # No space before trailing punctuation (., ! etc.)
+            result.append(token)
+        elif prev_token in LEADING_PUNCT:
+            # No space after leading punctuation ((, „ etc.)
+            result.append(token)
+        else:
+            result.append(" " + token)
+        prev_token = token
+
+    return "".join(result).strip()
+
+
 def semantic_chunks(text: str) -> list[str]:
-    words = tokenize(text)
+    tokens = tokenize(text)
     chunks = []
     current = []
 
-    for w in words:
-        current.append(w)
+    for token in tokens:
+        # Skip adding lone punctuation to empty chunk
+        if not current and token in TRAILING_PUNCT:
+            # Attach to previous chunk if exists
+            if chunks:
+                chunks[-1] = chunks[-1] + token
+            continue
+
+        current.append(token)
         clean_words = [x for x in current if re.match(r"\w+", x)]
         wc = len(clean_words)
 
-        if (
+        # Check if we should break here
+        should_break = (
             wc >= MAX_WORDS
-            or w in {".", "?", "!"}
-            or (wc >= MIN_WORDS and w.lower() in CONNECTORS)
-        ):
-            chunks.append(" ".join(current).strip())
+            or token in {".", "?", "!"}
+            or (wc >= MIN_WORDS and token.lower() in CONNECTORS)
+        )
+
+        if should_break:
+            chunk_text = join_tokens(current)
+            if chunk_text:
+                chunks.append(chunk_text)
             current = []
 
+    # Handle remaining tokens
     if current:
-        chunks.append(" ".join(current).strip())
+        chunk_text = join_tokens(current)
+        if chunk_text:
+            chunks.append(chunk_text)
 
     return chunks
 
