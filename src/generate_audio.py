@@ -227,12 +227,7 @@ def extract_segments(data: dict):
         source = d.get("source")
         segments.append((track(d["speaker"]), d["text"], emphasis, source))
 
-    if q := data.get("viewer_question"):
-        q_emphasis = data.get("viewer_question_emphasis", [])
-        segments.append(("__NARRATOR__", q, q_emphasis, None))
-
-    first = speakers[0] if speakers else "A"
-    return [(first if s == "__NARRATOR__" else s, t, e, src) for s, t, e, src in segments], speakers
+    return segments, speakers
 
 
 def voice_id(name: str) -> str:

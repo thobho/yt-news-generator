@@ -67,15 +67,13 @@ function DialogueTab({
 
   return (
     <div>
-      <div className="card">
-        <p><strong>Scene:</strong> {dialogue.scene}</p>
-        <p><strong>Hook:</strong> {dialogue.hook}</p>
-        {canEdit && (
-          <button onClick={onEdit} style={{ marginTop: '12px' }}>
+      {canEdit && (
+        <div className="card">
+          <button onClick={onEdit}>
             Edit Dialogue
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <h3 style={{ marginBottom: '16px' }}>Script</h3>
       {Array.isArray(dialogue.script) && dialogue.script.length > 0 ? (
@@ -95,11 +93,6 @@ function DialogueTab({
       ) : (
         <div className="card">No script lines available.</div>
       )}
-
-      <div className="card" style={{ marginTop: '20px' }}>
-        <p><strong>Climax:</strong> {dialogue.climax_line}</p>
-        <p><strong>Viewer question:</strong> {dialogue.viewer_question}</p>
-      </div>
     </div>
   )
 }
@@ -503,7 +496,7 @@ export default function RunDetail() {
       <Link to="/" className="back-link">&larr; Back to runs</Link>
 
       <div className="header">
-        <h1>{run.dialogue?.hook || run.id}</h1>
+        <h1>{run.dialogue?.topic_id || run.id}</h1>
         <div className="header-info">
           <span className="timestamp">{formatDate(run.timestamp)}</span>
           <StatusBadge status={getStatus()} />

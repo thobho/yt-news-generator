@@ -13,10 +13,6 @@ export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: Di
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const updateField = (field: keyof Dialogue, value: string) => {
-    setEditedDialogue({ ...editedDialogue, [field]: value })
-  }
-
   const updateScriptItem = (index: number, field: keyof DialogueItem, value: string) => {
     const newScript = [...editedDialogue.script]
     newScript[index] = { ...newScript[index], [field]: value }
@@ -47,26 +43,6 @@ export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: Di
       {error && <div className="error-message">{error}</div>}
 
       <div className="editor-section">
-        <label>Hook (Opening question)</label>
-        <input
-          type="text"
-          value={editedDialogue.hook}
-          onChange={(e) => updateField('hook', e.target.value)}
-          disabled={isSaving}
-        />
-      </div>
-
-      <div className="editor-section">
-        <label>Scene Description</label>
-        <input
-          type="text"
-          value={editedDialogue.scene}
-          onChange={(e) => updateField('scene', e.target.value)}
-          disabled={isSaving}
-        />
-      </div>
-
-      <div className="editor-section">
         <label>Script</label>
         {editedDialogue.script.map((item, index) => (
           <div key={index} className="script-item-editor">
@@ -93,26 +69,6 @@ export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: Di
             />
           </div>
         ))}
-      </div>
-
-      <div className="editor-section">
-        <label>Climax Line</label>
-        <input
-          type="text"
-          value={editedDialogue.climax_line}
-          onChange={(e) => updateField('climax_line', e.target.value)}
-          disabled={isSaving}
-        />
-      </div>
-
-      <div className="editor-section">
-        <label>Viewer Question (Closing)</label>
-        <input
-          type="text"
-          value={editedDialogue.viewer_question}
-          onChange={(e) => updateField('viewer_question', e.target.value)}
-          disabled={isSaving}
-        />
       </div>
 
       <div className="editor-actions">

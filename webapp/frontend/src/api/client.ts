@@ -70,11 +70,7 @@ export interface DialogueItem {
 
 export interface Dialogue {
   topic_id: string;
-  scene: string;
-  hook: string;
   script: DialogueItem[];
-  climax_line: string;
-  viewer_question: string;
 }
 
 export interface SourceSummary {
