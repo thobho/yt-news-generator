@@ -73,35 +73,6 @@ def wait_for_user(message: str):
         sys.exit(1)
 
 
-def assign_segment_indices(prompts_data: dict, timeline_path: str, storage=None) -> dict:
-    """Distribute images evenly across timeline chunks."""
-    if storage is not None:
-        content = storage.read_text(timeline_path)
-        timeline = json.loads(content)
-    else:
-        with open(timeline_path, "r", encoding="utf-8") as f:
-            timeline = json.load(f)
-
-    chunk_indices = [
-        i for i, s in enumerate(timeline["segments"])
-        if s.get("chunk")
-    ]
-    total_chunks = len(chunk_indices)
-    images = prompts_data.get("images", [])
-    n_images = len(images)
-
-    if n_images == 0 or total_chunks == 0:
-        return prompts_data
-
-    per_image = total_chunks / n_images
-    for img_idx, image_info in enumerate(images):
-        start = int(img_idx * per_image)
-        end = int((img_idx + 1) * per_image)
-        image_info["segment_indices"] = chunk_indices[start:end]
-
-    return prompts_data
-
-
 # =========================
 # MAIN
 # =========================
@@ -274,7 +245,6 @@ def main():
         )
 
         prompts_data = generate_all_images(prompts_data, images_dir_key, storage=run_storage)
-        prompts_data = assign_segment_indices(prompts_data, timeline_key, storage=run_storage)
 
         images_json = json.dumps(prompts_data, ensure_ascii=False, indent=2)
         run_storage.write_text(images_json_key, images_json)

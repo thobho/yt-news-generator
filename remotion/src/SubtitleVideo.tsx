@@ -33,8 +33,6 @@ interface ImageInfo {
   purpose: string;
   prompt: string;
   file: string;
-  segment_index?: number;
-  segment_indices?: number[];
 }
 
 export interface SubtitleVideoProps {

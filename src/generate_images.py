@@ -80,11 +80,6 @@ def build_user_message(dialogue_data: dict) -> str:
 LANGUAGE: {dialogue_data.get('language', 'en')}
 
 {chr(10).join(all_text)}
-
-Generate image prompts for this debate video. Create 4 images total:
-1. A hook image for the opening
-2-3. Topic images showing different aspects of the debate
-4. A discussion/engagement image for the ending
 """
 
 

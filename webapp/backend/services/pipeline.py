@@ -338,9 +338,6 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         generate_kwargs["model"] = settings.fal_model
     prompts_data = generate_all_images(**generate_kwargs)
 
-    # Assign segment indices
-    prompts_data = assign_segment_indices_for_run(prompts_data, run_id)
-
     # Save images metadata
     images_json = json.dumps(prompts_data, ensure_ascii=False, indent=2)
     run_storage.write_text(keys["images_json"], images_json)
@@ -351,59 +348,6 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
 def generate_images(run_dir: Path, model: str = "gpt-4o") -> dict:
     """Generate images from dialogue (legacy interface)."""
     return generate_images_for_run(run_dir.name, model)
-
-
-def assign_segment_indices_for_run(prompts_data: dict, run_id: str) -> dict:
-    """Distribute images evenly across timeline chunks."""
-    run_storage = get_run_storage(run_id)
-    keys = get_run_keys()
-
-    timeline_content = run_storage.read_text(keys["timeline"])
-    timeline = json.loads(timeline_content)
-
-    chunk_indices = [
-        i for i, s in enumerate(timeline["segments"])
-        if s.get("chunk")
-    ]
-    total_chunks = len(chunk_indices)
-    images = prompts_data.get("images", [])
-    n_images = len(images)
-
-    if n_images == 0 or total_chunks == 0:
-        return prompts_data
-
-    per_image = total_chunks / n_images
-    for img_idx, image_info in enumerate(images):
-        start = int(img_idx * per_image)
-        end = int((img_idx + 1) * per_image)
-        image_info["segment_indices"] = chunk_indices[start:end]
-
-    return prompts_data
-
-
-def assign_segment_indices(prompts_data: dict, timeline_path: Path) -> dict:
-    """Distribute images evenly across timeline chunks (legacy interface)."""
-    with open(timeline_path, "r", encoding="utf-8") as f:
-        timeline = json.load(f)
-
-    chunk_indices = [
-        i for i, s in enumerate(timeline["segments"])
-        if s.get("chunk")
-    ]
-    total_chunks = len(chunk_indices)
-    images = prompts_data.get("images", [])
-    n_images = len(images)
-
-    if n_images == 0 or total_chunks == 0:
-        return prompts_data
-
-    per_image = total_chunks / n_images
-    for img_idx, image_info in enumerate(images):
-        start = int(img_idx * per_image)
-        end = int((img_idx + 1) * per_image)
-        image_info["segment_indices"] = chunk_indices[start:end]
-
-    return prompts_data
 
 
 def generate_video_for_run(run_id: str) -> str:

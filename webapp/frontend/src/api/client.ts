@@ -113,7 +113,6 @@ export interface ImageInfo {
   id: string;
   purpose: string;
   prompt: string;
-  segment_indices?: number[];
   file?: string | null;
   error?: string;
 }
