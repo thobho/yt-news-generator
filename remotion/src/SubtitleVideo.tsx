@@ -288,8 +288,8 @@ const HeaderWatermark: React.FC<HeaderWatermarkProps> = ({ episodeNumber }) => {
       style={{
         position: "absolute",
         top: 40,
-        left: 32,
-        right: 32,
+        left: 64,
+        right: 64,
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
@@ -675,7 +675,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
               startFrame={Math.floor(5 * fps)}
               durationFrames={Math.floor(0.8 * fps)}
               headline="Zajrzyj do źródeł ↓"
-              subline={undefined}
+              subline={"Więcej informacji w opisie"}
               showArrow={false}
               visibleDurationFrames={Math.floor(3 * fps)}
             />
