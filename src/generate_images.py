@@ -54,31 +54,23 @@ def load_prompt(prompt_path: Union[Path, str], storage: StorageBackend = None) -
 
 def build_user_message(dialogue_data: dict) -> str:
     """Build the user message with dialogue data."""
-    # Extract all text for context
     all_text = []
 
-    if hook := dialogue_data.get("hook"):
-        all_text.append(f"HOOK: {hook}")
-
-    script = dialogue_data.get("script", dialogue_data.get("dialogue", []))
-    all_text.append("\nDIALOGUE:")
+    script = dialogue_data.get("script", [])
+    all_text.append("DIALOGUE:")
     for i, entry in enumerate(script):
         all_text.append(f"  [{i}] Speaker {entry['speaker']}: {entry['text']}")
 
-    cooldown = dialogue_data.get("cooldown", dialogue_data.get("common_ground", []))
-    all_text.append("\nCOOLDOWN:")
-    for i, entry in enumerate(cooldown):
-        idx = len(script) + i
-        all_text.append(f"  [{idx}] Speaker {entry['speaker']}: {entry['text']}")
+        # Add emphasis if present
+        if emphasis := entry.get("emphasis"):
+            all_text.append(f"      EMPHASIS: {', '.join(emphasis)}")
 
-    if viewer_question := dialogue_data.get("viewer_question"):
-        all_text.append(f"\nVIEWER QUESTION: {viewer_question}")
-
-    if call_to_action := dialogue_data.get("call_to_action"):
-        all_text.append(f"CALL TO ACTION: {call_to_action}")
+        # Add sources if present
+        if sources := entry.get("sources"):
+            source_strs = [f"{s['name']}: {s['text']}" for s in sources]
+            all_text.append(f"      SOURCES: {'; '.join(source_strs)}")
 
     return f"""TOPIC ID: {dialogue_data.get('topic_id', 'unknown')}
-LANGUAGE: {dialogue_data.get('language', 'en')}
 
 {chr(10).join(all_text)}
 """

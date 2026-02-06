@@ -210,8 +210,22 @@ def chunk_segment(segment: dict) -> list[dict]:
             "chunk": True
         }
         # Add emphasis words that appear in this chunk
+        # Check both full phrases AND individual words from emphasis phrases
         if emphasis:
-            chunk_emphasis = [w for w in emphasis if w.lower() in chunk.lower()]
+            chunk_lower = chunk.lower()
+            chunk_emphasis = []
+            for phrase in emphasis:
+                phrase_lower = phrase.lower()
+                # First check if the full phrase is in the chunk
+                if phrase_lower in chunk_lower:
+                    chunk_emphasis.append(phrase)
+                else:
+                    # Check if any word from the phrase appears in the chunk
+                    phrase_words = phrase_lower.split()
+                    for word in phrase_words:
+                        # Skip short words and check whole word boundaries
+                        if len(word) > 2 and re.search(rf'\b{re.escape(word)}\b', chunk_lower):
+                            chunk_emphasis.append(word)
             if chunk_emphasis:
                 chunk_data["emphasis"] = chunk_emphasis
 

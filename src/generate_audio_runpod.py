@@ -203,7 +203,7 @@ def generate_audio(
 
         output_name = Path(output).name if isinstance(output, (str, Path)) else output
 
-        for i, ((speaker, text, emphasis, source), dur) in enumerate(
+        for i, ((speaker, text, emphasis, sources), dur) in enumerate(
             zip(segments, durations)
         ):
             base = {
@@ -212,9 +212,8 @@ def generate_audio(
                 "start_ms": t,
                 "end_ms": t + dur,
                 "emphasis": emphasis,
+                "sources": sources,
             }
-            if source:
-                base["source"] = source
 
             timeline_segments.extend(chunk_segment(base))
             t += dur
