@@ -2,8 +2,8 @@
 # Download S3 data to local storage/ directory for local development.
 #
 # Usage:
-#   ./scripts/dump-s3.sh              # Sync data only (prompts, media, settings)
-#   ./scripts/dump-s3.sh --with-runs  # Also sync output runs (can be large)
+#   ./scripts/dump-s3.sh           # Sync everything (data + output runs)
+#   ./scripts/dump-s3.sh --no-runs # Sync data only (prompts, media, settings)
 #
 # Requires: AWS CLI configured with credentials that can read the bucket.
 
@@ -13,11 +13,11 @@ BUCKET="${S3_BUCKET:-yt-news-generator}"
 REGION="${S3_REGION:-us-east-1}"
 LOCAL_STORAGE="storage"
 
-WITH_RUNS=false
+WITH_RUNS=true
 for arg in "$@"; do
   case "$arg" in
-    --with-runs) WITH_RUNS=true ;;
-    *) echo "Unknown option: $arg"; echo "Usage: $0 [--with-runs]"; exit 1 ;;
+    --no-runs) WITH_RUNS=false ;;
+    *) echo "Unknown option: $arg"; echo "Usage: $0 [--no-runs]"; exit 1 ;;
   esac
 done
 
@@ -37,7 +37,7 @@ data_count=$(find "${LOCAL_STORAGE}/data" -type f | wc -l | tr -d ' ')
 echo "  ${data_count} files in ${LOCAL_STORAGE}/data/"
 echo ""
 
-# --- Output runs (optional) ---
+# --- Output runs (default, skip with --no-runs) ---
 if [ "$WITH_RUNS" = true ]; then
   echo "Syncing output/ (run directories)..."
   mkdir -p "${LOCAL_STORAGE}/output"
