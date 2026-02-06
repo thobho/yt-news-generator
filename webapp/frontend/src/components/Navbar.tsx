@@ -65,6 +65,14 @@ export default function Navbar() {
               open={Boolean(anchorEl)}
               onClose={handleMenuClose}
             >
+              <MenuItem
+                component={Link}
+                to="/new-run"
+                onClick={handleMenuClose}
+                sx={{ fontWeight: 'bold', color: 'secondary.main' }}
+              >
+                + New Run
+              </MenuItem>
               {navItems.map((item) => (
                 <MenuItem
                   key={item.path}
