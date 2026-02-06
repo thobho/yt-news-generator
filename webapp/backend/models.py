@@ -35,6 +35,7 @@ class RunSummary(BaseModel):
     has_images: bool
     has_youtube: bool
     image_count: int
+    auto_generated: bool = False
 
 
 class RunFiles(BaseModel):
@@ -83,3 +84,34 @@ class RunDetail(BaseModel):
     news_data: Optional[dict[str, Any]] = None
     files: RunFiles
     workflow: Optional[WorkflowState] = None
+    auto_generated: bool = False
+    source_info: Optional[dict[str, Any]] = None
+
+
+# Scheduler models
+
+class SchedulerConfig(BaseModel):
+    """Scheduler configuration."""
+    enabled: bool = False
+    generation_time: str = "10:00"
+    publish_time: str = "18:00"
+    poland_count: int = 5
+    world_count: int = 3
+    videos_count: int = 2
+
+
+class SchedulerState(BaseModel):
+    """Scheduler runtime state."""
+    last_run_at: Optional[str] = None
+    last_run_status: Optional[str] = None
+    last_run_runs: list[str] = []
+    last_run_errors: list[str] = []
+    next_run_at: Optional[str] = None
+
+
+class SchedulerStatus(BaseModel):
+    """Full scheduler status."""
+    enabled: bool
+    config: SchedulerConfig
+    state: SchedulerState
+    scheduler_running: bool

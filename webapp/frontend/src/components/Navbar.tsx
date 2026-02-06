@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext'
 const navItems = [
   { label: 'Runs', path: '/' },
   { label: 'Analytics', path: '/analytics' },
+  { label: 'Scheduler', path: '/scheduler' },
   { label: 'Settings', path: '/settings' },
 ]
 

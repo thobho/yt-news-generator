@@ -50,6 +50,7 @@ export interface RunSummary {
   has_images: boolean;
   has_youtube: boolean;
   image_count: number;
+  auto_generated: boolean;
 }
 
 export interface RunFiles {
@@ -131,6 +132,17 @@ export interface ImagesMetadata {
   images: ImageInfo[];
 }
 
+export interface SourceInfo {
+  infopigula_id?: string;
+  category?: string;
+  rating?: number;
+  title?: string;
+  source?: {
+    name: string;
+    url: string;
+  };
+}
+
 export interface RunDetail {
   id: string;
   timestamp: string;
@@ -142,6 +154,8 @@ export interface RunDetail {
   news_data: NewsData | null;
   files: RunFiles;
   workflow: WorkflowState | null;
+  auto_generated: boolean;
+  source_info: SourceInfo | null;
 }
 
 export interface TaskStatus {
@@ -685,6 +699,83 @@ export async function refreshAllStats(): Promise<{ status: string; message: stri
   });
   if (!response.ok) {
     throw new Error('Failed to start refresh');
+  }
+  return response.json();
+}
+
+// Scheduler types and functions
+
+export interface SchedulerConfig {
+  enabled: boolean;
+  generation_time: string;
+  publish_time: string;
+  poland_count: number;
+  world_count: number;
+  videos_count: number;
+}
+
+export interface SchedulerState {
+  last_run_at: string | null;
+  last_run_status: string | null;
+  last_run_runs: string[];
+  last_run_errors: string[];
+  next_run_at: string | null;
+}
+
+export interface SchedulerStatus {
+  enabled: boolean;
+  config: SchedulerConfig;
+  state: SchedulerState;
+  scheduler_running: boolean;
+}
+
+export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {
+  const response = await fetch(`${API_BASE}/scheduler/status`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch scheduler status');
+  }
+  return response.json();
+}
+
+export async function enableScheduler(): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/scheduler/enable`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to enable scheduler');
+  }
+  return response.json();
+}
+
+export async function disableScheduler(): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/scheduler/disable`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to disable scheduler');
+  }
+  return response.json();
+}
+
+export async function updateSchedulerConfig(config: Partial<SchedulerConfig>): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/scheduler/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to update scheduler config');
+  }
+  return response.json();
+}
+
+export async function triggerSchedulerRun(): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE}/scheduler/trigger`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to trigger scheduler run');
   }
   return response.json();
 }

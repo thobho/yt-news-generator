@@ -15,8 +15,9 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics
+from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler
 from .services import auth as auth_service
+from .services import scheduler as scheduler_service
 
 # Static files directory (built frontend)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -90,6 +91,19 @@ app.include_router(settings.router)
 app.include_router(prompts.router)
 app.include_router(infopigula.router)
 app.include_router(analytics.router)
+app.include_router(scheduler.router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize scheduler on startup."""
+    scheduler_service.init_scheduler()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown scheduler gracefully."""
+    scheduler_service.shutdown_scheduler()
 
 
 @app.get("/health")

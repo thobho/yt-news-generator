@@ -79,6 +79,10 @@ h2 {
   color: #ccc;
 }
 
+.icon-auto {
+  color: #6f42c1;
+}
+
 /* Cards */
 .card {
   background: white;

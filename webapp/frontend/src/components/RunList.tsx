@@ -22,6 +22,7 @@ function StatusBadge({ status }: { status: string }) {
 function MediaIcons({ run }: { run: RunSummary }) {
   return (
     <div style={{ display: 'flex', gap: '8px' }}>
+      {run.auto_generated && <span className="icon icon-auto" title="Auto-generated">🤖</span>}
       {run.has_audio && <span className="icon icon-active" title="Audio available">🔊</span>}
       {run.has_images && <span className="icon icon-active" title={`${run.image_count} images`}>🖼️</span>}
       {run.has_video && <span className="icon icon-active" title="Video available">🎬</span>}
