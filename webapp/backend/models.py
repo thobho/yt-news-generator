@@ -3,6 +3,28 @@ from typing import Optional, Any
 from datetime import datetime
 
 
+class YouTubeStats(BaseModel):
+    views: int
+    estimatedMinutesWatched: float
+    averageViewPercentage: float
+    likes: int
+    comments: int
+    shares: int
+    subscribersGained: int = 0
+
+
+class AnalyticsRun(BaseModel):
+    id: str
+    timestamp: datetime
+    title: Optional[str] = None
+    video_id: str
+    url: str
+    publish_at: Optional[str] = None
+    episode_number: Optional[int] = None
+    stats: Optional[YouTubeStats] = None
+    stats_fetched_at: Optional[str] = None
+
+
 class RunSummary(BaseModel):
     id: str
     timestamp: datetime

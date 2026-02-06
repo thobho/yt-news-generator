@@ -635,3 +635,56 @@ export async function migratePrompts(): Promise<{ migrated: Record<string, strin
   }
   return response.json();
 }
+
+// Analytics types and functions
+
+export interface YouTubeStats {
+  views: number;
+  estimatedMinutesWatched: number;
+  averageViewPercentage: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  subscribersGained: number;
+}
+
+export interface AnalyticsRun {
+  id: string;
+  timestamp: string;
+  title: string | null;
+  video_id: string;
+  url: string;
+  publish_at: string | null;
+  episode_number: number | null;
+  stats: YouTubeStats | null;
+  stats_fetched_at: string | null;
+}
+
+export async function fetchAnalyticsRuns(): Promise<AnalyticsRun[]> {
+  const response = await fetch(`${API_BASE}/analytics/runs`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch analytics runs');
+  }
+  return response.json();
+}
+
+export async function refreshRunStats(runId: string): Promise<AnalyticsRun> {
+  const response = await fetch(`${API_BASE}/analytics/runs/${runId}/refresh`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to refresh stats');
+  }
+  return response.json();
+}
+
+export async function refreshAllStats(): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE}/analytics/refresh-all`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to start refresh');
+  }
+  return response.json();
+}

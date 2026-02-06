@@ -43,6 +43,7 @@ TOKEN_PATH = CREDENTIALS_DIR / "token.json"
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
 ]
 
 PLAYLIST_TITLE = "Daily News"

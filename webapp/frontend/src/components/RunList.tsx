@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
-import { useAuth } from '../context/AuthContext'
 import Settings from './Settings'
 
 function formatDate(timestamp: string): string {
@@ -37,7 +36,6 @@ export default function RunList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const { logout, isAuthEnabled } = useAuth()
 
   const loadRuns = () => {
     setLoading(true)
@@ -94,25 +92,14 @@ export default function RunList() {
   return (
     <div>
       <div className="page-header">
-        <h1>&#x1F4F0; YT News Generator</h1>
+        <h1>Runs</h1>
         <div className="header-actions">
-          <Link to="/settings" className="settings-toggle">
-            Prompt Settings
-          </Link>
           <button
             className="settings-toggle"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
           >
             Quick Settings
           </button>
-          <Link to="/new-run" className="new-run-btn">
-            + New Run
-          </Link>
-          {isAuthEnabled && (
-            <button className="logout-btn" onClick={logout}>
-              Logout
-            </button>
-          )}
         </div>
       </div>
 

@@ -1,19 +1,40 @@
 import { Routes, Route } from 'react-router-dom'
+import { ThemeProvider, createTheme } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
+import Box from '@mui/material/Box'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import Navbar from './components/Navbar'
 import RunList from './components/RunList'
 import RunDetail from './components/RunDetail'
 import NewRunPage from './components/NewRunPage'
 import SettingsPage from './components/SettingsPage'
+import AnalyticsPage from './components/AnalyticsPage'
 import Login from './components/Login'
+
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+    background: {
+      default: '#ffffff',
+      paper: '#ffffff',
+    },
+  },
+})
 
 function AppContent() {
   const { isAuthenticated, isAuthEnabled, isLoading } = useAuth()
 
   if (isLoading) {
     return (
-      <div className="container">
-        <div className="loading">Loading...</div>
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
+        Loading...
+      </Box>
     )
   }
 
@@ -23,22 +44,29 @@ function AppContent() {
   }
 
   return (
-    <div className="container">
-      <Routes>
-        <Route path="/" element={<RunList />} />
-        <Route path="/new-run" element={<NewRunPage />} />
-        <Route path="/runs/:runId" element={<RunDetail />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Routes>
-    </div>
+    <Box>
+      <Navbar />
+      <Box sx={{ px: 3, pb: 3 }}>
+        <Routes>
+          <Route path="/" element={<RunList />} />
+          <Route path="/new-run" element={<NewRunPage />} />
+          <Route path="/runs/:runId" element={<RunDetail />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+        </Routes>
+      </Box>
+    </Box>
   )
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 
