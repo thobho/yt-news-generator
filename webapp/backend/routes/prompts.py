@@ -25,12 +25,14 @@ class CreatePromptRequest(BaseModel):
     prompt_id: str
     content: str
     step2_content: str | None = None
+    step3_content: str | None = None
     set_active: bool = False
 
 
 class UpdatePromptRequest(BaseModel):
     content: str
     step2_content: str | None = None
+    step3_content: str | None = None
 
 
 class SetActiveRequest(BaseModel):
@@ -89,6 +91,7 @@ async def create_prompt(prompt_type: PromptType, request: CreatePromptRequest):
             prompt_id=request.prompt_id,
             content=request.content,
             step2_content=request.step2_content,
+            step3_content=request.step3_content,
             set_active=request.set_active
         )
         return prompt.model_dump()
@@ -104,7 +107,8 @@ async def update_prompt(prompt_type: PromptType, prompt_id: str, request: Update
             prompt_type=prompt_type,
             prompt_id=prompt_id,
             content=request.content,
-            step2_content=request.step2_content
+            step2_content=request.step2_content,
+            step3_content=request.step3_content
         )
         return prompt.model_dump()
     except ValueError as e:
@@ -154,7 +158,7 @@ def _get_type_label(prompt_type: PromptType) -> str:
 def _get_type_description(prompt_type: PromptType) -> str:
     """Get description for prompt type."""
     descriptions = {
-        "dialogue": "Prompts for generating dialogue scripts. Includes main prompt and refinement (step-2) prompt.",
+        "dialogue": "Prompts for generating dialogue scripts. 3-step system: main (structure), step-2 (logic fix), step-3 (language polish).",
         "image": "Prompts for AI image generation (DALL-E style).",
         "research": "Prompts for summarizing news articles from Perplexity research.",
         "yt-metadata": "Prompts for generating YouTube video titles, descriptions, and tags."

@@ -533,6 +533,7 @@ export interface PromptInfo {
   created_at: string | null;
   is_active: boolean;
   has_step2: boolean;
+  has_step3: boolean;
 }
 
 export interface PromptContent {
@@ -541,6 +542,7 @@ export interface PromptContent {
   prompt_type: PromptType;
   content: string;
   step2_content: string | null;
+  step3_content: string | null;
   is_active: boolean;
 }
 
@@ -578,6 +580,7 @@ export async function createPrompt(
   promptId: string,
   content: string,
   step2Content?: string,
+  step3Content?: string,
   setActive?: boolean
 ): Promise<PromptContent> {
   const response = await fetch(`${API_BASE}/prompts/${promptType}`, {
@@ -587,6 +590,7 @@ export async function createPrompt(
       prompt_id: promptId,
       content,
       step2_content: step2Content,
+      step3_content: step3Content,
       set_active: setActive,
     }),
   });
@@ -601,7 +605,8 @@ export async function updatePrompt(
   promptType: PromptType,
   promptId: string,
   content: string,
-  step2Content?: string
+  step2Content?: string,
+  step3Content?: string
 ): Promise<PromptContent> {
   const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
     method: 'PUT',
@@ -609,6 +614,7 @@ export async function updatePrompt(
     body: JSON.stringify({
       content,
       step2_content: step2Content,
+      step3_content: step3Content,
     }),
   });
   if (!response.ok) {

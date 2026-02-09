@@ -26,8 +26,9 @@ from storage_config import get_data_storage
 PromptType = Literal["dialogue", "image", "research", "yt-metadata"]
 PROMPT_TYPES: list[PromptType] = ["dialogue", "image", "research", "yt-metadata"]
 
-# For dialogue prompts, we have pairs (main + step-2)
-DIALOGUE_PROMPT_SUFFIX = "-step-2"
+# For dialogue prompts, we have 3 steps (main + step-2 + step-3)
+DIALOGUE_STEP2_SUFFIX = "-step-2"
+DIALOGUE_STEP3_SUFFIX = "-step-3"
 
 
 class PromptInfo(BaseModel):
@@ -37,8 +38,9 @@ class PromptInfo(BaseModel):
     prompt_type: PromptType
     created_at: str | None = None
     is_active: bool = False
-    # For dialogue prompts, has_step2 indicates paired prompt exists
+    # For dialogue prompts, indicates which steps exist
     has_step2: bool = False
+    has_step3: bool = False
 
 
 class PromptContent(BaseModel):
@@ -47,8 +49,9 @@ class PromptContent(BaseModel):
     name: str
     prompt_type: PromptType
     content: str
-    # For dialogue prompts
-    step2_content: str | None = None
+    # For dialogue prompts (3-step system)
+    step2_content: str | None = None  # Logic/structure fixes
+    step3_content: str | None = None  # Language/style polish
     is_active: bool = False
 
 
@@ -74,7 +77,12 @@ def _get_prompt_key(prompt_type: PromptType, prompt_id: str) -> str:
 
 def _get_step2_key(prompt_id: str) -> str:
     """Get key for dialogue step-2 prompt file."""
-    return f"{_get_prompts_prefix('dialogue')}/{prompt_id}-step-2.md"
+    return f"{_get_prompts_prefix('dialogue')}/{prompt_id}{DIALOGUE_STEP2_SUFFIX}.md"
+
+
+def _get_step3_key(prompt_id: str) -> str:
+    """Get key for dialogue step-3 prompt file."""
+    return f"{_get_prompts_prefix('dialogue')}/{prompt_id}{DIALOGUE_STEP3_SUFFIX}.md"
 
 
 def get_active_prompt_id(prompt_type: PromptType) -> str | None:
@@ -118,6 +126,7 @@ def list_prompts(prompt_type: PromptType) -> list[PromptInfo]:
 
     prompts: dict[str, PromptInfo] = {}
     step2_ids: set[str] = set()
+    step3_ids: set[str] = set()
 
     for key in all_keys:
         if not key.endswith(".md"):
@@ -127,11 +136,16 @@ def list_prompts(prompt_type: PromptType) -> list[PromptInfo]:
         filename = key.split("/")[-1]
         prompt_id = filename[:-3]  # Remove .md
 
-        # Check if this is a step-2 file (for dialogue)
-        if prompt_type == "dialogue" and prompt_id.endswith(DIALOGUE_PROMPT_SUFFIX):
-            base_id = prompt_id[:-len(DIALOGUE_PROMPT_SUFFIX)]
-            step2_ids.add(base_id)
-            continue
+        # Check if this is a step-2 or step-3 file (for dialogue)
+        if prompt_type == "dialogue":
+            if prompt_id.endswith(DIALOGUE_STEP3_SUFFIX):
+                base_id = prompt_id[:-len(DIALOGUE_STEP3_SUFFIX)]
+                step3_ids.add(base_id)
+                continue
+            if prompt_id.endswith(DIALOGUE_STEP2_SUFFIX):
+                base_id = prompt_id[:-len(DIALOGUE_STEP2_SUFFIX)]
+                step2_ids.add(base_id)
+                continue
 
         # Create prompt info
         prompts[prompt_id] = PromptInfo(
@@ -139,13 +153,17 @@ def list_prompts(prompt_type: PromptType) -> list[PromptInfo]:
             name=_format_prompt_name(prompt_id),
             prompt_type=prompt_type,
             is_active=(prompt_id == active_id),
-            has_step2=False
+            has_step2=False,
+            has_step3=False
         )
 
-    # Mark dialogue prompts that have step-2
+    # Mark dialogue prompts that have step-2 and step-3
     for base_id in step2_ids:
         if base_id in prompts:
             prompts[base_id].has_step2 = True
+    for base_id in step3_ids:
+        if base_id in prompts:
+            prompts[base_id].has_step3 = True
 
     # Sort by ID (which typically includes version number)
     return sorted(prompts.values(), key=lambda p: p.id)
@@ -171,12 +189,16 @@ def get_prompt(prompt_type: PromptType, prompt_id: str) -> PromptContent | None:
     content = storage.read_text(prompt_key)
     active_id = get_active_prompt_id(prompt_type)
 
-    # For dialogue, also get step-2 content
+    # For dialogue, also get step-2 and step-3 content
     step2_content = None
+    step3_content = None
     if prompt_type == "dialogue":
         step2_key = _get_step2_key(prompt_id)
         if storage.exists(step2_key):
             step2_content = storage.read_text(step2_key)
+        step3_key = _get_step3_key(prompt_id)
+        if storage.exists(step3_key):
+            step3_content = storage.read_text(step3_key)
 
     return PromptContent(
         id=prompt_id,
@@ -184,6 +206,7 @@ def get_prompt(prompt_type: PromptType, prompt_id: str) -> PromptContent | None:
         prompt_type=prompt_type,
         content=content,
         step2_content=step2_content,
+        step3_content=step3_content,
         is_active=(prompt_id == active_id)
     )
 
@@ -193,6 +216,7 @@ def create_prompt(
     prompt_id: str,
     content: str,
     step2_content: str | None = None,
+    step3_content: str | None = None,
     set_active: bool = False
 ) -> PromptContent:
     """Create a new prompt."""
@@ -210,10 +234,14 @@ def create_prompt(
     # Write main prompt
     storage.write_text(prompt_key, content)
 
-    # Write step-2 for dialogue
-    if prompt_type == "dialogue" and step2_content:
-        step2_key = _get_step2_key(prompt_id)
-        storage.write_text(step2_key, step2_content)
+    # Write step-2 and step-3 for dialogue
+    if prompt_type == "dialogue":
+        if step2_content:
+            step2_key = _get_step2_key(prompt_id)
+            storage.write_text(step2_key, step2_content)
+        if step3_content:
+            step3_key = _get_step3_key(prompt_id)
+            storage.write_text(step3_key, step3_content)
 
     # Set as active if requested
     if set_active:
@@ -226,7 +254,8 @@ def update_prompt(
     prompt_type: PromptType,
     prompt_id: str,
     content: str,
-    step2_content: str | None = None
+    step2_content: str | None = None,
+    step3_content: str | None = None
 ) -> PromptContent:
     """Update an existing prompt."""
     storage = get_data_storage()
@@ -239,7 +268,7 @@ def update_prompt(
     # Write main prompt
     storage.write_text(prompt_key, content)
 
-    # Write step-2 for dialogue
+    # Write step-2 and step-3 for dialogue
     if prompt_type == "dialogue":
         step2_key = _get_step2_key(prompt_id)
         if step2_content:
@@ -247,6 +276,13 @@ def update_prompt(
         elif storage.exists(step2_key):
             # Remove step-2 if not provided but exists
             storage.delete(step2_key)
+
+        step3_key = _get_step3_key(prompt_id)
+        if step3_content:
+            storage.write_text(step3_key, step3_content)
+        elif storage.exists(step3_key):
+            # Remove step-3 if not provided but exists
+            storage.delete(step3_key)
 
     return get_prompt(prompt_type, prompt_id)  # type: ignore
 
@@ -268,11 +304,14 @@ def delete_prompt(prompt_type: PromptType, prompt_id: str) -> bool:
     # Delete main prompt
     storage.delete(prompt_key)
 
-    # Delete step-2 for dialogue
+    # Delete step-2 and step-3 for dialogue
     if prompt_type == "dialogue":
         step2_key = _get_step2_key(prompt_id)
         if storage.exists(step2_key):
             storage.delete(step2_key)
+        step3_key = _get_step3_key(prompt_id)
+        if storage.exists(step3_key):
+            storage.delete(step3_key)
 
     return True
 
@@ -289,19 +328,19 @@ def get_active_prompt_content(prompt_type: PromptType) -> str | None:
     return None
 
 
-def get_active_dialogue_prompts() -> tuple[str | None, str | None]:
+def get_active_dialogue_prompts() -> tuple[str | None, str | None, str | None]:
     """
-    Get the active dialogue prompts (main and step-2).
-    Returns (main_content, step2_content).
+    Get the active dialogue prompts (main, step-2, step-3).
+    Returns (main_content, step2_content, step3_content).
     """
     active_id = get_active_prompt_id("dialogue")
     if not active_id:
-        return None, None
+        return None, None, None
 
     prompt = get_prompt("dialogue", active_id)
     if prompt:
-        return prompt.content, prompt.step2_content
-    return None, None
+        return prompt.content, prompt.step2_content, prompt.step3_content
+    return None, None, None
 
 
 # Migration helper: migrate old prompts to new structure

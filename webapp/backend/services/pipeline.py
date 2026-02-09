@@ -44,20 +44,31 @@ from . import settings as settings_service
 from . import prompts as prompts_service
 
 
-def get_dialogue_prompt_keys() -> tuple[str, str]:
-    """Get dialogue prompt keys based on current active prompt."""
+def get_dialogue_prompt_keys() -> tuple[str, str, str | None]:
+    """Get dialogue prompt keys based on current active prompt.
+
+    Returns:
+        Tuple of (main_key, step2_key, step3_key). step3_key may be None if not exists.
+    """
     active_id = prompts_service.get_active_prompt_id("dialogue")
     if active_id:
         main_key = f"prompts/dialogue/{active_id}.md"
         refine_key = f"prompts/dialogue/{active_id}-step-2.md"
-        return main_key, refine_key
+        polish_key = f"prompts/dialogue/{active_id}-step-3.md"
+
+        # Check if step-3 exists
+        data_storage = get_data_storage()
+        if not data_storage.exists(polish_key):
+            polish_key = None
+
+        return main_key, refine_key, polish_key
 
     # Fallback to old path structure for backward compatibility
     current_settings = settings_service.load_settings()
     version = current_settings.prompt_version
     main_key = f"dialogue-prompt/prompt-{version}.md"
     refine_key = f"dialogue-prompt/prompt-{version}-step-2.md"
-    return main_key, refine_key
+    return main_key, refine_key, None
 
 
 def get_image_prompt_key() -> str:
@@ -185,11 +196,11 @@ def get_run_paths(run_dir: Path) -> dict:
 def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     """
     Generate dialogue from seed.
-    Steps: perplexity search -> dialogue generation -> refinement
+    Steps: perplexity search -> dialogue generation -> refinement -> polish
     """
     logger.info("Starting dialogue generation for run: %s", run_id)
     from perplexity_search import run_perplexity_enrichment
-    from generate_dialogue import generate_dialogue as gen_dialogue, refine_dialogue
+    from generate_dialogue import generate_dialogue as gen_dialogue, refine_dialogue, polish_dialogue
 
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
@@ -211,7 +222,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     news_data = json.loads(news_content)
 
     # Get prompt keys from settings
-    dialogue_prompt_key, refine_prompt_key = get_dialogue_prompt_keys()
+    dialogue_prompt_key, refine_prompt_key, polish_prompt_key = get_dialogue_prompt_keys()
 
     dialogue_data = gen_dialogue(
         news_data,
@@ -220,7 +231,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         storage=data_storage,
     )
 
-    # Step 3: Refine dialogue
+    # Step 3: Refine dialogue (logic/structure)
     dialogue_data = refine_dialogue(
         dialogue_data,
         news_data,
@@ -228,6 +239,15 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         model,
         storage=data_storage,
     )
+
+    # Step 4: Polish dialogue (language/style) - optional
+    if polish_prompt_key:
+        dialogue_data = polish_dialogue(
+            dialogue_data,
+            polish_prompt_key,
+            model,
+            storage=data_storage,
+        )
 
     # Save dialogue
     dialogue_json = json.dumps(dialogue_data, ensure_ascii=False, indent=2)

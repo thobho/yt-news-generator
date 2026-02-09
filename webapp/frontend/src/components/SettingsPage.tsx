@@ -16,6 +16,7 @@ interface EditingPrompt {
   promptId: string | null; // null for new prompt
   content: string;
   step2Content: string;
+  step3Content: string;
   isNew: boolean;
   newId: string;
 }
@@ -74,6 +75,7 @@ export default function SettingsPage() {
         promptId,
         content: prompt.content,
         step2Content: prompt.step2_content || '',
+        step3Content: prompt.step3_content || '',
         isNew: false,
         newId: '',
       });
@@ -88,6 +90,7 @@ export default function SettingsPage() {
       promptId: null,
       content: '',
       step2Content: '',
+      step3Content: '',
       isNew: true,
       newId: '',
     });
@@ -96,8 +99,8 @@ export default function SettingsPage() {
   async function handleSave() {
     if (!editingPrompt) return;
 
-    const { promptType, promptId, content, step2Content, isNew, newId } = editingPrompt;
-    const hasStep2 = promptTypes.find((t) => t.type === promptType)?.has_step2 ?? false;
+    const { promptType, promptId, content, step2Content, step3Content, isNew, newId } = editingPrompt;
+    const isDialogue = promptType === 'dialogue';
 
     if (isNew && !newId.trim()) {
       alert('Please enter a prompt ID');
@@ -116,14 +119,16 @@ export default function SettingsPage() {
           promptType,
           newId.trim(),
           content,
-          hasStep2 ? step2Content || undefined : undefined
+          isDialogue ? step2Content || undefined : undefined,
+          isDialogue ? step3Content || undefined : undefined
         );
       } else if (promptId) {
         await updatePrompt(
           promptType,
           promptId,
           content,
-          hasStep2 ? step2Content || undefined : undefined
+          isDialogue ? step2Content || undefined : undefined,
+          isDialogue ? step3Content || undefined : undefined
         );
       }
       setEditingPrompt(null);
@@ -204,6 +209,9 @@ export default function SettingsPage() {
                           )}
                           {typeInfo.has_step2 && prompt.has_step2 && (
                             <span className="badge badge-step2">+Step 2</span>
+                          )}
+                          {typeInfo.has_step2 && prompt.has_step3 && (
+                            <span className="badge badge-step3">+Step 3</span>
                           )}
                         </div>
                         <div className="prompt-item-actions">
@@ -293,21 +301,37 @@ export default function SettingsPage() {
                 />
               </div>
 
-              {promptTypes.find((t) => t.type === editingPrompt.promptType)?.has_step2 && (
-                <div className="form-field">
-                  <label>Step 2 (Refinement) Prompt</label>
-                  <textarea
-                    value={editingPrompt.step2Content}
-                    onChange={(e) =>
-                      setEditingPrompt({ ...editingPrompt, step2Content: e.target.value })
-                    }
-                    rows={10}
-                    placeholder="Enter the refinement prompt content..."
-                  />
-                  <span className="form-hint">
-                    Used for dialogue refinement step (optional)
-                  </span>
-                </div>
+              {editingPrompt.promptType === 'dialogue' && (
+                <>
+                  <div className="form-field">
+                    <label>Step 2 (Logic/Structure Fix) Prompt</label>
+                    <textarea
+                      value={editingPrompt.step2Content}
+                      onChange={(e) =>
+                        setEditingPrompt({ ...editingPrompt, step2Content: e.target.value })
+                      }
+                      rows={10}
+                      placeholder="Enter the logic/structure refinement prompt..."
+                    />
+                    <span className="form-hint">
+                      Fixes logical issues and structure problems (required)
+                    </span>
+                  </div>
+                  <div className="form-field">
+                    <label>Step 3 (Language/Style Polish) Prompt</label>
+                    <textarea
+                      value={editingPrompt.step3Content}
+                      onChange={(e) =>
+                        setEditingPrompt({ ...editingPrompt, step3Content: e.target.value })
+                      }
+                      rows={10}
+                      placeholder="Enter the language/style polish prompt..."
+                    />
+                    <span className="form-hint">
+                      Polishes language and style (optional)
+                    </span>
+                  </div>
+                </>
               )}
             </div>
             <div className="dialog-footer">

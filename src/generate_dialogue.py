@@ -144,7 +144,7 @@ def refine_dialogue(
     model: str = "gpt-4o",
     storage: StorageBackend = None
 ) -> dict:
-    """Refine dialogue using a second LLM pass for corrections.
+    """Refine dialogue using a second LLM pass for logic/structure corrections.
 
     Args:
         dialogue: Generated dialogue dict
@@ -166,7 +166,7 @@ def refine_dialogue(
 ```
 """
 
-    logger.info("Step 2: Refining dialogue with model=%s", model)
+    logger.info("Step 2: Refining dialogue (logic/structure) with model=%s", model)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -192,6 +192,56 @@ def refine_dialogue(
         logger.info("Step 2: No corrections needed")
 
     return refined
+
+
+def polish_dialogue(
+    dialogue: dict,
+    prompt_path: Union[Path, str],
+    model: str = "gpt-4o",
+    storage: StorageBackend = None
+) -> dict:
+    """Polish dialogue using a third LLM pass for language and style.
+
+    Args:
+        dialogue: Refined dialogue dict
+        prompt_path: Path to polish prompt file
+        model: OpenAI model to use
+        storage: Optional storage backend for reading prompt
+    """
+    system_prompt = load_prompt(prompt_path, storage)
+
+    user_message = f"""## dialogue.json
+```json
+{json.dumps(dialogue, ensure_ascii=False, indent=2)}
+```
+"""
+
+    logger.info("Step 3: Polishing dialogue (language/style) with model=%s", model)
+    client = OpenAI()
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0.6,
+    )
+
+    content = response.choices[0].message.content
+    polished = json.loads(content)
+
+    # Log changes
+    changes = log_corrections(dialogue, polished)
+    if changes:
+        logger.info("Polish made %d change(s):", len(changes))
+        for change in changes:
+            logger.info("  - %s", change)
+    else:
+        logger.info("Step 3: No changes needed")
+
+    return polished
 
 
 def main():

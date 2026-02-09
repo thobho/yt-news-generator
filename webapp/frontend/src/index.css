@@ -1338,6 +1338,12 @@ button.small {
   font-size: 11px;
 }
 
+.badge-step3 {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  font-size: 11px;
+}
+
 .prompt-item-actions {
   display: flex;
   gap: 8px;
