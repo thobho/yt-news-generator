@@ -541,8 +541,11 @@ export interface PromptContent {
   name: string;
   prompt_type: PromptType;
   content: string;
+  temperature: number;
   step2_content: string | null;
+  step2_temperature: number;
   step3_content: string | null;
+  step3_temperature: number;
   is_active: boolean;
 }
 
@@ -575,23 +578,33 @@ export async function fetchPrompt(promptType: PromptType, promptId: string): Pro
   return response.json();
 }
 
+export interface CreatePromptParams {
+  content: string;
+  temperature?: number;
+  step2Content?: string;
+  step2Temperature?: number;
+  step3Content?: string;
+  step3Temperature?: number;
+  setActive?: boolean;
+}
+
 export async function createPrompt(
   promptType: PromptType,
   promptId: string,
-  content: string,
-  step2Content?: string,
-  step3Content?: string,
-  setActive?: boolean
+  params: CreatePromptParams
 ): Promise<PromptContent> {
   const response = await fetch(`${API_BASE}/prompts/${promptType}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       prompt_id: promptId,
-      content,
-      step2_content: step2Content,
-      step3_content: step3Content,
-      set_active: setActive,
+      content: params.content,
+      temperature: params.temperature,
+      step2_content: params.step2Content,
+      step2_temperature: params.step2Temperature,
+      step3_content: params.step3Content,
+      step3_temperature: params.step3Temperature,
+      set_active: params.setActive,
     }),
   });
   if (!response.ok) {
@@ -601,20 +614,30 @@ export async function createPrompt(
   return response.json();
 }
 
+export interface UpdatePromptParams {
+  content: string;
+  temperature?: number;
+  step2Content?: string;
+  step2Temperature?: number;
+  step3Content?: string;
+  step3Temperature?: number;
+}
+
 export async function updatePrompt(
   promptType: PromptType,
   promptId: string,
-  content: string,
-  step2Content?: string,
-  step3Content?: string
+  params: UpdatePromptParams
 ): Promise<PromptContent> {
   const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      content,
-      step2_content: step2Content,
-      step3_content: step3Content,
+      content: params.content,
+      temperature: params.temperature,
+      step2_content: params.step2Content,
+      step2_temperature: params.step2Temperature,
+      step3_content: params.step3Content,
+      step3_temperature: params.step3Temperature,
     }),
   });
   if (!response.ok) {

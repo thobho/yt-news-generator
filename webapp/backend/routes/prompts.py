@@ -24,15 +24,21 @@ class AllPromptsResponse(BaseModel):
 class CreatePromptRequest(BaseModel):
     prompt_id: str
     content: str
+    temperature: float | None = None
     step2_content: str | None = None
+    step2_temperature: float | None = None
     step3_content: str | None = None
+    step3_temperature: float | None = None
     set_active: bool = False
 
 
 class UpdatePromptRequest(BaseModel):
     content: str
+    temperature: float | None = None
     step2_content: str | None = None
+    step2_temperature: float | None = None
     step3_content: str | None = None
+    step3_temperature: float | None = None
 
 
 class SetActiveRequest(BaseModel):
@@ -90,8 +96,11 @@ async def create_prompt(prompt_type: PromptType, request: CreatePromptRequest):
             prompt_type=prompt_type,
             prompt_id=request.prompt_id,
             content=request.content,
+            temperature=request.temperature,
             step2_content=request.step2_content,
+            step2_temperature=request.step2_temperature,
             step3_content=request.step3_content,
+            step3_temperature=request.step3_temperature,
             set_active=request.set_active
         )
         return prompt.model_dump()
@@ -107,8 +116,11 @@ async def update_prompt(prompt_type: PromptType, prompt_id: str, request: Update
             prompt_type=prompt_type,
             prompt_id=prompt_id,
             content=request.content,
+            temperature=request.temperature,
             step2_content=request.step2_content,
-            step3_content=request.step3_content
+            step2_temperature=request.step2_temperature,
+            step3_content=request.step3_content,
+            step3_temperature=request.step3_temperature
         )
         return prompt.model_dump()
     except ValueError as e:

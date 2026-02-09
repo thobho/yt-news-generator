@@ -49,9 +49,12 @@ class PromptContent(BaseModel):
     name: str
     prompt_type: PromptType
     content: str
+    temperature: float = 0.7  # Temperature for main prompt (0-1)
     # For dialogue prompts (3-step system)
     step2_content: str | None = None  # Logic/structure fixes
+    step2_temperature: float = 0.5  # Temperature for step 2
     step3_content: str | None = None  # Language/style polish
+    step3_temperature: float = 0.6  # Temperature for step 3
     is_active: bool = False
 
 
@@ -83,6 +86,58 @@ def _get_step2_key(prompt_id: str) -> str:
 def _get_step3_key(prompt_id: str) -> str:
     """Get key for dialogue step-3 prompt file."""
     return f"{_get_prompts_prefix('dialogue')}/{prompt_id}{DIALOGUE_STEP3_SUFFIX}.md"
+
+
+def _get_config_key(prompt_type: PromptType, prompt_id: str) -> str:
+    """Get key for prompt config file (stores temperature, etc.)."""
+    return f"{_get_prompts_prefix(prompt_type)}/{prompt_id}.config.json"
+
+
+def _load_prompt_config(prompt_type: PromptType, prompt_id: str) -> dict:
+    """Load prompt config (temperature settings)."""
+    storage = get_data_storage()
+    config_key = _get_config_key(prompt_type, prompt_id)
+
+    defaults = {
+        "temperature": 0.7,
+        "step2_temperature": 0.5,
+        "step3_temperature": 0.6,
+    }
+
+    if storage.exists(config_key):
+        try:
+            content = storage.read_text(config_key)
+            config = json.loads(content)
+            # Merge with defaults
+            return {**defaults, **config}
+        except Exception:
+            pass
+    return defaults
+
+
+def _save_prompt_config(
+    prompt_type: PromptType,
+    prompt_id: str,
+    temperature: float | None = None,
+    step2_temperature: float | None = None,
+    step3_temperature: float | None = None
+) -> None:
+    """Save prompt config (temperature settings)."""
+    storage = get_data_storage()
+    config_key = _get_config_key(prompt_type, prompt_id)
+
+    # Load existing config
+    config = _load_prompt_config(prompt_type, prompt_id)
+
+    # Update with new values
+    if temperature is not None:
+        config["temperature"] = max(0.0, min(1.0, temperature))
+    if step2_temperature is not None:
+        config["step2_temperature"] = max(0.0, min(1.0, step2_temperature))
+    if step3_temperature is not None:
+        config["step3_temperature"] = max(0.0, min(1.0, step3_temperature))
+
+    storage.write_text(config_key, json.dumps(config, indent=2))
 
 
 def get_active_prompt_id(prompt_type: PromptType) -> str | None:
@@ -189,6 +244,9 @@ def get_prompt(prompt_type: PromptType, prompt_id: str) -> PromptContent | None:
     content = storage.read_text(prompt_key)
     active_id = get_active_prompt_id(prompt_type)
 
+    # Load temperature config
+    config = _load_prompt_config(prompt_type, prompt_id)
+
     # For dialogue, also get step-2 and step-3 content
     step2_content = None
     step3_content = None
@@ -205,8 +263,11 @@ def get_prompt(prompt_type: PromptType, prompt_id: str) -> PromptContent | None:
         name=_format_prompt_name(prompt_id),
         prompt_type=prompt_type,
         content=content,
+        temperature=config.get("temperature", 0.7),
         step2_content=step2_content,
+        step2_temperature=config.get("step2_temperature", 0.5),
         step3_content=step3_content,
+        step3_temperature=config.get("step3_temperature", 0.6),
         is_active=(prompt_id == active_id)
     )
 
@@ -215,8 +276,11 @@ def create_prompt(
     prompt_type: PromptType,
     prompt_id: str,
     content: str,
+    temperature: float | None = None,
     step2_content: str | None = None,
+    step2_temperature: float | None = None,
     step3_content: str | None = None,
+    step3_temperature: float | None = None,
     set_active: bool = False
 ) -> PromptContent:
     """Create a new prompt."""
@@ -233,6 +297,14 @@ def create_prompt(
 
     # Write main prompt
     storage.write_text(prompt_key, content)
+
+    # Save temperature config
+    _save_prompt_config(
+        prompt_type, prompt_id,
+        temperature=temperature,
+        step2_temperature=step2_temperature,
+        step3_temperature=step3_temperature
+    )
 
     # Write step-2 and step-3 for dialogue
     if prompt_type == "dialogue":
@@ -254,8 +326,11 @@ def update_prompt(
     prompt_type: PromptType,
     prompt_id: str,
     content: str,
+    temperature: float | None = None,
     step2_content: str | None = None,
-    step3_content: str | None = None
+    step2_temperature: float | None = None,
+    step3_content: str | None = None,
+    step3_temperature: float | None = None
 ) -> PromptContent:
     """Update an existing prompt."""
     storage = get_data_storage()
@@ -267,6 +342,14 @@ def update_prompt(
 
     # Write main prompt
     storage.write_text(prompt_key, content)
+
+    # Save temperature config
+    _save_prompt_config(
+        prompt_type, prompt_id,
+        temperature=temperature,
+        step2_temperature=step2_temperature,
+        step3_temperature=step3_temperature
+    )
 
     # Write step-2 and step-3 for dialogue
     if prompt_type == "dialogue":
@@ -341,6 +424,21 @@ def get_active_dialogue_prompts() -> tuple[str | None, str | None, str | None]:
     if prompt:
         return prompt.content, prompt.step2_content, prompt.step3_content
     return None, None, None
+
+
+def get_active_dialogue_temperatures() -> tuple[float, float, float]:
+    """
+    Get the temperature settings for active dialogue prompts.
+    Returns (main_temp, step2_temp, step3_temp).
+    """
+    active_id = get_active_prompt_id("dialogue")
+    if not active_id:
+        return 0.7, 0.5, 0.6  # Defaults
+
+    prompt = get_prompt("dialogue", active_id)
+    if prompt:
+        return prompt.temperature, prompt.step2_temperature, prompt.step3_temperature
+    return 0.7, 0.5, 0.6  # Defaults
 
 
 # Migration helper: migrate old prompts to new structure

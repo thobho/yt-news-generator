@@ -82,7 +82,8 @@ def generate_dialogue(
     news: dict,
     prompt_path: Union[Path, str],
     model: str = "gpt-4o",
-    storage: StorageBackend = None
+    storage: StorageBackend = None,
+    temperature: float = 0.7
 ) -> dict:
     """Generate dialogue by sending news and prompt to ChatGPT.
 
@@ -91,11 +92,12 @@ def generate_dialogue(
         prompt_path: Path to prompt file
         model: OpenAI model to use
         storage: Optional storage backend for reading prompt
+        temperature: Model temperature (0-1)
     """
     system_prompt = load_prompt(prompt_path, storage)
     user_message = build_user_message(news)
     logger.debug("User message for dialogue generation:\n%s", user_message)
-    logger.info("Generating dialogue with model=%s", model)
+    logger.info("Generating dialogue with model=%s, temperature=%.2f", model, temperature)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -105,7 +107,7 @@ def generate_dialogue(
             {"role": "user", "content": user_message},
         ],
         response_format={"type": "json_object"},
-        temperature=0.7,
+        temperature=temperature,
     )
 
     content = response.choices[0].message.content
@@ -142,7 +144,8 @@ def refine_dialogue(
     news: dict,
     prompt_path: Union[Path, str],
     model: str = "gpt-4o",
-    storage: StorageBackend = None
+    storage: StorageBackend = None,
+    temperature: float = 0.5
 ) -> dict:
     """Refine dialogue using a second LLM pass for logic/structure corrections.
 
@@ -152,6 +155,7 @@ def refine_dialogue(
         prompt_path: Path to refinement prompt file
         model: OpenAI model to use
         storage: Optional storage backend for reading prompt
+        temperature: Model temperature (0-1)
     """
     system_prompt = load_prompt(prompt_path, storage)
 
@@ -166,7 +170,7 @@ def refine_dialogue(
 ```
 """
 
-    logger.info("Step 2: Refining dialogue (logic/structure) with model=%s", model)
+    logger.info("Step 2: Refining dialogue (logic/structure) with model=%s, temperature=%.2f", model, temperature)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -176,7 +180,7 @@ def refine_dialogue(
             {"role": "user", "content": user_message},
         ],
         response_format={"type": "json_object"},
-        temperature=0.5,
+        temperature=temperature,
     )
 
     content = response.choices[0].message.content
@@ -198,7 +202,8 @@ def polish_dialogue(
     dialogue: dict,
     prompt_path: Union[Path, str],
     model: str = "gpt-4o",
-    storage: StorageBackend = None
+    storage: StorageBackend = None,
+    temperature: float = 0.6
 ) -> dict:
     """Polish dialogue using a third LLM pass for language and style.
 
@@ -207,6 +212,7 @@ def polish_dialogue(
         prompt_path: Path to polish prompt file
         model: OpenAI model to use
         storage: Optional storage backend for reading prompt
+        temperature: Model temperature (0-1)
     """
     system_prompt = load_prompt(prompt_path, storage)
 
@@ -216,7 +222,7 @@ def polish_dialogue(
 ```
 """
 
-    logger.info("Step 3: Polishing dialogue (language/style) with model=%s", model)
+    logger.info("Step 3: Polishing dialogue (language/style) with model=%s, temperature=%.2f", model, temperature)
     client = OpenAI()
 
     response = client.chat.completions.create(
@@ -226,7 +232,7 @@ def polish_dialogue(
             {"role": "user", "content": user_message},
         ],
         response_format={"type": "json_object"},
-        temperature=0.6,
+        temperature=temperature,
     )
 
     content = response.choices[0].message.content

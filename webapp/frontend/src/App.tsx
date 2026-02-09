@@ -10,6 +10,7 @@ import NewRunPage from './components/NewRunPage'
 import SettingsPage from './components/SettingsPage'
 import AnalyticsPage from './components/AnalyticsPage'
 import SchedulerPage from './pages/SchedulerPage'
+import PromptEditorPage from './pages/PromptEditorPage'
 import Login from './components/Login'
 
 const theme = createTheme({
@@ -53,6 +54,7 @@ function AppContent() {
           <Route path="/new-run" element={<NewRunPage />} />
           <Route path="/runs/:runId" element={<RunDetail />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/prompts/:promptType/:promptId" element={<PromptEditorPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/scheduler" element={<SchedulerPage />} />
         </Routes>

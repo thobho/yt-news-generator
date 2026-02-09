@@ -1,33 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   fetchAllPrompts,
-  fetchPrompt,
-  createPrompt,
-  updatePrompt,
   deletePrompt,
   setActivePrompt,
   PromptTypeInfo,
   PromptType,
 } from '../api/client';
 
-interface EditingPrompt {
-  promptType: PromptType;
-  promptId: string | null; // null for new prompt
-  content: string;
-  step2Content: string;
-  step3Content: string;
-  isNew: boolean;
-  newId: string;
-}
-
 export default function SettingsPage() {
   const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedType, setExpandedType] = useState<PromptType | null>(null);
-  const [editingPrompt, setEditingPrompt] = useState<EditingPrompt | null>(null);
-  const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadPrompts();
@@ -67,77 +53,12 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleEdit(promptType: PromptType, promptId: string) {
-    try {
-      const prompt = await fetchPrompt(promptType, promptId);
-      setEditingPrompt({
-        promptType,
-        promptId,
-        content: prompt.content,
-        step2Content: prompt.step2_content || '',
-        step3Content: prompt.step3_content || '',
-        isNew: false,
-        newId: '',
-      });
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to load prompt');
-    }
+  function handleEdit(promptType: PromptType, promptId: string) {
+    navigate(`/settings/prompts/${promptType}/${promptId}`);
   }
 
   function handleCreate(promptType: PromptType) {
-    setEditingPrompt({
-      promptType,
-      promptId: null,
-      content: '',
-      step2Content: '',
-      step3Content: '',
-      isNew: true,
-      newId: '',
-    });
-  }
-
-  async function handleSave() {
-    if (!editingPrompt) return;
-
-    const { promptType, promptId, content, step2Content, step3Content, isNew, newId } = editingPrompt;
-    const isDialogue = promptType === 'dialogue';
-
-    if (isNew && !newId.trim()) {
-      alert('Please enter a prompt ID');
-      return;
-    }
-
-    if (!content.trim()) {
-      alert('Please enter prompt content');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      if (isNew) {
-        await createPrompt(
-          promptType,
-          newId.trim(),
-          content,
-          isDialogue ? step2Content || undefined : undefined,
-          isDialogue ? step3Content || undefined : undefined
-        );
-      } else if (promptId) {
-        await updatePrompt(
-          promptType,
-          promptId,
-          content,
-          isDialogue ? step2Content || undefined : undefined,
-          isDialogue ? step3Content || undefined : undefined
-        );
-      }
-      setEditingPrompt(null);
-      await loadPrompts();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to save prompt');
-    } finally {
-      setSaving(false);
-    }
+    navigate(`/settings/prompts/${promptType}/new`);
   }
 
   if (loading) {
@@ -253,96 +174,6 @@ export default function SettingsPage() {
           </div>
         ))}
       </div>
-
-      {/* Edit/Create Dialog */}
-      {editingPrompt && (
-        <div className="dialog-overlay" onClick={() => setEditingPrompt(null)}>
-          <div className="dialog prompt-editor-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-header">
-              <h2>
-                {editingPrompt.isNew ? 'Create' : 'Edit'}{' '}
-                {promptTypes.find((t) => t.type === editingPrompt.promptType)?.label || 'Prompt'}
-              </h2>
-              <button className="dialog-close" onClick={() => setEditingPrompt(null)}>
-                &times;
-              </button>
-            </div>
-            <div className="dialog-body">
-              {editingPrompt.isNew && (
-                <div className="form-field">
-                  <label>Prompt ID</label>
-                  <input
-                    type="text"
-                    value={editingPrompt.newId}
-                    onChange={(e) =>
-                      setEditingPrompt({ ...editingPrompt, newId: e.target.value })
-                    }
-                    placeholder="e.g., prompt-8 or custom-name"
-                  />
-                  <span className="form-hint">
-                    Use lowercase letters, numbers, and hyphens only
-                  </span>
-                </div>
-              )}
-
-              <div className="form-field">
-                <label>
-                  {promptTypes.find((t) => t.type === editingPrompt.promptType)?.has_step2
-                    ? 'Main Prompt Content'
-                    : 'Prompt Content'}
-                </label>
-                <textarea
-                  value={editingPrompt.content}
-                  onChange={(e) =>
-                    setEditingPrompt({ ...editingPrompt, content: e.target.value })
-                  }
-                  rows={15}
-                  placeholder="Enter the prompt content in Markdown format..."
-                />
-              </div>
-
-              {editingPrompt.promptType === 'dialogue' && (
-                <>
-                  <div className="form-field">
-                    <label>Step 2 (Logic/Structure Fix) Prompt</label>
-                    <textarea
-                      value={editingPrompt.step2Content}
-                      onChange={(e) =>
-                        setEditingPrompt({ ...editingPrompt, step2Content: e.target.value })
-                      }
-                      rows={10}
-                      placeholder="Enter the logic/structure refinement prompt..."
-                    />
-                    <span className="form-hint">
-                      Fixes logical issues and structure problems (required)
-                    </span>
-                  </div>
-                  <div className="form-field">
-                    <label>Step 3 (Language/Style Polish) Prompt</label>
-                    <textarea
-                      value={editingPrompt.step3Content}
-                      onChange={(e) =>
-                        setEditingPrompt({ ...editingPrompt, step3Content: e.target.value })
-                      }
-                      rows={10}
-                      placeholder="Enter the language/style polish prompt..."
-                    />
-                    <span className="form-hint">
-                      Polishes language and style (optional)
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-            <div className="dialog-footer">
-              <button onClick={() => setEditingPrompt(null)}>Cancel</button>
-              <button className="primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Saving...' : editingPrompt.isNew ? 'Create' : 'Save'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

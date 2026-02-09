@@ -71,6 +71,11 @@ def get_dialogue_prompt_keys() -> tuple[str, str, str | None]:
     return main_key, refine_key, None
 
 
+def get_dialogue_temperatures() -> tuple[float, float, float]:
+    """Get temperature settings for dialogue generation steps."""
+    return prompts_service.get_active_dialogue_temperatures()
+
+
 def get_image_prompt_key() -> str:
     """Get image prompt key based on current active prompt."""
     active_id = prompts_service.get_active_prompt_id("image")
@@ -221,14 +226,16 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     news_content = run_storage.read_text(keys["news_data"])
     news_data = json.loads(news_content)
 
-    # Get prompt keys from settings
+    # Get prompt keys and temperatures from settings
     dialogue_prompt_key, refine_prompt_key, polish_prompt_key = get_dialogue_prompt_keys()
+    temp1, temp2, temp3 = get_dialogue_temperatures()
 
     dialogue_data = gen_dialogue(
         news_data,
         dialogue_prompt_key,
         model,
         storage=data_storage,
+        temperature=temp1,
     )
 
     # Step 3: Refine dialogue (logic/structure)
@@ -238,6 +245,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         refine_prompt_key,
         model,
         storage=data_storage,
+        temperature=temp2,
     )
 
     # Step 4: Polish dialogue (language/style) - optional
@@ -247,6 +255,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
             polish_prompt_key,
             model,
             storage=data_storage,
+            temperature=temp3,
         )
 
     # Save dialogue
