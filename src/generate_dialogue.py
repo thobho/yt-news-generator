@@ -20,6 +20,48 @@ from storage_config import get_data_storage
 
 logger = get_logger(__name__)
 
+# JSON Schema for dialogue output - enforced by OpenAI Structured Outputs
+DIALOGUE_SCHEMA = {
+    "name": "dialogue_output",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "topic_id": {"type": "string"},
+            "script": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "speaker": {"type": "string"},
+                        "text": {"type": "string"},
+                        "emphasis": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        },
+                        "sources": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {"type": "string"},
+                                    "text": {"type": "string"}
+                                },
+                                "required": ["name", "text"],
+                                "additionalProperties": False
+                            }
+                        }
+                    },
+                    "required": ["speaker", "text", "emphasis", "sources"],
+                    "additionalProperties": False
+                }
+            }
+        },
+        "required": ["topic_id", "script"],
+        "additionalProperties": False
+    }
+}
+
 def load_prompt(prompt_path: Union[Path, str], storage: StorageBackend = None) -> str:
     """Load prompt template from markdown file.
 
@@ -106,7 +148,7 @@ def generate_dialogue(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": "json_object"},
+        response_format={"type": "json_schema", "json_schema": DIALOGUE_SCHEMA},
         temperature=temperature,
     )
 
@@ -179,7 +221,7 @@ def refine_dialogue(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": "json_object"},
+        response_format={"type": "json_schema", "json_schema": DIALOGUE_SCHEMA},
         temperature=temperature,
     )
 
@@ -231,7 +273,7 @@ def polish_dialogue(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": "json_object"},
+        response_format={"type": "json_schema", "json_schema": DIALOGUE_SCHEMA},
         temperature=temperature,
     )
 
