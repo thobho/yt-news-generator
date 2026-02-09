@@ -76,6 +76,78 @@ def get_dialogue_temperatures() -> tuple[float, float, float]:
     return prompts_service.get_active_dialogue_temperatures()
 
 
+def save_prompts_snapshot(run_id: str) -> None:
+    """
+    Save a snapshot of all prompts used for this run.
+    Creates prompts_snapshot/ folder with copies of all active prompts.
+    """
+    run_storage = get_run_storage(run_id)
+    data_storage = get_data_storage()
+
+    snapshot = {
+        "timestamp": datetime.now().isoformat(),
+        "prompts": {}
+    }
+
+    # Save dialogue prompts
+    dialogue_id = prompts_service.get_active_prompt_id("dialogue")
+    if dialogue_id:
+        dialogue_prompt = prompts_service.get_prompt("dialogue", dialogue_id)
+        if dialogue_prompt:
+            snapshot["prompts"]["dialogue"] = {
+                "id": dialogue_id,
+                "temperature": dialogue_prompt.temperature,
+                "step2_temperature": dialogue_prompt.step2_temperature,
+                "step3_temperature": dialogue_prompt.step3_temperature,
+            }
+            # Save prompt contents
+            run_storage.write_text("prompts_snapshot/dialogue_step1.md", dialogue_prompt.content)
+            if dialogue_prompt.step2_content:
+                run_storage.write_text("prompts_snapshot/dialogue_step2.md", dialogue_prompt.step2_content)
+            if dialogue_prompt.step3_content:
+                run_storage.write_text("prompts_snapshot/dialogue_step3.md", dialogue_prompt.step3_content)
+
+    # Save image prompt
+    image_id = prompts_service.get_active_prompt_id("image")
+    if image_id:
+        image_prompt = prompts_service.get_prompt("image", image_id)
+        if image_prompt:
+            snapshot["prompts"]["image"] = {
+                "id": image_id,
+                "temperature": image_prompt.temperature,
+            }
+            run_storage.write_text("prompts_snapshot/image.md", image_prompt.content)
+
+    # Save research prompt
+    research_id = prompts_service.get_active_prompt_id("research")
+    if research_id:
+        research_prompt = prompts_service.get_prompt("research", research_id)
+        if research_prompt:
+            snapshot["prompts"]["research"] = {
+                "id": research_id,
+                "temperature": research_prompt.temperature,
+            }
+            run_storage.write_text("prompts_snapshot/research.md", research_prompt.content)
+
+    # Save yt-metadata prompt
+    yt_id = prompts_service.get_active_prompt_id("yt-metadata")
+    if yt_id:
+        yt_prompt = prompts_service.get_prompt("yt-metadata", yt_id)
+        if yt_prompt:
+            snapshot["prompts"]["yt-metadata"] = {
+                "id": yt_id,
+                "temperature": yt_prompt.temperature,
+            }
+            run_storage.write_text("prompts_snapshot/yt_metadata.md", yt_prompt.content)
+
+    # Save snapshot config
+    run_storage.write_text(
+        "prompts_snapshot/config.json",
+        json.dumps(snapshot, ensure_ascii=False, indent=2)
+    )
+    logger.info("Saved prompts snapshot for run: %s", run_id)
+
+
 def get_image_prompt_key() -> str:
     """Get image prompt key based on current active prompt."""
     active_id = prompts_service.get_active_prompt_id("image")
@@ -214,6 +286,9 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     # Find seed file
     if not run_storage.exists(keys["seed"]):
         raise FileNotFoundError(f"No seed file found for run {run_id}")
+
+    # Save snapshot of all prompts used for this run
+    save_prompts_snapshot(run_id)
 
     # Step 1: Perplexity search
     run_perplexity_enrichment(
