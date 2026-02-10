@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to VPS
 
 on:
   push:
@@ -33,9 +33,9 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Write credentials
         run: |
@@ -44,7 +44,7 @@ jobs:
           echo '${{ secrets.YT_CLIENT_SECRETS }}' > /tmp/deploy-credentials/client_secrets.json
           echo '${{ secrets.YT_TOKEN }}' > /tmp/deploy-credentials/token.json
 
-      - name: Sync project files to EC2
+      - name: Sync project files to VPS
         run: |
           rsync -azq --delete \
             --exclude 'node_modules' \
@@ -56,29 +56,29 @@ jobs:
             --exclude 'output' \
             --exclude 'storage' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            ./ ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/
+            ./ deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/
 
-      - name: Copy credentials to EC2
+      - name: Copy credentials to VPS
         run: |
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             /tmp/deploy-credentials/env.production \
-            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/.env
+            deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/.env
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ubuntu@${{ secrets.EC2_HOST }} \
-            "mkdir -p /home/ubuntu/yt-news-generator/credentials"
+            deploy@${{ secrets.HOST }} \
+            "mkdir -p /home/deploy/yt-news-generator/credentials"
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             /tmp/deploy-credentials/client_secrets.json \
             /tmp/deploy-credentials/token.json \
-            ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/yt-news-generator/credentials/
+            deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/
 
       - name: Install dependencies and restart
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ubuntu@${{ secrets.EC2_HOST }} << 'REMOTE_SCRIPT'
+            deploy@${{ secrets.HOST }} << 'REMOTE_SCRIPT'
           set -e
-          cd /home/ubuntu/yt-news-generator
+          cd /home/deploy/yt-news-generator
 
           # Swap setup for low-memory instances
           TOTAL_MEM=$(free -m | awk '/^Mem:/{print $2}')
