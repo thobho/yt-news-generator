@@ -43,30 +43,145 @@ export interface SubtitleVideoProps {
 }
 
 /* =========================
-   EMPHASIZED TEXT RENDERER
+   ANIMATED TEXT RENDERER
+   - Emphasis words: glow when spoken, keep glowing until end
+   - Other words: fade out slowly after spoken
+========================= */
+
+interface AnimatedTextProps {
+  text: string;
+  emphasis?: string[];
+  chunkStartMs: number;
+  chunkEndMs: number;
+  currentTimeMs: number;
+}
+
+const AnimatedText: React.FC<AnimatedTextProps> = ({
+  text,
+  emphasis,
+  chunkStartMs,
+  chunkEndMs,
+  currentTimeMs,
+}) => {
+  const emphasisLower = (emphasis || []).map(w => w.toLowerCase());
+
+  // Split text into words while preserving spaces
+  const parts = text.split(/(\s+)/);
+  const words = parts.filter(p => p.trim());
+  const totalWords = words.length;
+
+  // Calculate timing for each word
+  const chunkDuration = chunkEndMs - chunkStartMs;
+  const wordDuration = totalWords > 0 ? chunkDuration / totalWords : chunkDuration;
+
+  // Track word index (excluding spaces)
+  let wordIndex = 0;
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        const isSpace = !part.trim();
+        if (isSpace) {
+          return <span key={i}>{part}</span>;
+        }
+
+        const currentWordIndex = wordIndex;
+        wordIndex++;
+
+        // Calculate when this word starts and ends
+        const wordStartMs = chunkStartMs + currentWordIndex * wordDuration;
+        const wordEndMs = wordStartMs + wordDuration;
+
+        // How far into speaking this word are we? (0 = not started, 1 = fully spoken)
+        const wordProgress = interpolate(
+          currentTimeMs,
+          [wordStartMs, wordEndMs],
+          [0, 1],
+          { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+        );
+
+        // Time since word finished speaking (for fade effect)
+        const timeSinceSpoken = Math.max(0, currentTimeMs - wordEndMs);
+        const fadeOutDuration = 1500; // 1.5s fade out
+
+        // Check if this word should be emphasized
+        const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
+        const isEmphasized = emphasisLower.some(e =>
+          cleanWord === e.toLowerCase() ||
+          cleanWord.includes(e.toLowerCase())
+        );
+
+        if (isEmphasized) {
+          // Emphasis words: glow when spoken, keep glowing
+          const hasBeenSpoken = wordProgress > 0;
+          const glowIntensity = hasBeenSpoken
+            ? interpolate(wordProgress, [0, 0.5], [0.3, 1], { extrapolateRight: "clamp" })
+            : 0;
+
+          return (
+            <span
+              key={i}
+              style={{
+                color: hasBeenSpoken ? "#FFD700" : "rgba(255, 255, 255, 0.6)",
+                fontWeight: 900,
+                textShadow: hasBeenSpoken
+                  ? `0 0 ${20 + glowIntensity * 15}px rgba(255, 215, 0, ${0.4 + glowIntensity * 0.4})`
+                  : "none",
+                transition: "color 0.15s ease-out",
+              }}
+            >
+              {part}
+            </span>
+          );
+        } else {
+          // Non-emphasis words: fade out after spoken
+          const hasBeenSpoken = currentTimeMs >= wordEndMs;
+          const fadeProgress = hasBeenSpoken
+            ? Math.min(1, timeSinceSpoken / fadeOutDuration)
+            : 0;
+
+          // Opacity: full when speaking, fade to 0.4 after
+          const opacity = hasBeenSpoken
+            ? interpolate(fadeProgress, [0, 1], [1, 0.4])
+            : wordProgress > 0 ? 1 : 0.7;
+
+          return (
+            <span
+              key={i}
+              style={{
+                opacity,
+                transition: "opacity 0.3s ease-out",
+              }}
+            >
+              {part}
+            </span>
+          );
+        }
+      })}
+    </>
+  );
+};
+
+/* =========================
+   STATIC EMPHASIS TEXT (for previous chunk)
 ========================= */
 
 interface EmphasisTextProps {
   text: string;
   emphasis?: string[];
-  isCurrentChunk?: boolean;
 }
 
-const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis, isCurrentChunk }) => {
+const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis }) => {
   if (!emphasis || emphasis.length === 0) {
     return <>{text}</>;
   }
 
-  // Create regex to match emphasis words (case insensitive, word boundaries)
   const emphasisLower = emphasis.map(w => w.toLowerCase());
-
-  // Split text into words while preserving spaces and punctuation
   const parts = text.split(/(\s+)/);
 
   return (
     <>
       {parts.map((part, i) => {
-        // Check if this word (without punctuation) should be emphasized
         const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
         const isEmphasized = emphasisLower.some(e =>
           cleanWord === e.toLowerCase() ||
@@ -80,8 +195,7 @@ const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis, isCurrentCh
               style={{
                 color: "#FFD700",
                 fontWeight: 900,
-                fontSize: isCurrentChunk ? "1.1em" : "1em",
-                textShadow: "0 0 20px rgba(255, 215, 0, 0.5)",
+                textShadow: "0 0 15px rgba(255, 215, 0, 0.4)",
               }}
             >
               {part}
@@ -623,17 +737,20 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
             textAlign: "center",
           }}
         >
-          {/* Previous chunk - no emphasis, plain text */}
+          {/* Previous chunk - faded with emphasis highlights */}
           {previousChunk && (
             <div
               style={{
                 fontSize: 42,
                 fontWeight: 600,
-                color: "rgba(255,255,255,0.55)",
+                color: "rgba(255,255,255,0.45)",
                 lineHeight: 1.25,
               }}
             >
-              {previousChunk.text}
+              <EmphasisText
+                text={previousChunk.text}
+                emphasis={previousChunk.emphasis}
+              />
             </div>
           )}
 
@@ -650,10 +767,12 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
                   "0 10px 40px rgba(0,0,0,0.9)",
               }}
             >
-              <EmphasisText
+              <AnimatedText
                 text={currentChunk.text}
                 emphasis={currentChunk.emphasis}
-                isCurrentChunk={true}
+                chunkStartMs={currentChunk.start_ms}
+                chunkEndMs={currentChunk.end_ms}
+                currentTimeMs={textTimeMs}
               />
             </div>
           )}

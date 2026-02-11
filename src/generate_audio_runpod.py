@@ -28,7 +28,10 @@ from generate_audio import (
     PAUSE_BETWEEN_SEGMENTS_MS,
     chunk_segment,
     extract_segments,
+    distribute_sources,
+    get_source_for_time,
 )
+from align_audio import transcribe_with_timestamps, align_text_to_audio, is_whisper_available
 from logging_config import get_logger
 from storage import StorageBackend
 from storage_config import get_data_storage
@@ -47,6 +50,122 @@ VOICE_REFS = {
 # Target format for merging – must match between segments and silence
 _MERGE_SAMPLE_RATE = 44100
 _FADE_MS = 15  # fade-in/out at segment edges to eliminate TTS edge noise
+
+# Alignment settings
+USE_WHISPER_ALIGNMENT = True  # Set to False to use old word-count method
+MIN_CHUNK_WORDS = 3  # Minimum words per subtitle chunk
+MAX_CHUNK_WORDS = 8  # Maximum words per subtitle chunk
+
+
+def chunk_segment_aligned(
+    aligned_words: list[dict],
+    speaker: str,
+    emphasis: list[str],
+    sources: list,
+    start_ms: int,
+    end_ms: int,
+) -> list[dict]:
+    """
+    Build subtitle chunks from word-aligned timestamps.
+
+    Groups words into readable chunks (3-8 words) while respecting
+    natural break points (punctuation).
+    """
+    import re
+
+    if not aligned_words:
+        return []
+
+    # Distribute sources across the segment duration
+    source_ranges = distribute_sources(sources, start_ms, end_ms)
+
+    chunks = []
+    current_words = []
+    current_start = None
+
+    for word_data in aligned_words:
+        word = word_data["word"]
+        word_start = word_data["start_ms"]
+        word_end = word_data["end_ms"]
+
+        if current_start is None:
+            current_start = word_start
+
+        current_words.append(word)
+
+        # Check if we should break here
+        ends_sentence = word.rstrip()[-1] in ".?!" if word.strip() else False
+        has_comma = "," in word
+        word_count = len(current_words)
+
+        should_break = (
+            word_count >= MAX_CHUNK_WORDS
+            or (word_count >= MIN_CHUNK_WORDS and (ends_sentence or has_comma))
+        )
+
+        if should_break:
+            chunk_text = " ".join(current_words)
+            chunk_end = word_end
+
+            chunk_data = {
+                "speaker": speaker,
+                "text": chunk_text,
+                "start_ms": current_start,
+                "end_ms": chunk_end,
+                "chunk": True,
+            }
+
+            # Add emphasis words that appear in this chunk
+            if emphasis:
+                chunk_lower = chunk_text.lower()
+                chunk_emphasis = []
+                for phrase in emphasis:
+                    phrase_lower = phrase.lower()
+                    if phrase_lower in chunk_lower:
+                        chunk_emphasis.append(phrase)
+                    else:
+                        for emp_word in phrase_lower.split():
+                            if len(emp_word) > 2 and re.search(
+                                rf"\b{re.escape(emp_word)}\b", chunk_lower
+                            ):
+                                chunk_emphasis.append(emp_word)
+                if chunk_emphasis:
+                    chunk_data["emphasis"] = chunk_emphasis
+
+            # Find active source at chunk midpoint
+            chunk_midpoint = current_start + (chunk_end - current_start) // 2
+            active_source = get_source_for_time(source_ranges, chunk_midpoint)
+            if active_source:
+                chunk_data["source"] = active_source
+
+            chunks.append(chunk_data)
+            current_words = []
+            current_start = None
+
+    # Handle remaining words
+    if current_words:
+        chunk_text = " ".join(current_words)
+        chunk_data = {
+            "speaker": speaker,
+            "text": chunk_text,
+            "start_ms": current_start,
+            "end_ms": aligned_words[-1]["end_ms"],
+            "chunk": True,
+        }
+
+        if emphasis:
+            chunk_lower = chunk_text.lower()
+            chunk_emphasis = []
+            for phrase in emphasis:
+                phrase_lower = phrase.lower()
+                if phrase_lower in chunk_lower:
+                    chunk_emphasis.append(phrase)
+            if chunk_emphasis:
+                chunk_data["emphasis"] = chunk_emphasis
+
+        chunks.append(chunk_data)
+
+    return chunks
 
 
 def _normalize_and_merge(wav_files: list[Path], output: Path, pause_ms: int):
@@ -166,6 +285,7 @@ def generate_audio(
         tmp = Path(tmp)
         audio_files = []
         durations = []
+        alignments = []  # Word-level alignments per segment
 
         for i, (speaker, text, _emphasis, _source) in enumerate(segments):
             out = tmp / f"seg_{i:03}.wav"
@@ -181,6 +301,19 @@ def generate_audio(
             out.write_bytes(result["audio"])
             audio_files.append(out)
             durations.append(result["duration_ms"])
+
+            # Run Whisper alignment on this segment
+            if USE_WHISPER_ALIGNMENT and timeline is not None and is_whisper_available():
+                try:
+                    whisper_words = transcribe_with_timestamps(out, language="pl")
+                    aligned = align_text_to_audio(text, whisper_words, start_offset_ms=0)
+                    alignments.append(aligned)
+                    logger.debug("Aligned %d words for segment %d", len(aligned), i + 1)
+                except Exception as e:
+                    logger.warning("Whisper alignment failed for segment %d: %s", i + 1, e)
+                    alignments.append(None)
+            else:
+                alignments.append(None)
 
         logger.info("Merging %d audio segments", len(audio_files))
 
@@ -203,19 +336,36 @@ def generate_audio(
 
         output_name = Path(output).name if isinstance(output, (str, Path)) else output
 
-        for i, ((speaker, text, emphasis, sources), dur) in enumerate(
-            zip(segments, durations)
+        for i, ((speaker, text, emphasis, sources), dur, aligned) in enumerate(
+            zip(segments, durations, alignments)
         ):
-            base = {
-                "speaker": speaker,
-                "text": text,
-                "start_ms": t,
-                "end_ms": t + dur,
-                "emphasis": emphasis,
-                "sources": sources,
-            }
+            if aligned and USE_WHISPER_ALIGNMENT:
+                # Use Whisper-aligned timestamps (offset by current position)
+                aligned_offset = [
+                    {
+                        "word": w["word"],
+                        "start_ms": w["start_ms"] + t,
+                        "end_ms": w["end_ms"] + t,
+                    }
+                    for w in aligned
+                ]
+                chunks = chunk_segment_aligned(
+                    aligned_offset, speaker, emphasis, sources, t, t + dur
+                )
+                timeline_segments.extend(chunks)
+                logger.debug("Used Whisper alignment for segment %d (%d chunks)", i + 1, len(chunks))
+            else:
+                # Fall back to word-count proportional distribution
+                base = {
+                    "speaker": speaker,
+                    "text": text,
+                    "start_ms": t,
+                    "end_ms": t + dur,
+                    "emphasis": emphasis,
+                    "sources": sources,
+                }
+                timeline_segments.extend(chunk_segment(base))
 
-            timeline_segments.extend(chunk_segment(base))
             t += dur
 
             if i < len(segments) - 1:
