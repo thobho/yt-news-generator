@@ -21,6 +21,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Union
 
@@ -55,6 +56,10 @@ _FADE_MS = 15  # fade-in/out at segment edges to eliminate TTS edge noise
 USE_WHISPER_ALIGNMENT = True  # Set to False to use old word-count method
 MIN_CHUNK_WORDS = 3  # Minimum words per subtitle chunk
 MAX_CHUNK_WORDS = 8  # Maximum words per subtitle chunk
+
+# Parallelization settings
+TTS_MAX_WORKERS = 5  # Max parallel TTS requests
+FFMPEG_MAX_WORKERS = 4  # Max parallel FFmpeg processes
 
 
 def chunk_segment_aligned(
@@ -168,37 +173,55 @@ def chunk_segment_aligned(
     return chunks
 
 
+def _normalize_single_wav(args: tuple) -> Path:
+    """Normalize a single WAV file (for parallel processing).
+
+    Args:
+        args: Tuple of (wav_path, output_path, sample_rate, fade_sec)
+
+    Returns:
+        Path to normalized file
+    """
+    wav_path, output_path, sample_rate, fade_sec = args
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", str(wav_path),
+            "-ar", str(sample_rate), "-ac", "1",
+            "-af", (
+                f"afade=t=in:d={fade_sec},"
+                f"areverse,afade=t=in:d={fade_sec},areverse"
+            ),
+            str(output_path),
+        ],
+        capture_output=True,
+        check=True,
+    )
+    return output_path
+
+
 def _normalize_and_merge(wav_files: list[Path], output: Path, pause_ms: int):
     """Merge WAV segments into MP3 with silence gaps.
 
-    Unlike the shared merge_audio(), this function first normalizes every
-    segment to a common sample rate / channel layout and applies short
-    fade-in / fade-out to each segment.  This prevents the "bzzzt" artifact
-    caused by concatenating files with mismatched formats via the ffmpeg
-    concat demuxer.
+    Uses parallel processing for normalization to speed up the process.
     """
     temp = wav_files[0].parent
     fade_sec = _FADE_MS / 1000
 
-    # 1. Normalize each WAV: resample, mono, 16-bit PCM, fade edges
-    #    Fade-out trick: reverse → fade-in → reverse (no need to know duration)
-    normalized: list[Path] = []
-    for i, wav in enumerate(wav_files):
-        norm = temp / f"norm_{i:03}.wav"
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-i", str(wav),
-                "-ar", str(_MERGE_SAMPLE_RATE), "-ac", "1",
-                "-af", (
-                    f"afade=t=in:d={fade_sec},"
-                    f"areverse,afade=t=in:d={fade_sec},areverse"
-                ),
-                str(norm),
-            ],
-            capture_output=True,
-            check=True,
-        )
-        normalized.append(norm)
+    # 1. Normalize each WAV in parallel: resample, mono, 16-bit PCM, fade edges
+    normalize_args = [
+        (wav, temp / f"norm_{i:03}.wav", _MERGE_SAMPLE_RATE, fade_sec)
+        for i, wav in enumerate(wav_files)
+    ]
+
+    normalized: list[Path] = [None] * len(wav_files)
+    with ProcessPoolExecutor(max_workers=FFMPEG_MAX_WORKERS) as executor:
+        future_to_idx = {
+            executor.submit(_normalize_single_wav, args): i
+            for i, args in enumerate(normalize_args)
+        }
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            normalized[idx] = future.result()
 
     # 2. Generate silence in the exact same WAV format
     silence = temp / "silence.wav"
@@ -283,37 +306,58 @@ def generate_audio(
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        audio_files = []
-        durations = []
-        alignments = []  # Word-level alignments per segment
+        n_segments = len(segments)
 
-        for i, (speaker, text, _emphasis, _source) in enumerate(segments):
-            out = tmp / f"seg_{i:03}.wav"
-            logger.debug(
-                "Generating segment %d/%d (%s): %s...",
-                i + 1, len(segments), speaker, text[:50],
-            )
+        # Parallel TTS generation
+        logger.info("Generating %d audio segments in parallel (max %d workers)", n_segments, TTS_MAX_WORKERS)
+
+        def generate_segment(args):
+            """Generate a single TTS segment."""
+            idx, speaker, text, voice_ref = args
+            out_path = tmp / f"seg_{idx:03}.wav"
             result = client.generate_with_metadata(
                 text=text,
-                voice_ref_path=voice_map[speaker],
+                voice_ref_path=voice_ref,
                 storage=data_storage,
             )
-            out.write_bytes(result["audio"])
-            audio_files.append(out)
-            durations.append(result["duration_ms"])
+            out_path.write_bytes(result["audio"])
+            return idx, out_path, result["duration_ms"], text
 
-            # Run Whisper alignment on this segment
-            if USE_WHISPER_ALIGNMENT and timeline is not None and is_whisper_available():
+        # Prepare arguments for parallel execution
+        tts_args = [
+            (i, speaker, text, voice_map[speaker])
+            for i, (speaker, text, _, _) in enumerate(segments)
+        ]
+
+        # Run TTS in parallel
+        audio_files = [None] * n_segments
+        durations = [None] * n_segments
+        segment_texts = [None] * n_segments
+
+        with ThreadPoolExecutor(max_workers=TTS_MAX_WORKERS) as executor:
+            futures = [executor.submit(generate_segment, args) for args in tts_args]
+            for future in as_completed(futures):
+                idx, out_path, duration_ms, text = future.result()
+                audio_files[idx] = out_path
+                durations[idx] = duration_ms
+                segment_texts[idx] = text
+                logger.debug("Generated segment %d/%d (%.1fs)", idx + 1, n_segments, duration_ms / 1000)
+
+        # Run Whisper alignment (can also be parallelized but API cost is per-minute)
+        alignments = []
+        if USE_WHISPER_ALIGNMENT and timeline is not None and is_whisper_available():
+            logger.info("Running Whisper alignment on %d segments", n_segments)
+            for i, (audio_file, text) in enumerate(zip(audio_files, segment_texts)):
                 try:
-                    whisper_words = transcribe_with_timestamps(out, language="pl")
+                    whisper_words = transcribe_with_timestamps(audio_file, language="pl")
                     aligned = align_text_to_audio(text, whisper_words, start_offset_ms=0)
                     alignments.append(aligned)
                     logger.debug("Aligned %d words for segment %d", len(aligned), i + 1)
                 except Exception as e:
                     logger.warning("Whisper alignment failed for segment %d: %s", i + 1, e)
                     alignments.append(None)
-            else:
-                alignments.append(None)
+        else:
+            alignments = [None] * n_segments
 
         logger.info("Merging %d audio segments", len(audio_files))
 

@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Union
 
@@ -28,6 +29,9 @@ DEFAULT_EPISODE_NUMBER = 6  # Starting episode number for DYSKUSJA counter
 
 # Node.js heap size in MB - needed for Remotion on low-memory instances
 NODE_HEAP_SIZE_MB = 2048
+
+# Parallelization settings
+IMAGE_DOWNLOAD_WORKERS = 5  # Max parallel image downloads from S3
 
 
 def _get_node_env() -> dict:
@@ -95,13 +99,22 @@ def prepare_public_dir(
         images_public.mkdir(parents=True, exist_ok=True)
 
         if storage is not None:
-            # List and download images from storage
+            # List and download images from storage in parallel
             images_prefix = str(images_dir)
             image_keys = [k for k in storage.list_keys(images_prefix) if k.endswith(".png")]
-            for key in image_keys:
+
+            def download_image(key: str) -> None:
+                """Download a single image from storage."""
                 img_name = Path(key).name
                 with storage.get_local_path(key) as local_img:
                     shutil.copy(local_img, images_public / img_name)
+
+            if image_keys:
+                logger.debug("Downloading %d images in parallel", len(image_keys))
+                with ThreadPoolExecutor(max_workers=IMAGE_DOWNLOAD_WORKERS) as executor:
+                    futures = [executor.submit(download_image, key) for key in image_keys]
+                    for future in as_completed(futures):
+                        future.result()  # Raise any exceptions
 
             # Load images.json
             images_json_key = f"{images_prefix}/images.json"

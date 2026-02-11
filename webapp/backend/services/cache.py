@@ -26,10 +26,12 @@ class RunsCache:
     - "run:{run_id}" - individual run details
     """
 
-    def __init__(self, default_ttl: float = 300.0):  # 5 minutes default
+    def __init__(self, default_ttl: float = 900.0):  # 15 minutes default (was 5)
         self._cache: dict[str, CacheEntry] = {}
         self._lock = threading.Lock()
         self._default_ttl = default_ttl
+        # Separate TTL for runs list (can be longer since it's expensive to compute)
+        self._runs_list_ttl = 1800.0  # 30 minutes for runs list
 
     def get(self, key: str) -> Optional[Any]:
         """Get a value from cache, returns None if expired or missing."""
@@ -43,8 +45,12 @@ class RunsCache:
             return entry.value
 
     def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:
-        """Set a value in cache with TTL."""
-        ttl = ttl if ttl is not None else self._default_ttl
+        """Set a value in cache with TTL.
+
+        Uses longer TTL for runs_list since it's expensive to compute.
+        """
+        if ttl is None:
+            ttl = self._runs_list_ttl if key == "runs_list" else self._default_ttl
         with self._lock:
             self._cache[key] = CacheEntry(
                 value=value,
