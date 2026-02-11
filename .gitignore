@@ -53,3 +53,4 @@ data/voices/
 # Credentials (API keys, SSH keys, tokens)
 credentials/
 *.pem
+scripts/vps-server.sh

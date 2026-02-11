@@ -311,3 +311,5 @@ The OAuth2 refresh token has expired. This happens every **7 days** if the Googl
 3. https://elevenlabs.io/app/developers/usage
 4. https://platform.openai.com/usage
 5. https://claude.ai/settings/billing
+6. https://accounts.hetzner.com/invoice
+7. https://us-east-1.console.aws.amazon.com/costmanagement/home?region=us-east-1#/home
