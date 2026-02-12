@@ -44,8 +44,8 @@ export interface SubtitleVideoProps {
 
 /* =========================
    ANIMATED TEXT RENDERER
-   - Emphasis words: glow when spoken, keep glowing until end
-   - Other words: fade out slowly after spoken
+   - Emphasis words: glow intensely when spoken, stay visible and pulsing
+   - Other words: fade out with scale + blur animation
 ========================= */
 
 interface AnimatedTextProps {
@@ -102,7 +102,7 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
 
         // Time since word finished speaking (for fade effect)
         const timeSinceSpoken = Math.max(0, currentTimeMs - wordEndMs);
-        const fadeOutDuration = 1500; // 1.5s fade out
+        const fadeOutDuration = 800; // Faster fade for snappier effect
 
         // Check if this word should be emphasized
         const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
@@ -112,97 +112,77 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
         );
 
         if (isEmphasized) {
-          // Emphasis words: glow when spoken, keep glowing
+          // Emphasis words: dramatic glow, scale up slightly, stay visible
           const hasBeenSpoken = wordProgress > 0;
           const glowIntensity = hasBeenSpoken
-            ? interpolate(wordProgress, [0, 0.5], [0.3, 1], { extrapolateRight: "clamp" })
+            ? interpolate(wordProgress, [0, 0.3], [0, 1], { extrapolateRight: "clamp" })
             : 0;
+
+          // Scale pop effect when word is spoken
+          const scale = hasBeenSpoken
+            ? interpolate(wordProgress, [0, 0.2, 0.5], [1, 1.15, 1.05], { extrapolateRight: "clamp" })
+            : 1;
 
           return (
             <span
               key={i}
               style={{
-                color: hasBeenSpoken ? "#FFD700" : "rgba(255, 255, 255, 0.6)",
+                display: "inline-block",
+                color: hasBeenSpoken ? "#FFD700" : "rgba(255, 255, 255, 0.5)",
                 fontWeight: 900,
+                transform: `scale(${scale})`,
                 textShadow: hasBeenSpoken
-                  ? `0 0 ${20 + glowIntensity * 15}px rgba(255, 215, 0, ${0.4 + glowIntensity * 0.4})`
+                  ? `0 0 ${25 + glowIntensity * 20}px rgba(255, 215, 0, ${0.6 + glowIntensity * 0.4}), 0 0 ${10 + glowIntensity * 10}px rgba(255, 215, 0, 0.8)`
                   : "none",
-                transition: "color 0.15s ease-out",
               }}
             >
               {part}
             </span>
           );
         } else {
-          // Non-emphasis words: fade out after spoken
+          // Non-emphasis words: fade out with scale shrink + blur
           const hasBeenSpoken = currentTimeMs >= wordEndMs;
           const fadeProgress = hasBeenSpoken
             ? Math.min(1, timeSinceSpoken / fadeOutDuration)
             : 0;
 
-          // Opacity: full when speaking, fade to 0.4 after
+          // Ease-out curve for smoother animation
+          const easedFade = 1 - Math.pow(1 - fadeProgress, 2);
+
+          // Opacity: bright when speaking, fade to near-invisible
           const opacity = hasBeenSpoken
-            ? interpolate(fadeProgress, [0, 1], [1, 0.4])
-            : wordProgress > 0 ? 1 : 0.7;
+            ? interpolate(easedFade, [0, 1], [1, 0.15])
+            : wordProgress > 0 ? 1 : 0.6;
+
+          // Scale: shrink as it fades
+          const scale = hasBeenSpoken
+            ? interpolate(easedFade, [0, 1], [1, 0.85])
+            : wordProgress > 0 ? 1 : 0.95;
+
+          // Blur as it fades
+          const blur = hasBeenSpoken
+            ? interpolate(easedFade, [0, 1], [0, 3])
+            : 0;
+
+          // Slight downward drift
+          const translateY = hasBeenSpoken
+            ? interpolate(easedFade, [0, 1], [0, 4])
+            : 0;
 
           return (
             <span
               key={i}
               style={{
+                display: "inline-block",
                 opacity,
-                transition: "opacity 0.3s ease-out",
+                transform: `scale(${scale}) translateY(${translateY}px)`,
+                filter: blur > 0 ? `blur(${blur}px)` : "none",
               }}
             >
               {part}
             </span>
           );
         }
-      })}
-    </>
-  );
-};
-
-/* =========================
-   STATIC EMPHASIS TEXT (for previous chunk)
-========================= */
-
-interface EmphasisTextProps {
-  text: string;
-  emphasis?: string[];
-}
-
-const EmphasisText: React.FC<EmphasisTextProps> = ({ text, emphasis }) => {
-  if (!emphasis || emphasis.length === 0) {
-    return <>{text}</>;
-  }
-
-  const emphasisLower = emphasis.map(w => w.toLowerCase());
-  const parts = text.split(/(\s+)/);
-
-  return (
-    <>
-      {parts.map((part, i) => {
-        const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
-        const isEmphasized = emphasisLower.some(e =>
-          cleanWord === e.toLowerCase() ||
-          cleanWord.includes(e.toLowerCase())
-        );
-
-        if (isEmphasized && part.trim()) {
-          return (
-            <span
-              key={i}
-              style={{
-                color: "#FFD700",
-                fontWeight: 900,
-                textShadow: "0 0 15px rgba(255, 215, 0, 0.4)",
-              }}
-            >
-              {part}
-            </span>
-          );
-        }
-        return <span key={i}>{part}</span>;
       })}
     </>
   );
@@ -419,7 +399,7 @@ const HeaderWatermark: React.FC<HeaderWatermarkProps> = ({ episodeNumber }) => {
           letterSpacing: "0.08em",
         }}
       >
-        DYSKUSJA #{displayNumber}
+        #{displayNumber}
       </div>
 
       {/* Logo - upper right */}
@@ -502,11 +482,6 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   const currentChunk =
     currentChunkIndex >= 0
       ? chunkSegments[currentChunkIndex]
-      : null;
-
-  const previousChunk =
-    currentChunkIndex > 0
-      ? chunkSegments[currentChunkIndex - 1]
       : null;
 
   const fadeIn = (startMs: number) =>
@@ -737,23 +712,6 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
             textAlign: "center",
           }}
         >
-          {/* Previous chunk - faded with emphasis highlights */}
-          {previousChunk && (
-            <div
-              style={{
-                fontSize: 42,
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.45)",
-                lineHeight: 1.25,
-              }}
-            >
-              <EmphasisText
-                text={previousChunk.text}
-                emphasis={previousChunk.emphasis}
-              />
-            </div>
-          )}
-
           {/* Current chunk */}
           {currentChunk && (
             <div
