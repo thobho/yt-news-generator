@@ -1,11 +1,13 @@
 import { Config } from "@remotion/cli/config";
+import os from "os";
 
 // Image format for frames
 Config.setVideoImageFormat("jpeg");
 Config.setOverwriteOutput(true);
 
-// Parallel rendering - process multiple frames concurrently
-Config.setConcurrency(8);
+// Parallel rendering - use all available cores (adapts to machine)
+const cpuCount = os.cpus().length;
+Config.setConcurrency(Math.max(1, cpuCount));
 
 // Video codec settings optimized for YouTube
 Config.setCodec("h264");
