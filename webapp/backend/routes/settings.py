@@ -2,14 +2,20 @@
 Settings routes - API endpoints for global settings.
 """
 
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ..services import settings as settings_service
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+
+# YouTube token path (relative to project root)
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+YT_TOKEN_PATH = PROJECT_ROOT / "credentials" / "token.json"
 
 
 class SettingsResponse(BaseModel):
@@ -137,3 +143,14 @@ async def get_available_settings():
         image_engines=[ImageEngineInfo(**e) for e in image_engines],
         fal_models=[FalModelInfo(**m) for m in fal_models],
     )
+
+
+@router.get("/youtube-token")
+async def get_youtube_token():
+    """Get YouTube OAuth token for updating GitHub secrets."""
+    if not YT_TOKEN_PATH.exists():
+        raise HTTPException(status_code=404, detail="YouTube token not found")
+
+    import json
+    token_data = json.loads(YT_TOKEN_PATH.read_text())
+    return JSONResponse(content=token_data)

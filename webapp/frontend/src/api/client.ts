@@ -254,9 +254,9 @@ export async function generateVideo(runId: string): Promise<{ task_id: string }>
   return response.json();
 }
 
-export type ScheduleOption = '8:00' | '18:00' | '1hour' | 'auto';
+export type ScheduleOption = 'now' | 'evening';
 
-export async function uploadToYoutube(runId: string, scheduleOption: ScheduleOption = 'auto'): Promise<{ task_id: string }> {
+export async function uploadToYoutube(runId: string, scheduleOption: ScheduleOption = 'evening'): Promise<{ task_id: string }> {
   const response = await fetch(`${API_BASE}/workflow/${runId}/upload-youtube`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -395,6 +395,14 @@ export async function fetchAvailableSettings(): Promise<AvailableSettings> {
   const response = await fetch(`${API_BASE}/settings/available`);
   if (!response.ok) {
     throw new Error('Failed to fetch available settings');
+  }
+  return response.json();
+}
+
+export async function fetchYouTubeToken(): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE}/settings/youtube-token`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch YouTube token');
   }
   return response.json();
 }

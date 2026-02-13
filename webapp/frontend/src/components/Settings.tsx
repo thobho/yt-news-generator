@@ -3,6 +3,7 @@ import {
   fetchSettings,
   fetchAvailableSettings,
   updateSettings,
+  fetchYouTubeToken,
   Settings as SettingsType,
   AvailableSettings,
 } from '../api/client'
@@ -177,6 +178,32 @@ export default function Settings({ onClose }: SettingsProps) {
             </select>
           </div>
         )}
+      </div>
+
+      <div className="settings-section">
+        <label className="settings-label">YouTube Token</label>
+        <div className="settings-description">
+          Download token.json for updating GitHub secrets
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const token = await fetchYouTubeToken()
+              const blob = new Blob([JSON.stringify(token)], { type: 'application/json' })
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = 'token.json'
+              a.click()
+              URL.revokeObjectURL(url)
+            } catch (err) {
+              alert(err instanceof Error ? err.message : 'Failed to download token')
+            }
+          }}
+          style={{ marginTop: '8px' }}
+        >
+          Download token.json
+        </button>
       </div>
     </div>
   )
