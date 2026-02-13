@@ -32,7 +32,7 @@ export default function WorkflowActions({
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [currentTask, setCurrentTask] = useState<string | null>(null)
-  const [scheduleOption, setScheduleOption] = useState<ScheduleOption>('8:00')
+  const [scheduleOption, setScheduleOption] = useState<ScheduleOption>('evening')
 
   // Poll for running tasks (to show progress even after page refresh)
   useEffect(() => {
@@ -221,27 +221,19 @@ export default function WorkflowActions({
               <div className="schedule-buttons">
                 <button
                   type="button"
-                  className={`schedule-btn ${scheduleOption === '8:00' ? 'active' : ''}`}
-                  onClick={() => setScheduleOption('8:00')}
+                  className={`schedule-btn ${scheduleOption === 'now' ? 'active' : ''}`}
+                  onClick={() => setScheduleOption('now')}
                   disabled={isRunning}
                 >
-                  8:00
+                  Now
                 </button>
                 <button
                   type="button"
-                  className={`schedule-btn ${scheduleOption === '18:00' ? 'active' : ''}`}
-                  onClick={() => setScheduleOption('18:00')}
+                  className={`schedule-btn ${scheduleOption === 'evening' ? 'active' : ''}`}
+                  onClick={() => setScheduleOption('evening')}
                   disabled={isRunning}
                 >
-                  18:00
-                </button>
-                <button
-                  type="button"
-                  className={`schedule-btn ${scheduleOption === '1hour' ? 'active' : ''}`}
-                  onClick={() => setScheduleOption('1hour')}
-                  disabled={isRunning}
-                >
-                  +1h
+                  18-20h
                 </button>
               </div>
             </div>
