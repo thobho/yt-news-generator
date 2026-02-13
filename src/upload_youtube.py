@@ -49,53 +49,36 @@ SCOPES = [
 PLAYLIST_TITLE = "Daily News"
 
 
-def get_scheduled_publish_time(schedule_option: str = "auto") -> str:
+def get_scheduled_publish_time(schedule_option: str = "evening") -> str | None:
     """
     Calculate publish time in Europe/Warsaw timezone based on schedule option.
 
     Args:
         schedule_option: One of:
-            - "8:00" - Schedule for 8:00 Warsaw time (today or tomorrow)
-            - "18:00" - Schedule for 18:00 Warsaw time (today or tomorrow)
-            - "1hour" - Publish in 1 hour, rounded to nearest 15 minutes
-            - "auto" - Legacy behavior (next 8:00 or 16:00)
+            - "now" - Publish immediately (returns None, video will be public)
+            - "evening" - Random time between 18:00-20:00 today, or next day if after 19:00
 
-    Returns ISO 8601 string in UTC for the YouTube API.
+    Returns ISO 8601 string in UTC for the YouTube API, or None for immediate publish.
     """
+    import random
     from datetime import timezone
+
+    if schedule_option == "now":
+        return None
+
+    # "evening" - random time between 18:00 and 20:00
     now = datetime.now(WARSAW_TZ)
 
-    if schedule_option == "8:00":
-        # Schedule for 8:00 today, or tomorrow if already past 8:00
-        publish_local = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        if now.hour >= 8:
-            publish_local = publish_local + timedelta(days=1)
+    # Random minutes within 18:00-20:00 range (0-120 minutes from 18:00)
+    random_minutes = random.randint(0, 120)
 
-    elif schedule_option == "18:00":
-        # Schedule for 18:00 today, or tomorrow if already past 18:00
-        publish_local = now.replace(hour=18, minute=0, second=0, microsecond=0)
-        if now.hour >= 18:
-            publish_local = publish_local + timedelta(days=1)
+    # Start with 18:00 today
+    publish_local = now.replace(hour=18, minute=0, second=0, microsecond=0)
+    publish_local = publish_local + timedelta(minutes=random_minutes)
 
-    elif schedule_option == "1hour":
-        # Publish in 1 hour, rounded to nearest 15 minutes
-        publish_local = now + timedelta(hours=1)
-        # Round to nearest 15 minutes
-        minutes = publish_local.minute
-        rounded_minutes = ((minutes + 7) // 15) * 15
-        if rounded_minutes == 60:
-            publish_local = publish_local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
-        else:
-            publish_local = publish_local.replace(minute=rounded_minutes, second=0, microsecond=0)
-
-    else:  # "auto" - legacy behavior
-        if now.hour < 8:
-            publish_local = now.replace(hour=8, minute=0, second=0, microsecond=0)
-        elif now.hour < 16:
-            publish_local = now.replace(hour=16, minute=0, second=0, microsecond=0)
-        else:
-            tomorrow = now + timedelta(days=1)
-            publish_local = tomorrow.replace(hour=8, minute=0, second=0, microsecond=0)
+    # If it's already past 19:00, schedule for tomorrow
+    if now.hour >= 19:
+        publish_local = publish_local + timedelta(days=1)
 
     # Convert to UTC ISO 8601 format required by YouTube API
     publish_utc = publish_local.astimezone(timezone.utc)
@@ -209,8 +192,24 @@ def add_to_playlist(youtube, playlist_id: str, video_id: str):
     ).execute()
 
 
-def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> str:
-    """Upload video to YouTube as private with scheduled publish time. Returns video ID."""
+def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str | None) -> str:
+    """Upload video to YouTube. Returns video ID.
+
+    If publish_at is None, video is published immediately as public.
+    Otherwise, video is private and scheduled to publish at the given time.
+    """
+    status = {
+        "selfDeclaredMadeForKids": False,
+    }
+
+    if publish_at is None:
+        # Publish immediately as public
+        status["privacyStatus"] = "public"
+    else:
+        # Schedule for later
+        status["privacyStatus"] = "private"
+        status["publishAt"] = publish_at
+
     body = {
         "snippet": {
             "title": metadata["title"],
@@ -218,11 +217,7 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str) -> 
             "tags": metadata["tags"],
             "categoryId": "25",  # News & Politics
         },
-        "status": {
-            "privacyStatus": "private",
-            "publishAt": publish_at,
-            "selfDeclaredMadeForKids": False,
-        },
+        "status": status,
     }
 
     media = MediaFileUpload(
@@ -257,7 +252,7 @@ def upload_to_youtube(
     metadata_path: Union[Path, str],
     storage: StorageBackend = None,
     schedule_option: str = "auto"
-) -> tuple[str, str]:
+) -> tuple[str, str | None]:
     """
     Full upload pipeline: authenticate, parse metadata, upload, add to playlist.
 
@@ -265,10 +260,10 @@ def upload_to_youtube(
         video_path: Path/key to the video file (.mp4)
         metadata_path: Path/key to yt_metadata.md
         storage: Optional storage backend. If provided, downloads files from storage.
-        schedule_option: One of "8:00", "18:00", "1hour", or "auto"
+        schedule_option: One of "now" (publish immediately) or "evening" (random 18:00-20:00)
 
     Returns:
-        Tuple of (video_id, publish_at)
+        Tuple of (video_id, publish_at). publish_at is None if published immediately.
     """
     # Validate files exist
     if storage is not None:
@@ -291,7 +286,10 @@ def upload_to_youtube(
 
     logger.info("Title: %s", metadata['title'])
     logger.info("Tags: %s", ', '.join(metadata['tags']))
-    logger.info("Scheduled publish: %s", publish_at)
+    if publish_at:
+        logger.info("Scheduled publish: %s", publish_at)
+    else:
+        logger.info("Publishing immediately")
 
     creds = authenticate()
     youtube = build("youtube", "v3", credentials=creds)
@@ -308,7 +306,10 @@ def upload_to_youtube(
     add_to_playlist(youtube, playlist_id, video_id)
     logger.info("Added to playlist '%s'", PLAYLIST_TITLE)
 
-    logger.info("Video scheduled for %s: https://youtu.be/%s", publish_at, video_id)
+    if publish_at:
+        logger.info("Video scheduled for %s: https://youtu.be/%s", publish_at, video_id)
+    else:
+        logger.info("Video published: https://youtu.be/%s", video_id)
 
     return video_id, publish_at
 

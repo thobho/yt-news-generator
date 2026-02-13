@@ -36,7 +36,7 @@ class SchedulerConfig(BaseModel):
     """Scheduler configuration stored in settings."""
     enabled: bool = False
     generation_time: str = "10:00"  # HH:MM format, Warsaw timezone
-    publish_time: str = "18:00"  # Schedule option for YouTube
+    publish_time: str = "evening"  # Schedule option: "now" or "evening" (18-20h)
     poland_count: int = 5  # Top N Poland news to consider
     world_count: int = 3  # Top N World news to consider
     videos_count: int = 2  # Number of videos to generate
