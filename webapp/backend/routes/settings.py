@@ -2,11 +2,13 @@
 Settings routes - API endpoints for global settings.
 """
 
+import json
+import secrets
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from ..services import settings as settings_service
@@ -16,6 +18,16 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 # YouTube token path (relative to project root)
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 YT_TOKEN_PATH = PROJECT_ROOT / "credentials" / "token.json"
+YT_CLIENT_SECRETS_PATH = PROJECT_ROOT / "credentials" / "client_secrets.json"
+
+# OAuth state storage (in-memory, simple approach)
+_oauth_states: dict[str, bool] = {}
+
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
+]
 
 
 class SettingsResponse(BaseModel):
@@ -151,6 +163,81 @@ async def get_youtube_token():
     if not YT_TOKEN_PATH.exists():
         raise HTTPException(status_code=404, detail="YouTube token not found")
 
-    import json
     token_data = json.loads(YT_TOKEN_PATH.read_text())
     return JSONResponse(content=token_data)
+
+
+@router.post("/youtube-token/refresh")
+async def start_youtube_oauth(request: Request):
+    """Start YouTube OAuth flow. Returns authorization URL."""
+    if not YT_CLIENT_SECRETS_PATH.exists():
+        raise HTTPException(status_code=404, detail="Client secrets not found")
+
+    from google_auth_oauthlib.flow import Flow
+
+    # Determine redirect URI based on request
+    host = request.headers.get("host", "localhost:8000")
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    redirect_uri = f"{scheme}://{host}/api/settings/youtube-token/callback"
+
+    # Create flow
+    flow = Flow.from_client_secrets_file(
+        str(YT_CLIENT_SECRETS_PATH),
+        scopes=SCOPES,
+        redirect_uri=redirect_uri,
+    )
+
+    # Generate state token
+    state = secrets.token_urlsafe(32)
+    _oauth_states[state] = True
+
+    auth_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=state,
+    )
+
+    return {"auth_url": auth_url}
+
+
+@router.get("/youtube-token/callback")
+async def youtube_oauth_callback(code: str, state: str):
+    """Handle OAuth callback from Google."""
+    # Verify state
+    if state not in _oauth_states:
+        raise HTTPException(status_code=400, detail="Invalid state")
+    del _oauth_states[state]
+
+    if not YT_CLIENT_SECRETS_PATH.exists():
+        raise HTTPException(status_code=404, detail="Client secrets not found")
+
+    from google_auth_oauthlib.flow import Flow
+
+    # We need to reconstruct the flow - use a placeholder redirect_uri
+    # The actual redirect already happened, we just need to exchange the code
+    client_config = json.loads(YT_CLIENT_SECRETS_PATH.read_text())
+
+    # Get redirect_uri from client config
+    if "web" in client_config:
+        redirect_uri = client_config["web"].get("redirect_uris", [""])[0]
+    else:
+        # For installed app type, we need to use a custom redirect
+        redirect_uri = "http://localhost:8000/api/settings/youtube-token/callback"
+
+    flow = Flow.from_client_secrets_file(
+        str(YT_CLIENT_SECRETS_PATH),
+        scopes=SCOPES,
+        redirect_uri=redirect_uri,
+    )
+
+    # Exchange code for credentials
+    flow.fetch_token(code=code)
+    creds = flow.credentials
+
+    # Save token
+    YT_TOKEN_PATH.parent.mkdir(parents=True, exist_ok=True)
+    YT_TOKEN_PATH.write_text(creds.to_json())
+
+    # Redirect to settings page with success message
+    return RedirectResponse(url="/?yt_token_refreshed=1")

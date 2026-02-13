@@ -4,6 +4,7 @@ import {
   fetchAvailableSettings,
   updateSettings,
   fetchYouTubeToken,
+  startYouTubeOAuth,
   Settings as SettingsType,
   AvailableSettings,
 } from '../api/client'
@@ -183,27 +184,41 @@ export default function Settings({ onClose }: SettingsProps) {
       <div className="settings-section">
         <label className="settings-label">YouTube Token</label>
         <div className="settings-description">
-          Download token.json for updating GitHub secrets
+          Refresh expired token or download for GitHub secrets
         </div>
-        <button
-          onClick={async () => {
-            try {
-              const token = await fetchYouTubeToken()
-              const blob = new Blob([JSON.stringify(token)], { type: 'application/json' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = 'token.json'
-              a.click()
-              URL.revokeObjectURL(url)
-            } catch (err) {
-              alert(err instanceof Error ? err.message : 'Failed to download token')
-            }
-          }}
-          style={{ marginTop: '8px' }}
-        >
-          Download token.json
-        </button>
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          <button
+            onClick={async () => {
+              try {
+                const { auth_url } = await startYouTubeOAuth()
+                window.location.href = auth_url
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Failed to start OAuth')
+              }
+            }}
+            className="primary"
+          >
+            Refresh Token
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const token = await fetchYouTubeToken()
+                const blob = new Blob([JSON.stringify(token)], { type: 'application/json' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'token.json'
+                a.click()
+                URL.revokeObjectURL(url)
+              } catch (err) {
+                alert(err instanceof Error ? err.message : 'Failed to download token')
+              }
+            }}
+          >
+            Download
+          </button>
+        </div>
       </div>
     </div>
   )

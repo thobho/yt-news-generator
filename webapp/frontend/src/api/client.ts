@@ -407,6 +407,16 @@ export async function fetchYouTubeToken(): Promise<Record<string, unknown>> {
   return response.json();
 }
 
+export async function startYouTubeOAuth(): Promise<{ auth_url: string }> {
+  const response = await fetch(`${API_BASE}/settings/youtube-token/refresh`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Failed to start OAuth flow');
+  }
+  return response.json();
+}
+
 // Running tasks
 
 export interface RunningTaskInfo {
