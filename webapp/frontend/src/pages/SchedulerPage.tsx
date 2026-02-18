@@ -17,6 +17,8 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
 import {
   fetchSchedulerStatus,
   fetchAllPrompts,
@@ -24,9 +26,11 @@ import {
   disableScheduler,
   updateSchedulerConfig,
   triggerSchedulerRun,
+  testNewsSelection,
   SchedulerStatus,
   PromptTypeInfo,
   PromptSelections,
+  TestSelectionResult,
 } from '../api/client'
 
 function formatDateTime(isoString: string | null): string {
@@ -53,15 +57,16 @@ export default function SchedulerPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [triggering, setTriggering] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<TestSelectionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   // Form state
   const [generationTime, setGenerationTime] = useState('10:00')
-  const [publishTime, setPublishTime] = useState('18:00')
-  const [polandCount, setPolandCount] = useState(5)
-  const [worldCount, setWorldCount] = useState(3)
+  const [publishTime, setPublishTime] = useState('evening')
   const [videosCount, setVideosCount] = useState(2)
+  const [selectionMode, setSelectionMode] = useState<'random' | 'llm'>('random')
 
   // Prompt selection state
   const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([])
@@ -74,9 +79,8 @@ export default function SchedulerPage() {
       // Initialize form with current config
       setGenerationTime(data.config.generation_time)
       setPublishTime(data.config.publish_time)
-      setPolandCount(data.config.poland_count)
-      setWorldCount(data.config.world_count)
       setVideosCount(data.config.videos_count)
+      setSelectionMode(data.config.selection_mode)
       // Initialize prompt selections from config
       if (data.config.prompts) {
         setSelectedPrompts(data.config.prompts)
@@ -136,9 +140,8 @@ export default function SchedulerPage() {
       await updateSchedulerConfig({
         generation_time: generationTime,
         publish_time: publishTime,
-        poland_count: polandCount,
-        world_count: worldCount,
         videos_count: videosCount,
+        selection_mode: selectionMode,
         prompts: hasPromptSelections ? selectedPrompts : undefined,
       })
       setSuccess('Configuration saved')
@@ -179,6 +182,20 @@ export default function SchedulerPage() {
       setError(err instanceof Error ? err.message : 'Failed to trigger run')
     } finally {
       setTriggering(false)
+    }
+  }
+
+  const handleTestSelection = async () => {
+    setTesting(true)
+    setError(null)
+    setTestResult(null)
+    try {
+      const result = await testNewsSelection()
+      setTestResult(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to test selection')
+    } finally {
+      setTesting(false)
     }
   }
 
@@ -292,7 +309,7 @@ export default function SchedulerPage() {
             Configuration
           </Typography>
 
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
             <TextField
               label="Generation Time (Warsaw)"
               value={generationTime}
@@ -302,49 +319,110 @@ export default function SchedulerPage() {
               helperText="Time to generate videos"
               sx={{ width: 180 }}
             />
-            <TextField
-              label="Publish Time"
-              value={publishTime}
-              onChange={(e) => setPublishTime(e.target.value)}
-              size="small"
-              placeholder="HH:MM"
-              helperText="YouTube schedule time"
-              sx={{ width: 180 }}
-            />
-          </Box>
-
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-            <TextField
-              label="Poland News Count"
-              type="number"
-              value={polandCount}
-              onChange={(e) => setPolandCount(parseInt(e.target.value) || 0)}
-              size="small"
-              helperText="Top N Polska news"
-              inputProps={{ min: 0, max: 20 }}
-              sx={{ width: 150 }}
-            />
-            <TextField
-              label="World News Count"
-              type="number"
-              value={worldCount}
-              onChange={(e) => setWorldCount(parseInt(e.target.value) || 0)}
-              size="small"
-              helperText="Top N Swiat news"
-              inputProps={{ min: 0, max: 20 }}
-              sx={{ width: 150 }}
-            />
+            <FormControl size="small" sx={{ minWidth: 180 }}>
+              <InputLabel>Publish Time</InputLabel>
+              <Select
+                value={publishTime}
+                label="Publish Time"
+                onChange={(e) => setPublishTime(e.target.value)}
+              >
+                <MenuItem value="now">Immediately</MenuItem>
+                <MenuItem value="evening">Evening (18:00-20:00)</MenuItem>
+              </Select>
+            </FormControl>
             <TextField
               label="Videos to Generate"
               type="number"
               value={videosCount}
-              onChange={(e) => setVideosCount(parseInt(e.target.value) || 0)}
+              onChange={(e) => setVideosCount(parseInt(e.target.value) || 1)}
               size="small"
-              helperText="Random pick count"
+              helperText="Number of runs"
               inputProps={{ min: 1, max: 10 }}
               sx={{ width: 150 }}
             />
           </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle2" gutterBottom>
+            News Selection Mode
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            How to select news items for video generation.
+          </Typography>
+
+          <RadioGroup
+            value={selectionMode}
+            onChange={(e) => setSelectionMode(e.target.value as 'random' | 'llm')}
+            sx={{ mb: 2 }}
+          >
+            <FormControlLabel
+              value="random"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="body1">Random Selection</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Randomly pick news items from today's release
+                  </Typography>
+                </Box>
+              }
+            />
+            <FormControlLabel
+              value="llm"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="body1">LLM Selection (AI-powered)</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Use AI to select news based on historical YouTube performance data
+                  </Typography>
+                </Box>
+              }
+            />
+          </RadioGroup>
+
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleTestSelection}
+            disabled={testing}
+            sx={{ mb: 2 }}
+          >
+            {testing ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                Testing...
+              </>
+            ) : (
+              'Test Selection'
+            )}
+          </Button>
+
+          {testResult && (
+            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Selection Result ({testResult.selection_mode} mode, {testResult.selected.length} items)
+              </Typography>
+              {testResult.reasoning && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>LLM Reasoning:</strong> {testResult.reasoning}
+                  </Typography>
+                </Alert>
+              )}
+              {testResult.selected.map((item, index) => (
+                <Box key={item.id} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1 }}>
+                  <Typography variant="body2" fontWeight="bold">
+                    {index + 1}. [{item.category}] {item.title}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Rating: {item.rating.toFixed(1)} | {item.content.substring(0, 150)}...
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
 
           <Divider sx={{ my: 2 }} />
 

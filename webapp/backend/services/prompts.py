@@ -23,8 +23,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from storage_config import get_data_storage
 
 # Prompt types
-PromptType = Literal["dialogue", "image", "research", "yt-metadata"]
-PROMPT_TYPES: list[PromptType] = ["dialogue", "image", "research", "yt-metadata"]
+PromptType = Literal["dialogue", "image", "research", "yt-metadata", "news-selection"]
+PROMPT_TYPES: list[PromptType] = ["dialogue", "image", "research", "yt-metadata", "news-selection"]
 
 # For dialogue prompts, we have 3 steps (main + step-2 + step-3)
 DIALOGUE_STEP2_SUFFIX = "-step-2"

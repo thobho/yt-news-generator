@@ -17,9 +17,8 @@ class SchedulerConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     generation_time: Optional[str] = None
     publish_time: Optional[str] = None
-    poland_count: Optional[int] = None
-    world_count: Optional[int] = None
     videos_count: Optional[int] = None
+    selection_mode: Optional[str] = None  # "random" or "llm"
     prompts: Optional[PromptSelections] = None
 
 
@@ -75,3 +74,12 @@ async def trigger_manual_run(background_tasks: BackgroundTasks):
         status="started",
         message="Manual generation started in background"
     )
+
+
+@router.post("/test-selection")
+async def test_news_selection():
+    """
+    Test news selection without running generation.
+    Returns selected news items for preview.
+    """
+    return await scheduler_service.test_news_selection()

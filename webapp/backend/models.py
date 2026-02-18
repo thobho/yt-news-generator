@@ -104,10 +104,9 @@ class SchedulerConfig(BaseModel):
     """Scheduler configuration."""
     enabled: bool = False
     generation_time: str = "10:00"
-    publish_time: str = "18:00"
-    poland_count: int = 5
-    world_count: int = 3
+    publish_time: str = "evening"
     videos_count: int = 2
+    selection_mode: str = "random"  # "random" or "llm"
     prompts: Optional[PromptSelections] = None
 
 

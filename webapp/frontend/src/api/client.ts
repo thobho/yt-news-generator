@@ -772,9 +772,8 @@ export interface SchedulerConfig {
   enabled: boolean;
   generation_time: string;
   publish_time: string;
-  poland_count: number;
-  world_count: number;
   videos_count: number;
+  selection_mode: 'random' | 'llm';
   prompts?: PromptSelections | null;
 }
 
@@ -830,6 +829,32 @@ export async function updateSchedulerConfig(config: Partial<SchedulerConfig>): P
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to update scheduler config');
+  }
+  return response.json();
+}
+
+export interface SelectedNewsItem {
+  id: string;
+  title: string;
+  category: string;
+  rating: number;
+  content: string;
+}
+
+export interface TestSelectionResult {
+  selection_mode: 'random' | 'llm';
+  count: number;
+  reasoning?: string | null;
+  selected: SelectedNewsItem[];
+}
+
+export async function testNewsSelection(): Promise<TestSelectionResult> {
+  const response = await fetch(`${API_BASE}/scheduler/test-selection`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to test news selection');
   }
   return response.json();
 }
