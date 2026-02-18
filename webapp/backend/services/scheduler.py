@@ -32,6 +32,14 @@ logger = get_logger(__name__)
 SCHEDULER_STATE_KEY = "scheduler_state.json"
 
 
+class PromptSelections(BaseModel):
+    """Prompt selections for runs - allows overriding the active prompt per type."""
+    dialogue: Optional[str] = None  # prompt ID, None = use active
+    image: Optional[str] = None
+    research: Optional[str] = None
+    yt_metadata: Optional[str] = None
+
+
 class SchedulerConfig(BaseModel):
     """Scheduler configuration stored in settings."""
     enabled: bool = False
@@ -40,6 +48,7 @@ class SchedulerConfig(BaseModel):
     poland_count: int = 5  # Top N Poland news to consider
     world_count: int = 3  # Top N World news to consider
     videos_count: int = 2  # Number of videos to generate
+    prompts: Optional[PromptSelections] = None  # Prompt overrides
 
 
 class SchedulerState(BaseModel):
@@ -167,13 +176,18 @@ async def select_daily_news(
     return selected
 
 
-async def run_auto_generation_for_news(news_item: dict, publish_time: str) -> tuple[str, Optional[str]]:
+async def run_auto_generation_for_news(
+    news_item: dict,
+    publish_time: str,
+    prompts: Optional[dict] = None
+) -> tuple[str, Optional[str]]:
     """
     Run the full generation pipeline for a single news item.
 
     Args:
         news_item: News item dict from InfoPigula
         publish_time: Schedule option for YouTube (e.g., "18:00")
+        prompts: Optional prompt selections (dialogue, image, research, yt_metadata IDs)
 
     Returns:
         Tuple of (run_id, error_message). error_message is None on success.
@@ -192,7 +206,8 @@ async def run_auto_generation_for_news(news_item: dict, publish_time: str) -> tu
         run_id, _ = pipeline.create_seed(
             news_text=news_item.get("content", ""),
             auto_generated=True,
-            source_info=source_info
+            source_info=source_info,
+            prompts=prompts
         )
 
         logger.info("Created run %s for auto-generation", run_id)
@@ -265,10 +280,19 @@ async def run_auto_generation() -> dict:
         logger.error("Auto-generation aborted: no news available")
         return {"status": "error", "message": "No news available"}
 
+    # Get prompt selections from config
+    prompts_dict = None
+    if config.prompts:
+        prompts_dict = config.prompts.model_dump(exclude_none=True)
+
     # Generate videos for each selected news
     results = []
     for news_item in selected_news:
-        run_id, error = await run_auto_generation_for_news(news_item, config.publish_time)
+        run_id, error = await run_auto_generation_for_news(
+            news_item,
+            config.publish_time,
+            prompts=prompts_dict
+        )
         results.append({"run_id": run_id, "error": error})
         if run_id and run_id != "unknown":
             state.last_run_runs.append(run_id)
@@ -413,6 +437,14 @@ def update_scheduler_config(updates: dict) -> SchedulerConfig:
         config.world_count = updates["world_count"]
     if "videos_count" in updates:
         config.videos_count = updates["videos_count"]
+    if "prompts" in updates:
+        prompts_data = updates["prompts"]
+        if prompts_data is None:
+            config.prompts = None
+        elif isinstance(prompts_data, PromptSelections):
+            config.prompts = prompts_data
+        else:
+            config.prompts = PromptSelections(**prompts_data)
 
     _save_config(config)
     _config = config

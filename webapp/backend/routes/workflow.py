@@ -21,6 +21,7 @@ logger = get_logger(__name__)
 
 from ..services import pipeline
 from ..services.cache import get_cache
+from ..models import PromptSelections
 
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
 
@@ -32,6 +33,7 @@ def _get_output_dir() -> Path:
 
 class CreateSeedRequest(BaseModel):
     news_text: str
+    prompts: PromptSelections | None = None
 
 
 class CreateSeedResponse(BaseModel):
@@ -140,7 +142,12 @@ async def create_seed(request: CreateSeedRequest):
     if not request.news_text.strip():
         raise HTTPException(status_code=400, detail="News text cannot be empty")
 
-    run_id, seed_key = pipeline.create_seed(request.news_text)
+    # Convert PromptSelections to dict if provided
+    prompts_dict = None
+    if request.prompts:
+        prompts_dict = request.prompts.model_dump(exclude_none=True)
+
+    run_id, seed_key = pipeline.create_seed(request.news_text, prompts=prompts_dict)
 
     # Invalidate runs list cache (new run added)
     get_cache().invalidate_runs_list()

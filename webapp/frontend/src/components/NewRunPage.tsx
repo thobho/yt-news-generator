@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import {
   fetchInfoPigulaNews,
+  fetchAllPrompts,
   createSeed,
   generateDialogue,
   pollTaskUntilDone,
   TaskStatus,
   InfoPigulaNewsItem,
+  PromptTypeInfo,
+  PromptSelections,
 } from '../api/client'
 
 type Tab = 'browse' | 'custom'
@@ -44,6 +47,11 @@ export default function NewRunPage() {
   // Custom tab state
   const [customText, setCustomText] = useState('')
 
+  // Advanced options state
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([])
+  const [selectedPrompts, setSelectedPrompts] = useState<PromptSelections>({})
+
   // Shared submit state
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -59,6 +67,14 @@ export default function NewRunPage() {
         setNewsError(err instanceof Error ? err.message : 'Failed to fetch news')
       })
       .finally(() => setLoadingNews(false))
+
+    fetchAllPrompts()
+      .then((data) => {
+        setPromptTypes(data.types)
+      })
+      .catch((err) => {
+        console.error('Failed to fetch prompts:', err)
+      })
   }, [])
 
   const toggleItem = (id: string) => {
@@ -73,6 +89,29 @@ export default function NewRunPage() {
     })
   }
 
+  const handlePromptChange = (promptType: string, value: string) => {
+    // Map prompt type to PromptSelections key
+    const keyMap: Record<string, keyof PromptSelections> = {
+      'dialogue': 'dialogue',
+      'image': 'image',
+      'research': 'research',
+      'yt-metadata': 'yt_metadata',
+    }
+    const key = keyMap[promptType]
+    if (key) {
+      setSelectedPrompts(prev => ({
+        ...prev,
+        [key]: value === '' ? null : value,
+      }))
+    }
+  }
+
+  const getPromptSelectionsForSubmit = (): PromptSelections | undefined => {
+    // Only return if at least one prompt is selected (not null/empty)
+    const hasSelections = Object.values(selectedPrompts).some(v => v !== null && v !== undefined)
+    return hasSelections ? selectedPrompts : undefined
+  }
+
   const handleSubmit = async () => {
     let seedText = ''
     if (activeTab === 'browse') {
@@ -83,6 +122,8 @@ export default function NewRunPage() {
       if (!customText.trim()) return
       seedText = customText.trim()
     }
+
+    const promptSelections = getPromptSelectionsForSubmit()
 
     setIsSubmitting(true)
     setSubmitError(null)
@@ -95,7 +136,7 @@ export default function NewRunPage() {
           const itemSeedText = formatSeedText([item])
           const itemLabel = item.title || `item ${index + 1}`
           setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
-          const { run_id } = await createSeed(itemSeedText)
+          const { run_id } = await createSeed(itemSeedText, promptSelections)
           setSubmitStatus(`Starting dialogue generation (${index + 1}/${total})...`)
           const { task_id } = await generateDialogue(run_id)
           setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
@@ -112,7 +153,7 @@ export default function NewRunPage() {
         navigate('/')
       } else {
         setSubmitStatus('Creating seed...')
-        const { run_id } = await createSeed(seedText)
+        const { run_id } = await createSeed(seedText, promptSelections)
         setSubmitStatus('Starting dialogue generation...')
         const { task_id } = await generateDialogue(run_id)
         setSubmitStatus('Generating dialogue (this may take a minute)...')
@@ -216,6 +257,50 @@ export default function NewRunPage() {
             </div>
           ))}
 
+          {/* Advanced Options */}
+          <div className="advanced-options">
+            <button
+              type="button"
+              className="advanced-toggle"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              {showAdvanced ? '▼' : '▶'} Advanced Options
+            </button>
+            {showAdvanced && (
+              <div className="prompt-selectors">
+                {promptTypes.map((pt) => {
+                  const keyMap: Record<string, keyof PromptSelections> = {
+                    'dialogue': 'dialogue',
+                    'image': 'image',
+                    'research': 'research',
+                    'yt-metadata': 'yt_metadata',
+                  }
+                  const key = keyMap[pt.type]
+                  const currentValue = key ? selectedPrompts[key] ?? '' : ''
+                  return (
+                    <div key={pt.type} className="prompt-selector">
+                      <label>{pt.label}</label>
+                      <select
+                        value={currentValue}
+                        onChange={(e) => handlePromptChange(pt.type, e.target.value)}
+                        disabled={isSubmitting}
+                      >
+                        <option value="">
+                          Active ({pt.prompts.find(p => p.is_active)?.name || 'none'})
+                        </option>
+                        {pt.prompts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{p.is_active ? ' (active)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {selectedIds.size > 0 && (
             <div className="selection-summary">
               <div className="selection-info">
@@ -249,6 +334,50 @@ export default function NewRunPage() {
             rows={10}
             disabled={isSubmitting}
           />
+
+          {/* Advanced Options */}
+          <div className="advanced-options">
+            <button
+              type="button"
+              className="advanced-toggle"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              {showAdvanced ? '▼' : '▶'} Advanced Options
+            </button>
+            {showAdvanced && (
+              <div className="prompt-selectors">
+                {promptTypes.map((pt) => {
+                  const keyMap: Record<string, keyof PromptSelections> = {
+                    'dialogue': 'dialogue',
+                    'image': 'image',
+                    'research': 'research',
+                    'yt-metadata': 'yt_metadata',
+                  }
+                  const key = keyMap[pt.type]
+                  const currentValue = key ? selectedPrompts[key] ?? '' : ''
+                  return (
+                    <div key={pt.type} className="prompt-selector">
+                      <label>{pt.label}</label>
+                      <select
+                        value={currentValue}
+                        onChange={(e) => handlePromptChange(pt.type, e.target.value)}
+                        disabled={isSubmitting}
+                      >
+                        <option value="">
+                          Active ({pt.prompts.find(p => p.is_active)?.name || 'none'})
+                        </option>
+                        {pt.prompts.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{p.is_active ? ' (active)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
 
           <div className="custom-seed-actions">
             <button

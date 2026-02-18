@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..services import scheduler as scheduler_service
-from ..models import SchedulerConfig, SchedulerStatus
+from ..models import SchedulerConfig, SchedulerStatus, PromptSelections
 
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
@@ -20,6 +20,7 @@ class SchedulerConfigUpdate(BaseModel):
     poland_count: Optional[int] = None
     world_count: Optional[int] = None
     videos_count: Optional[int] = None
+    prompts: Optional[PromptSelections] = None
 
 
 class TriggerResponse(BaseModel):

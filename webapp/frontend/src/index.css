@@ -1618,6 +1618,70 @@ a.new-run-btn:hover {
   text-decoration: none;
 }
 
+/* Advanced options for new run page */
+.advanced-options {
+  margin: 20px 0;
+  padding: 16px;
+  background: #e3f2fd;
+  border: 2px solid #1976d2;
+  border-radius: 8px;
+}
+
+.advanced-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.advanced-toggle:hover {
+  color: #333;
+}
+
+.prompt-selectors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.prompt-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.prompt-selector label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+
+.prompt-selector select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  cursor: pointer;
+}
+
+.prompt-selector select:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+.prompt-selector select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 640px) {
   .news-grid {
     grid-template-columns: 1fr;
@@ -1635,5 +1699,9 @@ a.new-run-btn:hover {
 
   .selection-info {
     white-space: normal;
+  }
+
+  .prompt-selectors {
+    grid-template-columns: 1fr;
   }
 }

@@ -184,11 +184,18 @@ export async function fetchRun(runId: string): Promise<RunDetail> {
 
 // Workflow functions
 
-export async function createSeed(newsText: string): Promise<{ run_id: string; seed_path: string }> {
+export async function createSeed(
+  newsText: string,
+  prompts?: PromptSelections
+): Promise<{ run_id: string; seed_path: string }> {
+  const body: { news_text: string; prompts?: PromptSelections } = { news_text: newsText };
+  if (prompts) {
+    body.prompts = prompts;
+  }
   const response = await fetch(`${API_BASE}/workflow/create-seed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ news_text: newsText }),
+    body: JSON.stringify(body),
   });
   if (!response.ok) {
     const error = await response.json();
@@ -750,6 +757,15 @@ export async function refreshAllStats(): Promise<{ status: string; message: stri
   return response.json();
 }
 
+// Prompt selections for runs
+
+export interface PromptSelections {
+  dialogue?: string | null;
+  image?: string | null;
+  research?: string | null;
+  yt_metadata?: string | null;
+}
+
 // Scheduler types and functions
 
 export interface SchedulerConfig {
@@ -759,6 +775,7 @@ export interface SchedulerConfig {
   poland_count: number;
   world_count: number;
   videos_count: number;
+  prompts?: PromptSelections | null;
 }
 
 export interface SchedulerState {

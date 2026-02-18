@@ -13,13 +13,20 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import Chip from '@mui/material/Chip'
 import Stack from '@mui/material/Stack'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
 import {
   fetchSchedulerStatus,
+  fetchAllPrompts,
   enableScheduler,
   disableScheduler,
   updateSchedulerConfig,
   triggerSchedulerRun,
   SchedulerStatus,
+  PromptTypeInfo,
+  PromptSelections,
 } from '../api/client'
 
 function formatDateTime(isoString: string | null): string {
@@ -56,6 +63,10 @@ export default function SchedulerPage() {
   const [worldCount, setWorldCount] = useState(3)
   const [videosCount, setVideosCount] = useState(2)
 
+  // Prompt selection state
+  const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([])
+  const [selectedPrompts, setSelectedPrompts] = useState<PromptSelections>({})
+
   const loadStatus = async () => {
     try {
       const data = await fetchSchedulerStatus()
@@ -66,6 +77,10 @@ export default function SchedulerPage() {
       setPolandCount(data.config.poland_count)
       setWorldCount(data.config.world_count)
       setVideosCount(data.config.videos_count)
+      // Initialize prompt selections from config
+      if (data.config.prompts) {
+        setSelectedPrompts(data.config.prompts)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load scheduler status')
     } finally {
@@ -78,6 +93,16 @@ export default function SchedulerPage() {
     // Poll status every 30 seconds
     const interval = setInterval(loadStatus, 30000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    fetchAllPrompts()
+      .then((data) => {
+        setPromptTypes(data.types)
+      })
+      .catch((err) => {
+        console.error('Failed to fetch prompts:', err)
+      })
   }, [])
 
   const handleToggle = async () => {
@@ -106,12 +131,15 @@ export default function SchedulerPage() {
     setError(null)
     setSuccess(null)
     try {
+      // Only include prompts if at least one is selected
+      const hasPromptSelections = Object.values(selectedPrompts).some(v => v !== null && v !== undefined)
       await updateSchedulerConfig({
         generation_time: generationTime,
         publish_time: publishTime,
         poland_count: polandCount,
         world_count: worldCount,
         videos_count: videosCount,
+        prompts: hasPromptSelections ? selectedPrompts : undefined,
       })
       setSuccess('Configuration saved')
       await loadStatus()
@@ -119,6 +147,22 @@ export default function SchedulerPage() {
       setError(err instanceof Error ? err.message : 'Failed to save configuration')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePromptChange = (promptType: string, value: string) => {
+    const keyMap: Record<string, keyof PromptSelections> = {
+      'dialogue': 'dialogue',
+      'image': 'image',
+      'research': 'research',
+      'yt-metadata': 'yt_metadata',
+    }
+    const key = keyMap[promptType]
+    if (key) {
+      setSelectedPrompts(prev => ({
+        ...prev,
+        [key]: value === '' ? null : value,
+      }))
     }
   }
 
@@ -300,6 +344,48 @@ export default function SchedulerPage() {
               inputProps={{ min: 1, max: 10 }}
               sx={{ width: 150 }}
             />
+          </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle2" gutterBottom>
+            Prompt Selection (optional)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Override the active prompt for each step. Leave empty to use the currently active prompt.
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
+            {promptTypes.map((pt) => {
+              const keyMap: Record<string, keyof PromptSelections> = {
+                'dialogue': 'dialogue',
+                'image': 'image',
+                'research': 'research',
+                'yt-metadata': 'yt_metadata',
+              }
+              const key = keyMap[pt.type]
+              const currentValue = key ? selectedPrompts[key] ?? '' : ''
+              const activePrompt = pt.prompts.find(p => p.is_active)
+              return (
+                <FormControl key={pt.type} size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel>{pt.label}</InputLabel>
+                  <Select
+                    value={currentValue}
+                    label={pt.label}
+                    onChange={(e) => handlePromptChange(pt.type, e.target.value as string)}
+                  >
+                    <MenuItem value="">
+                      <em>Active ({activePrompt?.name || 'none'})</em>
+                    </MenuItem>
+                    {pt.prompts.map((p) => (
+                      <MenuItem key={p.id} value={p.id}>
+                        {p.name}{p.is_active ? ' (active)' : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )
+            })}
           </Box>
 
           <Button

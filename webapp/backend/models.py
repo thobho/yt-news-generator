@@ -88,6 +88,16 @@ class RunDetail(BaseModel):
     source_info: Optional[dict[str, Any]] = None
 
 
+# Prompt selection models
+
+class PromptSelections(BaseModel):
+    """Prompt selections for runs - allows overriding the active prompt per type."""
+    dialogue: Optional[str] = None  # prompt ID, None = use active
+    image: Optional[str] = None
+    research: Optional[str] = None
+    yt_metadata: Optional[str] = None
+
+
 # Scheduler models
 
 class SchedulerConfig(BaseModel):
@@ -98,6 +108,7 @@ class SchedulerConfig(BaseModel):
     poland_count: int = 5
     world_count: int = 3
     videos_count: int = 2
+    prompts: Optional[PromptSelections] = None
 
 
 class SchedulerState(BaseModel):

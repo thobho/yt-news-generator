@@ -44,17 +44,21 @@ from . import settings as settings_service
 from . import prompts as prompts_service
 
 
-def get_dialogue_prompt_keys() -> tuple[str, str, str | None]:
-    """Get dialogue prompt keys based on current active prompt.
+def get_dialogue_prompt_keys(prompt_id: Optional[str] = None) -> tuple[str, str, str | None]:
+    """Get dialogue prompt keys based on specified or active prompt.
+
+    Args:
+        prompt_id: Optional specific prompt ID to use. If None, uses active prompt.
 
     Returns:
         Tuple of (main_key, step2_key, step3_key). step3_key may be None if not exists.
     """
-    active_id = prompts_service.get_active_prompt_id("dialogue")
-    if active_id:
-        main_key = f"prompts/dialogue/{active_id}.md"
-        refine_key = f"prompts/dialogue/{active_id}-step-2.md"
-        polish_key = f"prompts/dialogue/{active_id}-step-3.md"
+    # Use specified prompt_id or fall back to active
+    selected_id = prompt_id or prompts_service.get_active_prompt_id("dialogue")
+    if selected_id:
+        main_key = f"prompts/dialogue/{selected_id}.md"
+        refine_key = f"prompts/dialogue/{selected_id}-step-2.md"
+        polish_key = f"prompts/dialogue/{selected_id}-step-3.md"
 
         # Check if step-3 exists
         data_storage = get_data_storage()
@@ -71,26 +75,58 @@ def get_dialogue_prompt_keys() -> tuple[str, str, str | None]:
     return main_key, refine_key, None
 
 
-def get_dialogue_temperatures() -> tuple[float, float, float]:
-    """Get temperature settings for dialogue generation steps."""
+def get_dialogue_temperatures(prompt_id: Optional[str] = None) -> tuple[float, float, float]:
+    """Get temperature settings for dialogue generation steps.
+
+    Args:
+        prompt_id: Optional specific prompt ID to use. If None, uses active prompt.
+    """
+    if prompt_id:
+        prompt = prompts_service.get_prompt("dialogue", prompt_id)
+        if prompt:
+            return (prompt.temperature, prompt.step2_temperature, prompt.step3_temperature)
     return prompts_service.get_active_dialogue_temperatures()
+
+
+def get_run_prompt_selections(run_id: str) -> dict:
+    """
+    Get prompt selections from seed.json for a run.
+
+    Returns dict with keys: dialogue, image, research, yt_metadata (values are prompt IDs or None).
+    """
+    run_storage = get_run_storage(run_id)
+    keys = get_run_keys()
+
+    prompts = {}
+    if run_storage.exists(keys["seed"]):
+        try:
+            seed_content = run_storage.read_text(keys["seed"])
+            seed_data = json.loads(seed_content)
+            prompts = seed_data.get("prompts", {})
+        except Exception:
+            pass
+
+    return prompts
 
 
 def save_prompts_snapshot(run_id: str) -> None:
     """
     Save a snapshot of all prompts used for this run.
-    Creates prompts_snapshot/ folder with copies of all active prompts.
+    Creates prompts_snapshot/ folder with copies of selected prompts (or active if not selected).
     """
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
+
+    # Get prompt selections from seed.json
+    selections = get_run_prompt_selections(run_id)
 
     snapshot = {
         "timestamp": datetime.now().isoformat(),
         "prompts": {}
     }
 
-    # Save dialogue prompts
-    dialogue_id = prompts_service.get_active_prompt_id("dialogue")
+    # Save dialogue prompts (use selected or fall back to active)
+    dialogue_id = selections.get("dialogue") or prompts_service.get_active_prompt_id("dialogue")
     if dialogue_id:
         dialogue_prompt = prompts_service.get_prompt("dialogue", dialogue_id)
         if dialogue_prompt:
@@ -108,7 +144,7 @@ def save_prompts_snapshot(run_id: str) -> None:
                 run_storage.write_text("prompts_snapshot/dialogue_step3.md", dialogue_prompt.step3_content)
 
     # Save image prompt
-    image_id = prompts_service.get_active_prompt_id("image")
+    image_id = selections.get("image") or prompts_service.get_active_prompt_id("image")
     if image_id:
         image_prompt = prompts_service.get_prompt("image", image_id)
         if image_prompt:
@@ -119,7 +155,7 @@ def save_prompts_snapshot(run_id: str) -> None:
             run_storage.write_text("prompts_snapshot/image.md", image_prompt.content)
 
     # Save research prompt
-    research_id = prompts_service.get_active_prompt_id("research")
+    research_id = selections.get("research") or prompts_service.get_active_prompt_id("research")
     if research_id:
         research_prompt = prompts_service.get_prompt("research", research_id)
         if research_prompt:
@@ -130,7 +166,7 @@ def save_prompts_snapshot(run_id: str) -> None:
             run_storage.write_text("prompts_snapshot/research.md", research_prompt.content)
 
     # Save yt-metadata prompt
-    yt_id = prompts_service.get_active_prompt_id("yt-metadata")
+    yt_id = selections.get("yt_metadata") or prompts_service.get_active_prompt_id("yt-metadata")
     if yt_id:
         yt_prompt = prompts_service.get_prompt("yt-metadata", yt_id)
         if yt_prompt:
@@ -148,29 +184,41 @@ def save_prompts_snapshot(run_id: str) -> None:
     logger.info("Saved prompts snapshot for run: %s", run_id)
 
 
-def get_image_prompt_key() -> str:
-    """Get image prompt key based on current active prompt."""
-    active_id = prompts_service.get_active_prompt_id("image")
-    if active_id:
-        return f"prompts/image/{active_id}.md"
+def get_image_prompt_key(prompt_id: Optional[str] = None) -> str:
+    """Get image prompt key based on specified or active prompt.
+
+    Args:
+        prompt_id: Optional specific prompt ID to use. If None, uses active prompt.
+    """
+    selected_id = prompt_id or prompts_service.get_active_prompt_id("image")
+    if selected_id:
+        return f"prompts/image/{selected_id}.md"
     # Fallback to old path
     return "image_prompt.md"
 
 
-def get_research_prompt_key() -> str:
-    """Get research/summarizer prompt key based on current active prompt."""
-    active_id = prompts_service.get_active_prompt_id("research")
-    if active_id:
-        return f"prompts/research/{active_id}.md"
+def get_research_prompt_key(prompt_id: Optional[str] = None) -> str:
+    """Get research/summarizer prompt key based on specified or active prompt.
+
+    Args:
+        prompt_id: Optional specific prompt ID to use. If None, uses active prompt.
+    """
+    selected_id = prompt_id or prompts_service.get_active_prompt_id("research")
+    if selected_id:
+        return f"prompts/research/{selected_id}.md"
     # Fallback to old path
     return "fetch_sources_summariser_prompt.md"
 
 
-def get_yt_metadata_prompt_key() -> str:
-    """Get YouTube metadata prompt key based on current active prompt."""
-    active_id = prompts_service.get_active_prompt_id("yt-metadata")
-    if active_id:
-        return f"prompts/yt-metadata/{active_id}.md"
+def get_yt_metadata_prompt_key(prompt_id: Optional[str] = None) -> str:
+    """Get YouTube metadata prompt key based on specified or active prompt.
+
+    Args:
+        prompt_id: Optional specific prompt ID to use. If None, uses active prompt.
+    """
+    selected_id = prompt_id or prompts_service.get_active_prompt_id("yt-metadata")
+    if selected_id:
+        return f"prompts/yt-metadata/{selected_id}.md"
     # Fallback to old path
     return "yt_metadata_prompt.md"
 
@@ -198,7 +246,8 @@ def create_run_dir() -> tuple[str, Path]:
 def create_seed(
     news_text: str,
     auto_generated: bool = False,
-    source_info: Optional[dict] = None
+    source_info: Optional[dict] = None,
+    prompts: Optional[dict] = None
 ) -> tuple[str, str]:
     """
     Create a new seed file and run directory.
@@ -207,6 +256,7 @@ def create_seed(
         news_text: The news text content
         auto_generated: Whether this run was auto-generated by scheduler
         source_info: Optional metadata about the news source
+        prompts: Optional prompt selections (dialogue, image, research, yt_metadata IDs)
 
     Returns (run_id, seed_key).
     """
@@ -219,6 +269,11 @@ def create_seed(
         seed_data["auto_generated"] = True
     if source_info:
         seed_data["source_info"] = source_info
+    if prompts:
+        # Store prompt selections (filter out None values)
+        prompt_selections = {k: v for k, v in prompts.items() if v is not None}
+        if prompt_selections:
+            seed_data["prompts"] = prompt_selections
     seed_json = json.dumps(seed_data, ensure_ascii=False, indent=2)
 
     # Save seed to run storage
@@ -287,6 +342,10 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     if not run_storage.exists(keys["seed"]):
         raise FileNotFoundError(f"No seed file found for run {run_id}")
 
+    # Get prompt selections from seed.json
+    selections = get_run_prompt_selections(run_id)
+    dialogue_prompt_id = selections.get("dialogue")
+
     # Save snapshot of all prompts used for this run
     save_prompts_snapshot(run_id)
 
@@ -301,9 +360,9 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     news_content = run_storage.read_text(keys["news_data"])
     news_data = json.loads(news_content)
 
-    # Get prompt keys and temperatures from settings
-    dialogue_prompt_key, refine_prompt_key, polish_prompt_key = get_dialogue_prompt_keys()
-    temp1, temp2, temp3 = get_dialogue_temperatures()
+    # Get prompt keys and temperatures (use selected or fall back to active)
+    dialogue_prompt_key, refine_prompt_key, polish_prompt_key = get_dialogue_prompt_keys(dialogue_prompt_id)
+    temp1, temp2, temp3 = get_dialogue_temperatures(dialogue_prompt_id)
 
     dialogue_data = gen_dialogue(
         news_data,
@@ -434,8 +493,12 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
 
     run_storage.makedirs(keys["images_dir"])
 
-    # Get the active image prompt key
-    image_prompt_key = get_image_prompt_key()
+    # Get prompt selections from seed.json
+    selections = get_run_prompt_selections(run_id)
+    image_prompt_id = selections.get("image")
+
+    # Get the image prompt key (use selected or fall back to active)
+    image_prompt_key = get_image_prompt_key(image_prompt_id)
 
     # Generate image prompts
     prompts_data = generate_image_prompts(
@@ -530,8 +593,12 @@ def generate_yt_metadata_for_run(run_id: str, model: str = "gpt-4o") -> str:
     if not run_storage.exists(keys["news_data"]):
         raise FileNotFoundError("News data not found. Generate dialogue first.")
 
-    # Get the active YT metadata prompt key
-    yt_prompt_key = get_yt_metadata_prompt_key()
+    # Get prompt selections from seed.json
+    selections = get_run_prompt_selections(run_id)
+    yt_prompt_id = selections.get("yt_metadata")
+
+    # Get the YT metadata prompt key (use selected or fall back to active)
+    yt_prompt_key = get_yt_metadata_prompt_key(yt_prompt_id)
 
     metadata = gen_metadata(
         keys["news_data"],
