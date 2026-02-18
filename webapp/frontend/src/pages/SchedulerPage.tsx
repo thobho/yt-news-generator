@@ -19,6 +19,9 @@ import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
 import Radio from '@mui/material/Radio'
 import RadioGroup from '@mui/material/RadioGroup'
+import IconButton from '@mui/material/IconButton'
+import AddIcon from '@mui/icons-material/Add'
+import DeleteIcon from '@mui/icons-material/Delete'
 import {
   fetchSchedulerStatus,
   fetchAllPrompts,
@@ -31,6 +34,7 @@ import {
   PromptTypeInfo,
   PromptSelections,
   TestSelectionResult,
+  ScheduledRunConfig,
 } from '../api/client'
 
 function formatDateTime(isoString: string | null): string {
@@ -65,10 +69,15 @@ export default function SchedulerPage() {
   // Form state
   const [generationTime, setGenerationTime] = useState('10:00')
   const [publishTime, setPublishTime] = useState('evening')
-  const [videosCount, setVideosCount] = useState(2)
   const [selectionMode, setSelectionMode] = useState<'random' | 'llm'>('random')
 
-  // Prompt selection state
+  // Per-run configuration state
+  const [runs, setRuns] = useState<ScheduledRunConfig[]>([
+    { enabled: true, prompts: null },
+    { enabled: true, prompts: null },
+  ])
+
+  // Prompt selection state (default prompts)
   const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([])
   const [selectedPrompts, setSelectedPrompts] = useState<PromptSelections>({})
 
@@ -79,9 +88,17 @@ export default function SchedulerPage() {
       // Initialize form with current config
       setGenerationTime(data.config.generation_time)
       setPublishTime(data.config.publish_time)
-      setVideosCount(data.config.videos_count)
       setSelectionMode(data.config.selection_mode)
-      // Initialize prompt selections from config
+      // Initialize runs from config (or default to 2 runs if empty)
+      if (data.config.runs && data.config.runs.length > 0) {
+        setRuns(data.config.runs)
+      } else {
+        setRuns([
+          { enabled: true, prompts: null },
+          { enabled: true, prompts: null },
+        ])
+      }
+      // Initialize default prompt selections from config
       if (data.config.prompts) {
         setSelectedPrompts(data.config.prompts)
       }
@@ -140,9 +157,9 @@ export default function SchedulerPage() {
       await updateSchedulerConfig({
         generation_time: generationTime,
         publish_time: publishTime,
-        videos_count: videosCount,
         selection_mode: selectionMode,
         prompts: hasPromptSelections ? selectedPrompts : undefined,
+        runs: runs,
       })
       setSuccess('Configuration saved')
       await loadStatus()
@@ -151,6 +168,45 @@ export default function SchedulerPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Run management functions
+  const handleAddRun = () => {
+    setRuns([...runs, { enabled: true, prompts: null }])
+  }
+
+  const handleRemoveRun = (index: number) => {
+    if (runs.length > 1) {
+      setRuns(runs.filter((_, i) => i !== index))
+    }
+  }
+
+  const handleRunEnabledChange = (index: number, enabled: boolean) => {
+    const newRuns = [...runs]
+    newRuns[index] = { ...newRuns[index], enabled }
+    setRuns(newRuns)
+  }
+
+  const handleRunPromptChange = (index: number, promptType: string, value: string) => {
+    const keyMap: Record<string, keyof PromptSelections> = {
+      'dialogue': 'dialogue',
+      'image': 'image',
+      'research': 'research',
+      'yt-metadata': 'yt_metadata',
+    }
+    const key = keyMap[promptType]
+    if (!key) return
+
+    const newRuns = [...runs]
+    const currentPrompts = newRuns[index].prompts || {}
+    newRuns[index] = {
+      ...newRuns[index],
+      prompts: {
+        ...currentPrompts,
+        [key]: value === '' ? null : value,
+      }
+    }
+    setRuns(newRuns)
   }
 
   const handlePromptChange = (promptType: string, value: string) => {
@@ -330,17 +386,81 @@ export default function SchedulerPage() {
                 <MenuItem value="evening">Evening (18:00-20:00)</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              label="Videos to Generate"
-              type="number"
-              value={videosCount}
-              onChange={(e) => setVideosCount(parseInt(e.target.value) || 1)}
-              size="small"
-              helperText="Number of runs"
-              inputProps={{ min: 1, max: 10 }}
-              sx={{ width: 150 }}
-            />
           </Box>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Typography variant="subtitle2">
+              Run Configurations ({runs.filter(r => r.enabled).length} active)
+            </Typography>
+            <IconButton size="small" onClick={handleAddRun} sx={{ ml: 1 }}>
+              <AddIcon />
+            </IconButton>
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Configure each run independently. Each enabled run will generate one video.
+          </Typography>
+
+          {runs.map((run, index) => (
+            <Card key={index} variant="outlined" sx={{ mb: 2, bgcolor: run.enabled ? 'background.paper' : 'grey.100' }}>
+              <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={run.enabled}
+                        onChange={(e) => handleRunEnabledChange(index, e.target.checked)}
+                      />
+                    }
+                    label={<Typography variant="body2" fontWeight="bold">Run {index + 1}</Typography>}
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={() => handleRemoveRun(index)}
+                    disabled={runs.length <= 1}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                {run.enabled && (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {promptTypes.filter(pt => ['dialogue', 'image', 'research', 'yt-metadata'].includes(pt.type)).map((pt) => {
+                      const keyMap: Record<string, keyof PromptSelections> = {
+                        'dialogue': 'dialogue',
+                        'image': 'image',
+                        'research': 'research',
+                        'yt-metadata': 'yt_metadata',
+                      }
+                      const key = keyMap[pt.type]
+                      const currentValue = key && run.prompts ? (run.prompts[key] ?? '') : ''
+                      const activePrompt = pt.prompts.find(p => p.is_active)
+                      return (
+                        <FormControl key={pt.type} size="small" sx={{ minWidth: 150 }}>
+                          <InputLabel>{pt.label}</InputLabel>
+                          <Select
+                            value={currentValue}
+                            label={pt.label}
+                            onChange={(e) => handleRunPromptChange(index, pt.type, e.target.value as string)}
+                          >
+                            <MenuItem value="">
+                              <em>Default ({activePrompt?.name || 'active'})</em>
+                            </MenuItem>
+                            {pt.prompts.map((p) => (
+                              <MenuItem key={p.id} value={p.id}>
+                                {p.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      )
+                    })}
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          ))}
 
           <Divider sx={{ my: 2 }} />
 

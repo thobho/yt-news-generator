@@ -100,14 +100,20 @@ class PromptSelections(BaseModel):
 
 # Scheduler models
 
+class ScheduledRunConfig(BaseModel):
+    """Configuration for a single scheduled run."""
+    enabled: bool = True  # Can disable individual runs
+    prompts: Optional[PromptSelections] = None  # Override prompts for this run
+
+
 class SchedulerConfig(BaseModel):
     """Scheduler configuration."""
     enabled: bool = False
     generation_time: str = "10:00"
     publish_time: str = "evening"
-    videos_count: int = 2
     selection_mode: str = "random"  # "random" or "llm"
-    prompts: Optional[PromptSelections] = None
+    prompts: Optional[PromptSelections] = None  # Default prompts (fallback)
+    runs: list[ScheduledRunConfig] = []  # Per-run configurations
 
 
 class SchedulerState(BaseModel):

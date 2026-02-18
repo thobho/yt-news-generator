@@ -768,13 +768,18 @@ export interface PromptSelections {
 
 // Scheduler types and functions
 
+export interface ScheduledRunConfig {
+  enabled: boolean;
+  prompts?: PromptSelections | null;
+}
+
 export interface SchedulerConfig {
   enabled: boolean;
   generation_time: string;
   publish_time: string;
-  videos_count: number;
   selection_mode: 'random' | 'llm';
-  prompts?: PromptSelections | null;
+  prompts?: PromptSelections | null;  // Default prompts
+  runs: ScheduledRunConfig[];  // Per-run configurations
 }
 
 export interface SchedulerState {

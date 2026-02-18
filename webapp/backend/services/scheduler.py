@@ -44,14 +44,20 @@ class PromptSelections(BaseModel):
     yt_metadata: Optional[str] = None
 
 
+class ScheduledRunConfig(BaseModel):
+    """Configuration for a single scheduled run."""
+    enabled: bool = True  # Can disable individual runs
+    prompts: Optional[PromptSelections] = None  # Override prompts for this run
+
+
 class SchedulerConfig(BaseModel):
     """Scheduler configuration."""
     enabled: bool = False
     generation_time: str = "10:00"  # HH:MM format, Warsaw timezone
     publish_time: str = "evening"  # Schedule option: "now" or "evening"
-    videos_count: int = 2  # Number of videos to generate
     selection_mode: SelectionMode = "random"  # How to select news
-    prompts: Optional[PromptSelections] = None
+    prompts: Optional[PromptSelections] = None  # Default prompts (fallback)
+    runs: list[ScheduledRunConfig] = []  # Per-run configurations
 
 
 class SchedulerState(BaseModel):
@@ -374,6 +380,15 @@ async def select_news_llm(count: int) -> list[dict]:
         count=count
     )
 
+    # Log full prompt for debugging
+    logger.info("=== LLM NEWS SELECTION PROMPT ===")
+    logger.info("Historical runs with stats: %d", len(runs_with_stats))
+    logger.info("Available news items: %d", len(items))
+    logger.info("Requesting selection of: %d items", count)
+    logger.info("--- FULL PROMPT START ---")
+    logger.info(prompt)
+    logger.info("--- FULL PROMPT END ---")
+
     # Call LLM with structured output
     try:
         import openai
@@ -547,10 +562,19 @@ async def run_auto_generation() -> dict:
     state.last_run_runs = []
     state.last_run_errors = []
 
+    # Get enabled runs from config
+    enabled_runs = [r for r in config.runs if r.enabled]
+    if not enabled_runs:
+        state.last_run_status = "error"
+        state.last_run_errors = ["No runs configured"]
+        _save_state(state)
+        logger.error("Auto-generation aborted: no runs configured")
+        return {"status": "error", "message": "No runs configured"}
+
     # Select news using configured mode
     selected_news = await select_news(
         mode=config.selection_mode,
-        count=config.videos_count
+        count=len(enabled_runs)
     )
 
     if not selected_news:
@@ -560,14 +584,20 @@ async def run_auto_generation() -> dict:
         logger.error("Auto-generation aborted: no news available")
         return {"status": "error", "message": "No news available"}
 
-    # Get prompt selections from config
-    prompts_dict = None
-    if config.prompts:
-        prompts_dict = config.prompts.model_dump(exclude_none=True)
-
-    # Generate videos for each selected news
+    # Generate videos for each selected news with per-run config
     results = []
-    for news_item in selected_news:
+    for i, news_item in enumerate(selected_news):
+        run_config = enabled_runs[i] if i < len(enabled_runs) else enabled_runs[-1]
+
+        # Use run-specific prompts, fall back to global prompts
+        prompts_dict = None
+        if run_config.prompts:
+            prompts_dict = run_config.prompts.model_dump(exclude_none=True)
+        elif config.prompts:
+            prompts_dict = config.prompts.model_dump(exclude_none=True)
+
+        logger.info("Processing run %d/%d with prompts: %s", i + 1, len(selected_news), prompts_dict)
+
         run_id, error = await run_auto_generation_for_news(
             news_item,
             config.publish_time,
@@ -706,8 +736,15 @@ def update_scheduler_config(updates: dict) -> SchedulerConfig:
         config.generation_time = updates["generation_time"]
     if "publish_time" in updates:
         config.publish_time = updates["publish_time"]
-    if "videos_count" in updates:
-        config.videos_count = updates["videos_count"]
+    if "runs" in updates:
+        runs_data = updates["runs"]
+        if runs_data is None:
+            config.runs = []
+        else:
+            config.runs = [
+                ScheduledRunConfig(**r) if isinstance(r, dict) else r
+                for r in runs_data
+            ]
     if "selection_mode" in updates:
         config.selection_mode = updates["selection_mode"]
     if "prompts" in updates:
@@ -750,12 +787,16 @@ async def test_news_selection() -> dict:
     """
     config = _load_config()
 
+    # Get count from enabled runs
+    enabled_runs = [r for r in config.runs if r.enabled]
+    count = len(enabled_runs) if enabled_runs else 2  # Default to 2 if no runs configured
+
     logger.info("Testing news selection (mode=%s, count=%d)",
-                config.selection_mode, config.videos_count)
+                config.selection_mode, count)
 
     selected = await select_news(
         mode=config.selection_mode,
-        count=config.videos_count
+        count=count
     )
 
     # Extract reasoning if present (from LLM mode)
@@ -765,7 +806,7 @@ async def test_news_selection() -> dict:
 
     return {
         "selection_mode": config.selection_mode,
-        "count": config.videos_count,
+        "count": count,
         "reasoning": reasoning,
         "selected": [
             {
