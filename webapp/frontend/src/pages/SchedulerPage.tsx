@@ -17,8 +17,6 @@ import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import InputLabel from '@mui/material/InputLabel'
-import Radio from '@mui/material/Radio'
-import RadioGroup from '@mui/material/RadioGroup'
 import IconButton from '@mui/material/IconButton'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -29,11 +27,9 @@ import {
   disableScheduler,
   updateSchedulerConfig,
   triggerSchedulerRun,
-  testNewsSelection,
   SchedulerStatus,
   PromptTypeInfo,
   PromptSelections,
-  TestSelectionResult,
   ScheduledRunConfig,
 } from '../api/client'
 
@@ -59,50 +55,53 @@ function StatusChip({ status }: { status: string | null }) {
 export default function SchedulerPage() {
   const [status, setStatus] = useState<SchedulerStatus | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isInitialized, setIsInitialized] = useState(false)
   const [saving, setSaving] = useState(false)
   const [triggering, setTriggering] = useState(false)
-  const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<TestSelectionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   // Form state
   const [generationTime, setGenerationTime] = useState('10:00')
   const [publishTime, setPublishTime] = useState('evening')
-  const [selectionMode, setSelectionMode] = useState<'random' | 'llm'>('random')
 
   // Per-run configuration state
   const [runs, setRuns] = useState<ScheduledRunConfig[]>([
-    { enabled: true, prompts: null },
-    { enabled: true, prompts: null },
+    { enabled: true, prompts: null, selection_mode: 'random' },
+    { enabled: true, prompts: null, selection_mode: 'random' },
   ])
 
-  // Prompt selection state (default prompts)
+  // Prompt types for selection
   const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([])
-  const [selectedPrompts, setSelectedPrompts] = useState<PromptSelections>({})
 
-  const loadStatus = async () => {
+  const loadStatus = async (forceInit = false) => {
     try {
       const data = await fetchSchedulerStatus()
       setStatus(data)
-      // Initialize form with current config
-      setGenerationTime(data.config.generation_time)
-      setPublishTime(data.config.publish_time)
-      setSelectionMode(data.config.selection_mode)
-      // Initialize runs from config (or default to 2 runs if empty)
-      if (data.config.runs && data.config.runs.length > 0) {
-        setRuns(data.config.runs)
-      } else {
-        setRuns([
-          { enabled: true, prompts: null },
-          { enabled: true, prompts: null },
-        ])
-      }
-      // Initialize default prompt selections from config
-      if (data.config.prompts) {
-        setSelectedPrompts(data.config.prompts)
+
+      // Only initialize form with current config on first load or forceInit
+      if (forceInit || !isInitialized) {
+        setGenerationTime(data.config.generation_time || '10:00')
+        setPublishTime(data.config.publish_time || 'evening')
+
+        // Initialize runs from config (or default to 2 runs if empty)
+        if (data.config.runs && data.config.runs.length > 0) {
+          setRuns(data.config.runs.map(r => ({
+            enabled: r.enabled ?? true,
+            prompts: r.prompts || null,
+            selection_mode: r.selection_mode || 'random'
+          })))
+        } else {
+          setRuns([
+            { enabled: true, prompts: null, selection_mode: 'random' },
+            { enabled: true, prompts: null, selection_mode: 'random' },
+          ])
+        }
+
+        if (!isInitialized) setIsInitialized(true)
       }
     } catch (err) {
+      console.error('Failed to load scheduler status:', err)
       setError(err instanceof Error ? err.message : 'Failed to load scheduler status')
     } finally {
       setLoading(false)
@@ -111,10 +110,10 @@ export default function SchedulerPage() {
 
   useEffect(() => {
     loadStatus()
-    // Poll status every 30 seconds
-    const interval = setInterval(loadStatus, 30000)
+    // Poll status every 30 seconds - but don't overwrite form state
+    const interval = setInterval(() => loadStatus(false), 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [isInitialized])
 
   useEffect(() => {
     fetchAllPrompts()
@@ -152,13 +151,9 @@ export default function SchedulerPage() {
     setError(null)
     setSuccess(null)
     try {
-      // Only include prompts if at least one is selected
-      const hasPromptSelections = Object.values(selectedPrompts).some(v => v !== null && v !== undefined)
       await updateSchedulerConfig({
         generation_time: generationTime,
         publish_time: publishTime,
-        selection_mode: selectionMode,
-        prompts: hasPromptSelections ? selectedPrompts : undefined,
         runs: runs,
       })
       setSuccess('Configuration saved')
@@ -172,7 +167,7 @@ export default function SchedulerPage() {
 
   // Run management functions
   const handleAddRun = () => {
-    setRuns([...runs, { enabled: true, prompts: null }])
+    setRuns([...runs, { enabled: true, prompts: null, selection_mode: 'random' }])
   }
 
   const handleRemoveRun = (index: number) => {
@@ -184,6 +179,12 @@ export default function SchedulerPage() {
   const handleRunEnabledChange = (index: number, enabled: boolean) => {
     const newRuns = [...runs]
     newRuns[index] = { ...newRuns[index], enabled }
+    setRuns(newRuns)
+  }
+
+  const handleRunSelectionModeChange = (index: number, mode: 'random' | 'llm') => {
+    const newRuns = [...runs]
+    newRuns[index] = { ...newRuns[index], selection_mode: mode }
     setRuns(newRuns)
   }
 
@@ -209,22 +210,6 @@ export default function SchedulerPage() {
     setRuns(newRuns)
   }
 
-  const handlePromptChange = (promptType: string, value: string) => {
-    const keyMap: Record<string, keyof PromptSelections> = {
-      'dialogue': 'dialogue',
-      'image': 'image',
-      'research': 'research',
-      'yt-metadata': 'yt_metadata',
-    }
-    const key = keyMap[promptType]
-    if (key) {
-      setSelectedPrompts(prev => ({
-        ...prev,
-        [key]: value === '' ? null : value,
-      }))
-    }
-  }
-
   const handleTrigger = async () => {
     setTriggering(true)
     setError(null)
@@ -238,20 +223,6 @@ export default function SchedulerPage() {
       setError(err instanceof Error ? err.message : 'Failed to trigger run')
     } finally {
       setTriggering(false)
-    }
-  }
-
-  const handleTestSelection = async () => {
-    setTesting(true)
-    setError(null)
-    setTestResult(null)
-    try {
-      const result = await testNewsSelection()
-      setTestResult(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to test selection')
-    } finally {
-      setTesting(false)
     }
   }
 
@@ -426,6 +397,17 @@ export default function SchedulerPage() {
                 </Box>
                 {run.enabled && (
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <InputLabel>News Selection</InputLabel>
+                      <Select
+                        value={run.selection_mode || 'random'}
+                        label="News Selection"
+                        onChange={(e) => handleRunSelectionModeChange(index, e.target.value as 'random' | 'llm')}
+                      >
+                        <MenuItem value="random">Random</MenuItem>
+                        <MenuItem value="llm">LLM</MenuItem>
+                      </Select>
+                    </FormControl>
                     {promptTypes.filter(pt => ['dialogue', 'image', 'research', 'yt-metadata'].includes(pt.type)).map((pt) => {
                       const keyMap: Record<string, keyof PromptSelections> = {
                         'dialogue': 'dialogue',
@@ -462,134 +444,11 @@ export default function SchedulerPage() {
             </Card>
           ))}
 
-          <Divider sx={{ my: 2 }} />
-
-          <Typography variant="subtitle2" gutterBottom>
-            News Selection Mode
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            How to select news items for video generation.
-          </Typography>
-
-          <RadioGroup
-            value={selectionMode}
-            onChange={(e) => setSelectionMode(e.target.value as 'random' | 'llm')}
-            sx={{ mb: 2 }}
-          >
-            <FormControlLabel
-              value="random"
-              control={<Radio />}
-              label={
-                <Box>
-                  <Typography variant="body1">Random Selection</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Randomly pick news items from today's release
-                  </Typography>
-                </Box>
-              }
-            />
-            <FormControlLabel
-              value="llm"
-              control={<Radio />}
-              label={
-                <Box>
-                  <Typography variant="body1">LLM Selection (AI-powered)</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Use AI to select news based on historical YouTube performance data
-                  </Typography>
-                </Box>
-              }
-            />
-          </RadioGroup>
-
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleTestSelection}
-            disabled={testing}
-            sx={{ mb: 2 }}
-          >
-            {testing ? (
-              <>
-                <CircularProgress size={16} sx={{ mr: 1 }} />
-                Testing...
-              </>
-            ) : (
-              'Test Selection'
-            )}
-          </Button>
-
-          {testResult && (
-            <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Selection Result ({testResult.selection_mode} mode, {testResult.selected.length} items)
-              </Typography>
-              {testResult.reasoning && (
-                <Alert severity="info" sx={{ mb: 2 }}>
-                  <Typography variant="body2">
-                    <strong>LLM Reasoning:</strong> {testResult.reasoning}
-                  </Typography>
-                </Alert>
-              )}
-              {testResult.selected.map((item, index) => (
-                <Box key={item.id} sx={{ mb: 1, p: 1, bgcolor: 'white', borderRadius: 1 }}>
-                  <Typography variant="body2" fontWeight="bold">
-                    {index + 1}. [{item.category}] {item.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Rating: {item.rating.toFixed(1)} | {item.content.substring(0, 150)}...
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          )}
-
-          <Divider sx={{ my: 2 }} />
-
-          <Typography variant="subtitle2" gutterBottom>
-            Prompt Selection (optional)
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Override the active prompt for each step. Leave empty to use the currently active prompt.
-          </Typography>
-
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
-            {promptTypes.map((pt) => {
-              const keyMap: Record<string, keyof PromptSelections> = {
-                'dialogue': 'dialogue',
-                'image': 'image',
-                'research': 'research',
-                'yt-metadata': 'yt_metadata',
-              }
-              const key = keyMap[pt.type]
-              const currentValue = key ? selectedPrompts[key] ?? '' : ''
-              const activePrompt = pt.prompts.find(p => p.is_active)
-              return (
-                <FormControl key={pt.type} size="small" sx={{ minWidth: 200 }}>
-                  <InputLabel>{pt.label}</InputLabel>
-                  <Select
-                    value={currentValue}
-                    label={pt.label}
-                    onChange={(e) => handlePromptChange(pt.type, e.target.value as string)}
-                  >
-                    <MenuItem value="">
-                      <em>Active ({activePrompt?.name || 'none'})</em>
-                    </MenuItem>
-                    {pt.prompts.map((p) => (
-                      <MenuItem key={p.id} value={p.id}>
-                        {p.name}{p.is_active ? ' (active)' : ''}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              )
-            })}
-          </Box>
-
           <Button
             variant="contained"
             onClick={handleSaveConfig}
             disabled={saving}
+            sx={{ mt: 2 }}
           >
             {saving ? 'Saving...' : 'Save Configuration'}
           </Button>

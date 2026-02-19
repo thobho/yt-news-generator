@@ -885,6 +885,53 @@ def delete_run_for_run(run_id: str) -> dict:
     return {"run_id": run_id, "deleted_count": len(deleted)}
 
 
+def list_runs() -> list[dict]:
+    """
+    List all runs with their IDs and timestamps.
+    Returns list of dicts: [{'run_id': '...', 'created_at': '...'}]
+    """
+    output_storage = get_output_storage()
+    runs = []
+
+    if is_s3_enabled():
+        # List ALL keys once (single S3 call)
+        all_keys = output_storage.list_keys("")
+        
+        # Group keys by run_id
+        run_ids = set()
+        for key in all_keys:
+            parts = key.split("/", 1)
+            if parts and parts[0].startswith("run_"):
+                run_ids.add(parts[0])
+        
+        for run_id in sorted(list(run_ids), reverse=True):
+            runs.append({
+                "run_id": run_id,
+                "created_at": run_id.replace("run_", "").replace("_", " "),
+            })
+    else:
+        # Local filesystem mode
+        output_dir = _get_output_dir()
+        if not output_dir.exists():
+            return []
+
+        entries = [
+            entry for entry in output_dir.iterdir()
+            if entry.is_dir() and entry.name.startswith("run_")
+        ]
+        
+        # Sort by name descending (timestamp based)
+        entries.sort(key=lambda x: x.name, reverse=True)
+        
+        for entry in entries:
+            runs.append({
+                "run_id": entry.name,
+                "created_at": entry.name.replace("run_", "").replace("_", " "),
+            })
+
+    return runs
+
+
 def get_workflow_state_for_run(run_id: str) -> dict:
     """
     Determine current workflow state for a run.

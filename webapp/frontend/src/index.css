@@ -1705,3 +1705,32 @@ a.new-run-btn:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Load more button */
+.load-more-container {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.load-more-btn {
+  padding: 12px 32px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+  border-color: #ccc;
+}
+
+.load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

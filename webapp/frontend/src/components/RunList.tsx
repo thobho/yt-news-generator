@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
 import Settings from './Settings'
+
+const PAGE_SIZE = 20
 
 function formatDate(timestamp: string): string {
   const date = new Date(timestamp)
@@ -35,15 +37,34 @@ export default function RunList() {
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [runningTasks, setRunningTasks] = useState<AllRunningTasks>({})
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
-  const loadRuns = () => {
+  const loadRuns = useCallback(() => {
     setLoading(true)
-    fetchRuns()
-      .then(setRuns)
+    fetchRuns(PAGE_SIZE, 0)
+      .then((response) => {
+        setRuns(response.runs)
+        setHasMore(response.has_more)
+        setTotal(response.total)
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
+  }, [])
+
+  const loadMore = () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    fetchRuns(PAGE_SIZE, runs.length)
+      .then((response) => {
+        setRuns((prev) => [...prev, ...response.runs])
+        setHasMore(response.has_more)
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoadingMore(false))
   }
 
   const loadRunningTasks = () => {
@@ -196,6 +217,18 @@ export default function RunList() {
               )
             })}
           </div>
+
+          {hasMore && (
+            <div className="load-more-container">
+              <button
+                className="load-more-btn"
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Loading...' : `Load More (${runs.length} of ${total})`}
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>

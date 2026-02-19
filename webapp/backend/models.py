@@ -103,6 +103,7 @@ class PromptSelections(BaseModel):
 class ScheduledRunConfig(BaseModel):
     """Configuration for a single scheduled run."""
     enabled: bool = True  # Can disable individual runs
+    selection_mode: str = "random"  # "random" or "llm"
     prompts: Optional[PromptSelections] = None  # Override prompts for this run
 
 
@@ -111,8 +112,6 @@ class SchedulerConfig(BaseModel):
     enabled: bool = False
     generation_time: str = "10:00"
     publish_time: str = "evening"
-    selection_mode: str = "random"  # "random" or "llm"
-    prompts: Optional[PromptSelections] = None  # Default prompts (fallback)
     runs: list[ScheduledRunConfig] = []  # Per-run configurations
 
 

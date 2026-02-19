@@ -64,6 +64,7 @@ def fetch_video_stats(video_id: str) -> dict:
         Dict with stats: views, estimatedMinutesWatched, averageViewPercentage,
         likes, comments, shares
     """
+    logger.info("Fetching YouTube stats from API for video: %s", video_id)
     analytics = get_youtube_analytics_service()
 
     # Get stats from video publish date to today
@@ -71,17 +72,24 @@ def fetch_video_stats(video_id: str) -> dict:
     end_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     start_date = (datetime.now(timezone.utc) - timedelta(days=365)).strftime("%Y-%m-%d")
 
-    response = analytics.reports().query(
-        ids="channel==MINE",
-        startDate=start_date,
-        endDate=end_date,
-        metrics="views,estimatedMinutesWatched,averageViewPercentage,likes,comments,shares,subscribersGained",
-        filters=f"video=={video_id}",
-    ).execute()
+    try:
+        response = analytics.reports().query(
+            ids="channel==MINE",
+            startDate=start_date,
+            endDate=end_date,
+            metrics="views,estimatedMinutesWatched,averageViewPercentage,likes,comments,shares,subscribersGained",
+            filters=f"video=={video_id}",
+        ).execute()
+        
+        logger.debug("YouTube API raw response for %s: %s", video_id, response)
+    except Exception as e:
+        logger.error("YouTube Analytics API query failed for %s: %s", video_id, e)
+        raise
 
     # Parse response
     rows = response.get("rows", [])
     if not rows:
+        logger.info("No stats rows returned from API for video: %s", video_id)
         return {
             "views": 0,
             "estimatedMinutesWatched": 0.0,
@@ -102,16 +110,18 @@ def fetch_video_stats(video_id: str) -> dict:
         value = row[i] if i < len(row) else 0
         stats[name] = value
 
+    logger.info("Parsed stats for %s: views=%s, likes=%s", video_id, stats.get('views'), stats.get('likes'))
     return stats
 
 
-def get_or_fetch_stats(run_id: str, force: bool = False) -> Optional[dict]:
+def get_or_fetch_stats(run_id: str, force: bool = False, max_age_hours: Optional[int] = None) -> Optional[dict]:
     """
     Get cached stats or fetch fresh from YouTube Analytics API.
 
     Args:
         run_id: Run ID (e.g., 'run_2026-01-25_16-46-47')
         force: If True, fetch fresh stats even if cached
+        max_age_hours: If provided, fetch fresh stats if cached ones are older than this
 
     Returns:
         Dict with video_id, fetched_at, and stats, or None if no YT upload
@@ -133,16 +143,42 @@ def get_or_fetch_stats(run_id: str, force: bool = False) -> Optional[dict]:
     if not force and run_storage.exists(stats_path):
         try:
             cached = json.loads(run_storage.read_text(stats_path))
-            return cached
-        except (json.JSONDecodeError, Exception):
+            
+            # Check age if requested
+            if max_age_hours is not None:
+                fetched_at_str = cached.get("fetched_at")
+                if fetched_at_str:
+                    fetched_at = datetime.fromisoformat(fetched_at_str)
+                    # Handle timezone-naive vs timezone-aware
+                    if fetched_at.tzinfo is None:
+                        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+                    
+                    age = datetime.now(timezone.utc) - fetched_at
+                    if age < timedelta(hours=max_age_hours):
+                        logger.debug("Using cached stats for run %s (age: %s)", run_id, age)
+                        return cached
+                    else:
+                        logger.info("Cached stats for %s are too old (%s hours), refreshing", run_id, age.total_seconds() / 3600)
+                else:
+                    logger.info("Cached stats for %s have no timestamp, refreshing", run_id)
+            else:
+                logger.debug("Using cached stats for run %s (no max_age check)", run_id)
+                return cached
+        except (json.JSONDecodeError, Exception) as e:
+            logger.debug("Error reading cached stats for %s: %s", run_id, e)
             pass
+
+    # Check if credentials exist before trying to fetch
+    if not TOKEN_PATH.exists():
+        logger.warning("YouTube token missing, skipping stats fetch for %s", run_id)
+        return None
 
     # Fetch fresh stats
     try:
         stats = fetch_video_stats(video_id)
     except Exception as e:
-        logger.error("Failed to fetch stats for video %s: %s", video_id, e)
-        raise
+        logger.error("Failed to fetch stats for video %s in run %s: %s", video_id, run_id, e)
+        return None # Return None instead of raising to allow process to continue
 
     result = {
         "video_id": video_id,
@@ -152,6 +188,6 @@ def get_or_fetch_stats(run_id: str, force: bool = False) -> Optional[dict]:
 
     # Cache the result
     run_storage.write_text(stats_path, json.dumps(result, indent=2))
-    logger.info("Fetched and cached stats for video %s in run %s", video_id, run_id)
+    logger.info("Successfully fetched and cached fresh stats for video %s in run %s", video_id, run_id)
 
     return result

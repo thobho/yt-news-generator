@@ -166,8 +166,14 @@ export interface TaskStatus {
 
 // Fetch functions
 
-export async function fetchRuns(): Promise<RunSummary[]> {
-  const response = await fetch(`${API_BASE}/runs`);
+export interface RunsListResponse {
+  runs: RunSummary[];
+  total: number;
+  has_more: boolean;
+}
+
+export async function fetchRuns(limit: number = 20, offset: number = 0): Promise<RunsListResponse> {
+  const response = await fetch(`${API_BASE}/runs?limit=${limit}&offset=${offset}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch runs: ${response.statusText}`);
   }
@@ -770,6 +776,7 @@ export interface PromptSelections {
 
 export interface ScheduledRunConfig {
   enabled: boolean;
+  selection_mode: 'random' | 'llm';
   prompts?: PromptSelections | null;
 }
 
@@ -777,8 +784,6 @@ export interface SchedulerConfig {
   enabled: boolean;
   generation_time: string;
   publish_time: string;
-  selection_mode: 'random' | 'llm';
-  prompts?: PromptSelections | null;  // Default prompts
   runs: ScheduledRunConfig[];  // Per-run configurations
 }
 
@@ -834,32 +839,6 @@ export async function updateSchedulerConfig(config: Partial<SchedulerConfig>): P
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to update scheduler config');
-  }
-  return response.json();
-}
-
-export interface SelectedNewsItem {
-  id: string;
-  title: string;
-  category: string;
-  rating: number;
-  content: string;
-}
-
-export interface TestSelectionResult {
-  selection_mode: 'random' | 'llm';
-  count: number;
-  reasoning?: string | null;
-  selected: SelectedNewsItem[];
-}
-
-export async function testNewsSelection(): Promise<TestSelectionResult> {
-  const response = await fetch(`${API_BASE}/scheduler/test-selection`, {
-    method: 'POST',
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || 'Failed to test news selection');
   }
   return response.json();
 }

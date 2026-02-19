@@ -42,10 +42,12 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+logs/
 
 # Temporary files
 *.tmp
 *.temp
+tmp/
 
 # Voice reference audio files
 data/voices/
@@ -54,3 +56,4 @@ data/voices/
 credentials/
 *.pem
 scripts/vps-server.sh
+

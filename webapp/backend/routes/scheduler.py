@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from ..services import scheduler as scheduler_service
-from ..models import SchedulerConfig, SchedulerStatus, PromptSelections, ScheduledRunConfig
+from ..models import SchedulerConfig, SchedulerStatus, ScheduledRunConfig
 
 router = APIRouter(prefix="/api/scheduler", tags=["scheduler"])
 
@@ -17,8 +17,6 @@ class SchedulerConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     generation_time: Optional[str] = None
     publish_time: Optional[str] = None
-    selection_mode: Optional[str] = None  # "random" or "llm"
-    prompts: Optional[PromptSelections] = None  # Default prompts
     runs: Optional[list[ScheduledRunConfig]] = None  # Per-run configurations
 
 

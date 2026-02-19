@@ -47,6 +47,7 @@ class PromptSelections(BaseModel):
 class ScheduledRunConfig(BaseModel):
     """Configuration for a single scheduled run."""
     enabled: bool = True  # Can disable individual runs
+    selection_mode: SelectionMode = "random"  # Per-run selection mode
     prompts: Optional[PromptSelections] = None  # Override prompts for this run
 
 
@@ -55,8 +56,6 @@ class SchedulerConfig(BaseModel):
     enabled: bool = False
     generation_time: str = "10:00"  # HH:MM format, Warsaw timezone
     publish_time: str = "evening"  # Schedule option: "now" or "evening"
-    selection_mode: SelectionMode = "random"  # How to select news
-    prompts: Optional[PromptSelections] = None  # Default prompts (fallback)
     runs: list[ScheduledRunConfig] = []  # Per-run configurations
 
 
@@ -122,27 +121,21 @@ def _save_state(state: SchedulerState) -> None:
     storage.write_text(SCHEDULER_STATE_KEY, content)
 
 
-async def select_news_random(count: int) -> list[dict]:
+async def select_news_random(count: int, items: list[dict]) -> list[dict]:
     """
-    Select news items randomly from InfoPigula.
+    Select news items randomly from provided list.
 
     Args:
         count: Number of news items to select
+        items: List of available news items
 
     Returns:
         List of selected news items
     """
-    logger.info("Selecting %d random news items", count)
-
-    try:
-        data = await infopigula.fetch_news()
-        items = data.get("items", [])
-    except Exception as e:
-        logger.error("Failed to fetch news from InfoPigula: %s", e)
-        return []
+    logger.info("Selecting %d random news items from %d available", count, len(items))
 
     if not items:
-        logger.warning("No news items available from InfoPigula")
+        logger.warning("No news items available for random selection")
         return []
 
     selected = random.sample(items, min(count, len(items)))
@@ -313,6 +306,8 @@ def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
 def _refresh_stats_for_recent_runs(limit: int = 60) -> int:
     """
     Refresh YouTube stats for recent runs that have uploads.
+    Only refreshes if stats are older than 24 hours.
+    Parallelized to speed up the process.
 
     Args:
         limit: Maximum number of runs to process
@@ -320,44 +315,53 @@ def _refresh_stats_for_recent_runs(limit: int = 60) -> int:
     Returns:
         Number of runs updated
     """
+    from concurrent.futures import ThreadPoolExecutor
+    
+    logger.info("Starting parallel YouTube stats refresh for up to %d runs", limit)
     runs = pipeline.list_runs()
-    updated = 0
-
+    
+    # Filter runs that actually have YT uploads to avoid unnecessary threads
+    candidate_runs = []
     for run_info in runs[:limit]:
         run_id = run_info["run_id"]
-        try:
-            result = youtube_analytics.get_or_fetch_stats(run_id, force=True)
-            if result:
-                updated += 1
-        except Exception as e:
-            logger.debug("Could not refresh stats for %s: %s", run_id, e)
+        candidate_runs.append(run_id)
 
-    logger.info("Refreshed YouTube stats for %d runs", updated)
+    def refresh_task(run_id):
+        try:
+            logger.info("  Starting refresh task for run: %s", run_id)
+            # Only refresh if older than 24 hours
+            result = youtube_analytics.get_or_fetch_stats(run_id, force=False, max_age_hours=24)
+            logger.info("  Completed refresh task for run: %s (result: %s)", run_id, "updated" if result else "cached/skipped")
+            return 1 if result else 0
+        except Exception as e:
+            logger.error("  Error in refresh task for %s: %s", run_id, e)
+            return 0
+
+    # Use max 10 threads to avoid hitting API rate limits too hard
+    updated = 0
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(refresh_task, candidate_runs))
+        updated = sum(results)
+
+    logger.info("Refreshed YouTube stats for %d runs (using 24h cache and parallel fetch)", updated)
     return updated
 
 
-async def select_news_llm(count: int) -> list[dict]:
+async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
     """
-    Select news items using LLM based on historical performance.
+    Select news items using LLM based on historical performance from provided list.
 
     Args:
         count: Number of news items to select
+        items: List of available news items
 
     Returns:
         List of selected news items
     """
-    logger.info("Selecting %d news items using LLM", count)
-
-    # Fetch available news
-    try:
-        data = await infopigula.fetch_news()
-        items = data.get("items", [])
-    except Exception as e:
-        logger.error("Failed to fetch news from InfoPigula: %s", e)
-        return []
+    logger.info("Selecting %d news items using LLM from %d available", count, len(items))
 
     if not items:
-        logger.warning("No news items available from InfoPigula")
+        logger.warning("No news items available for LLM selection")
         return []
 
     # Refresh stats for recent runs first
@@ -366,6 +370,7 @@ async def select_news_llm(count: int) -> list[dict]:
 
     # Get historical data
     runs_with_stats = await asyncio.to_thread(_get_recent_runs_with_stats, 60)
+    logger.info("Found %d historical runs with YouTube stats", len(runs_with_stats))
 
     # Get prompt
     prompt_template, temperature = _get_news_selection_prompt()
@@ -381,17 +386,14 @@ async def select_news_llm(count: int) -> list[dict]:
     )
 
     # Log full prompt for debugging
-    logger.info("=== LLM NEWS SELECTION PROMPT ===")
-    logger.info("Historical runs with stats: %d", len(runs_with_stats))
-    logger.info("Available news items: %d", len(items))
-    logger.info("Requesting selection of: %d items", count)
-    logger.info("--- FULL PROMPT START ---")
+    logger.info("=== FINAL LLM NEWS SELECTION PROMPT ===")
     logger.info(prompt)
-    logger.info("--- FULL PROMPT END ---")
+    logger.info("========================================")
 
     # Call LLM with structured output
     try:
         import openai
+        logger.info("Calling OpenAI API (model=gpt-4o)...")
 
         client = openai.OpenAI()
         response = client.chat.completions.create(
@@ -429,7 +431,8 @@ async def select_news_llm(count: int) -> list[dict]:
         )
 
         result_text = response.choices[0].message.content.strip()
-        logger.debug("LLM response: %s", result_text)
+        logger.info("OpenAI API response received")
+        logger.debug("Raw LLM response: %s", result_text)
 
         result = json.loads(result_text)
         selected_ids = result.get("selected_ids", [])
@@ -452,26 +455,27 @@ async def select_news_llm(count: int) -> list[dict]:
         return selected[:count]
 
     except Exception as e:
-        logger.error("LLM news selection failed: %s", e)
+        logger.error("LLM news selection failed: %s", e, exc_info=True)
         logger.info("Falling back to random selection")
-        return await select_news_random(count)
+        return await select_news_random(count, items)
 
 
-async def select_news(mode: SelectionMode, count: int) -> list[dict]:
+async def select_news(mode: SelectionMode, count: int, items: list[dict]) -> list[dict]:
     """
     Select news items for video generation.
 
     Args:
         mode: Selection mode ("random" or "llm")
         count: Number of news items to select
+        items: List of available news items
 
     Returns:
         List of selected news items
     """
     if mode == "llm":
-        return await select_news_llm(count)
+        return await select_news_llm(count, items)
     else:
-        return await select_news_random(count)
+        return await select_news_random(count, items)
 
 
 async def run_auto_generation_for_news(
@@ -571,32 +575,75 @@ async def run_auto_generation() -> dict:
         logger.error("Auto-generation aborted: no runs configured")
         return {"status": "error", "message": "No runs configured"}
 
-    # Select news using configured mode
-    selected_news = await select_news(
-        mode=config.selection_mode,
-        count=len(enabled_runs)
-    )
+    # Fetch available news from InfoPigula
+    try:
+        data = await infopigula.fetch_news()
+        available_items = data.get("items", [])
+    except Exception as e:
+        logger.error("Failed to fetch news from InfoPigula: %s", e)
+        available_items = []
 
-    if not selected_news:
+    if not available_items:
         state.last_run_status = "error"
-        state.last_run_errors = ["No news items available"]
+        state.last_run_errors = ["No news items available from InfoPigula"]
         _save_state(state)
-        logger.error("Auto-generation aborted: no news available")
+        logger.error("Auto-generation aborted: no news items available")
         return {"status": "error", "message": "No news available"}
+
+    # Determine selection mode for each enabled run and group them
+    runs_by_mode: dict[str, list[int]] = {"llm": [], "random": []}
+    for i, run_config in enumerate(enabled_runs):
+        mode = run_config.selection_mode or "random"
+        runs_by_mode[mode].append(i)
+
+    selected_news_map = {} # run_index -> news_item
+    remaining_items = list(available_items)
+
+    # First handle LLM selections
+    if runs_by_mode["llm"]:
+        count = len(runs_by_mode["llm"])
+        selected = await select_news_llm(count, remaining_items)
+        for i, idx in enumerate(runs_by_mode["llm"]):
+            if i < len(selected):
+                item = selected[i]
+                selected_news_map[idx] = item
+                # Remove selected items from remaining to avoid duplicates
+                item_id = item.get("id")
+                remaining_items = [it for it in remaining_items if it.get("id") != item_id]
+
+    # Then handle random selections
+    if runs_by_mode["random"]:
+        count = len(runs_by_mode["random"])
+        selected = await select_news_random(count, remaining_items)
+        for i, idx in enumerate(runs_by_mode["random"]):
+            if i < len(selected):
+                item = selected[i]
+                selected_news_map[idx] = item
+                # Remove selected items from remaining
+                item_id = item.get("id")
+                remaining_items = [it for it in remaining_items if it.get("id") != item_id]
+
+    if not selected_news_map:
+        state.last_run_status = "error"
+        state.last_run_errors = ["No news items selected"]
+        _save_state(state)
+        logger.error("Auto-generation aborted: no news selected")
+        return {"status": "error", "message": "No news selected"}
 
     # Generate videos for each selected news with per-run config
     results = []
-    for i, news_item in enumerate(selected_news):
-        run_config = enabled_runs[i] if i < len(enabled_runs) else enabled_runs[-1]
+    # Use sorted indices to process in order
+    for idx in sorted(selected_news_map.keys()):
+        news_item = selected_news_map[idx]
+        run_config = enabled_runs[idx]
 
-        # Use run-specific prompts, fall back to global prompts
+        # Use run-specific prompts (or None to use active prompts)
         prompts_dict = None
         if run_config.prompts:
             prompts_dict = run_config.prompts.model_dump(exclude_none=True)
-        elif config.prompts:
-            prompts_dict = config.prompts.model_dump(exclude_none=True)
 
-        logger.info("Processing run %d/%d with prompts: %s", i + 1, len(selected_news), prompts_dict)
+        logger.info("Processing run %d/%d (original index %d) with prompts: %s",
+                    len(results) + 1, len(selected_news_map), idx, prompts_dict)
 
         run_id, error = await run_auto_generation_for_news(
             news_item,
@@ -611,7 +658,7 @@ async def run_auto_generation() -> dict:
 
     # Determine overall status
     successful = sum(1 for r in results if r["error"] is None)
-    if successful == len(results):
+    if successful == len(results) and len(results) == len(enabled_runs):
         state.last_run_status = "success"
     elif successful > 0:
         state.last_run_status = "partial"
@@ -626,7 +673,7 @@ async def run_auto_generation() -> dict:
     return {
         "status": state.last_run_status,
         "successful": successful,
-        "total": len(results),
+        "total": len(enabled_runs),
         "runs": state.last_run_runs,
         "errors": state.last_run_errors,
     }
@@ -745,16 +792,6 @@ def update_scheduler_config(updates: dict) -> SchedulerConfig:
                 ScheduledRunConfig(**r) if isinstance(r, dict) else r
                 for r in runs_data
             ]
-    if "selection_mode" in updates:
-        config.selection_mode = updates["selection_mode"]
-    if "prompts" in updates:
-        prompts_data = updates["prompts"]
-        if prompts_data is None:
-            config.prompts = None
-        elif isinstance(prompts_data, PromptSelections):
-            config.prompts = prompts_data
-        else:
-            config.prompts = PromptSelections(**prompts_data)
 
     _save_config(config)
     _config = config
@@ -787,26 +824,79 @@ async def test_news_selection() -> dict:
     """
     config = _load_config()
 
-    # Get count from enabled runs
+    # Get enabled runs from config
     enabled_runs = [r for r in config.runs if r.enabled]
-    count = len(enabled_runs) if enabled_runs else 2  # Default to 2 if no runs configured
+    if not enabled_runs:
+        # Default fallback if no runs
+        enabled_runs = [ScheduledRunConfig(enabled=True, selection_mode="random")]
 
-    logger.info("Testing news selection (mode=%s, count=%d)",
-                config.selection_mode, count)
+    logger.info("Testing news selection for %d runs", len(enabled_runs))
 
-    selected = await select_news(
-        mode=config.selection_mode,
-        count=count
-    )
+    # Fetch available news
+    try:
+        data = await infopigula.fetch_news()
+        available_items = data.get("items", [])
+    except Exception as e:
+        logger.error("Failed to fetch news from InfoPigula: %s", e)
+        available_items = []
+
+    if not available_items:
+        return {"selection_mode": "error", "count": 0, "selected": []}
+
+    # Determine selection mode for each enabled run and group them
+    runs_by_mode: dict[str, list[int]] = {"llm": [], "random": []}
+    for i, run_config in enumerate(enabled_runs):
+        mode = run_config.selection_mode or "random"
+        if mode not in runs_by_mode:
+            mode = "random"  # Fallback
+        runs_by_mode[mode].append(i)
+
+    selected_news_map = {} # run_index -> news_item
+    remaining_items = list(available_items)
+
+    # First handle LLM selections
+    if runs_by_mode["llm"]:
+        count = len(runs_by_mode["llm"])
+        selected = await select_news_llm(count, remaining_items)
+        for i, idx in enumerate(runs_by_mode["llm"]):
+            if i < len(selected):
+                item = selected[i]
+                selected_news_map[idx] = item
+                item_id = item.get("id")
+                remaining_items = [it for it in remaining_items if it.get("id") != item_id]
+
+    # Then handle random selections
+    if runs_by_mode["random"]:
+        count = len(runs_by_mode["random"])
+        selected = await select_news_random(count, remaining_items)
+        for i, idx in enumerate(runs_by_mode["random"]):
+            if i < len(selected):
+                item = selected[i]
+                selected_news_map[idx] = item
+                item_id = item.get("id")
+                remaining_items = [it for it in remaining_items if it.get("id") != item_id]
+
+    # Reassemble selected news in order
+    selected_items = []
+    for idx in sorted(selected_news_map.keys()):
+        selected_items.append(selected_news_map[idx])
 
     # Extract reasoning if present (from LLM mode)
     reasoning = None
-    if selected and "_llm_reasoning" in selected[0]:
-        reasoning = selected[0]["_llm_reasoning"]
+    if selected_items and "_llm_reasoning" in selected_items[0]:
+        reasoning = selected_items[0]["_llm_reasoning"]
+
+    # Determine mode label based on run configs
+    if len(runs_by_mode["llm"]) > 0 and len(runs_by_mode["random"]) > 0:
+        mode_label = "mixed"
+    elif len(runs_by_mode["llm"]) > 0:
+        mode_label = "llm"
+    else:
+        mode_label = "random"
 
     return {
-        "selection_mode": config.selection_mode,
-        "count": count,
+        "selection_mode": mode_label,
+        "count": len(selected_items),
         "reasoning": reasoning,
         "selected": [
             {
@@ -816,6 +906,6 @@ async def test_news_selection() -> dict:
                 "rating": item.get("rating", 0),
                 "content": item.get("content", "")[:300],
             }
-            for item in selected
+            for item in selected_items
         ]
     }

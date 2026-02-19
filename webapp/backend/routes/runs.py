@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from pydantic import BaseModel
 
 from ..models import RunSummary, RunDetail, RunFiles, WorkflowState, YouTubeUpload
 from ..services import pipeline
@@ -174,15 +175,26 @@ def _build_run_summary_from_keys(run_id: str, run_keys: set[str], title: Optiona
     )
 
 
-@router.get("", response_model=list[RunSummary])
-async def list_runs():
-    """List all runs with summary info."""
+class RunsListResponse(BaseModel):
+    """Response for paginated runs list."""
+    runs: list[RunSummary]
+    total: int
+    has_more: bool
+
+
+@router.get("")
+async def list_runs(limit: int = 20, offset: int = 0) -> RunsListResponse:
+    """List runs with pagination support."""
     cache = get_cache()
 
     # Check cache first
     cached = cache.get("runs_list")
     if cached is not None:
-        return cached
+        # Apply pagination to cached result
+        total = len(cached)
+        paginated_runs = cached[offset:offset + limit]
+        has_more = offset + limit < total
+        return RunsListResponse(runs=paginated_runs, total=total, has_more=has_more)
 
     output_storage = get_output_storage()
     runs = []
@@ -276,10 +288,15 @@ async def list_runs():
     # Sort by timestamp, newest first
     runs.sort(key=lambda r: r.timestamp, reverse=True)
 
-    # Cache the result
+    # Cache the full result
     cache.set("runs_list", runs)
 
-    return runs
+    # Apply pagination
+    total = len(runs)
+    paginated_runs = runs[offset:offset + limit]
+    has_more = offset + limit < total
+
+    return RunsListResponse(runs=paginated_runs, total=total, has_more=has_more)
 
 
 def _read_json_file(run_storage, key: str) -> Optional[dict]:

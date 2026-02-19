@@ -1,4 +1,5 @@
 import sys
+import traceback
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -34,6 +35,23 @@ PUBLIC_PATHS = [
 ]
 
 
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log every request for debugging."""
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"Incoming request: {request.method} {request.url.path}")
+        try:
+            response = await call_next(request)
+            logger.info(f"Response: {response.status_code} for {request.method} {request.url.path}")
+            return response
+        except Exception as e:
+            logger.error(f"Unhandled error during request {request.method} {request.url.path}: {str(e)}")
+            logger.error(traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal Server Error", "error": str(e)}
+            )
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware to protect API routes with session authentication."""
 
@@ -55,6 +73,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Validate session
         token = request.cookies.get(COOKIE_NAME)
         if not auth_service.validate_session(token):
+            logger.warning(f"Authentication failed for path: {path}")
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Not authenticated"}
@@ -69,17 +88,29 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global exception caught: {str(exc)}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal Server Error", "message": str(exc)}
+    )
+
 logger.info("Starting YT News Generator Dashboard API")
 
 # Configure CORS for frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000", "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Add logging middleware first to catch everything
+app.add_middleware(RequestLoggingMiddleware)
 # Add authentication middleware
 app.add_middleware(AuthMiddleware)
 
