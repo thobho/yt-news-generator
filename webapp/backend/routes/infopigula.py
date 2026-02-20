@@ -1,5 +1,8 @@
 """
-InfoPigula routes - API endpoints for fetching news from infopigula.pl.
+News routes — fetch today's news for a tenant via its configured NewsSource.
+
+URL is still /api/infopigula/news until Task 06 renames it to
+/api/tenants/{tenant_id}/news and wires in the tenant path parameter.
 """
 
 from typing import Optional
@@ -7,12 +10,13 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..services import infopigula
+from ..config.tenant_registry import get_tenant
+from ..services.news_source import get_news_source
 
 router = APIRouter(prefix="/api/infopigula", tags=["infopigula"])
 
 
-class NewsSource(BaseModel):
+class NewsSourceModel(BaseModel):
     name: str
     url: str
 
@@ -24,7 +28,7 @@ class NewsItem(BaseModel):
     category: str
     rating: float
     total_votes: int
-    source: NewsSource
+    source: NewsSourceModel
 
 
 class NewsResponse(BaseModel):
@@ -35,9 +39,11 @@ class NewsResponse(BaseModel):
 
 @router.get("/news", response_model=NewsResponse)
 async def get_news():
-    """Fetch the latest news release from InfoPigula."""
+    """Fetch the latest news release for the pl tenant (default until Task 06)."""
+    tenant = get_tenant("pl")
+    source = get_news_source(tenant)
     try:
-        data = await infopigula.fetch_news()
+        data = await source.fetch_news()
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:

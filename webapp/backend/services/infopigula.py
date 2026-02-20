@@ -84,9 +84,9 @@ def _strip_html(html: str) -> str:
     return soup.get_text(separator="\n", strip=True)
 
 
-async def fetch_news() -> dict:
+async def fetch_news_from_infopigula() -> dict:
     """
-    Fetch the latest news release.
+    Fetch the latest news release from infopigula.pl.
 
     Returns:
         Dict with title, publish_date, and items list
@@ -134,3 +134,6 @@ async def fetch_news() -> dict:
         "publish_date": data.get("publishDate", ""),
         "items": items,
     }
+
+# Backward-compat alias
+fetch_news = fetch_news_from_infopigula
