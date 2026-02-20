@@ -16,8 +16,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from storage_config import get_config_storage, is_s3_enabled
 
-# Settings file location
-SETTINGS_FILE = PROJECT_ROOT / "webapp" / "settings.json"
+# Settings key within tenant data storage
 SETTINGS_KEY = "settings.json"
 
 # Available prompt versions

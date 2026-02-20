@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from logging_config import get_logger
-from storage_config import get_output_storage, get_run_storage, is_s3_enabled
+from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, is_s3_enabled
 
 logger = get_logger(__name__)
 
@@ -165,9 +165,8 @@ async def list_analytics_runs():
         ])
         runs = [r for r in analytics_runs if r is not None]
     else:
-        # Local filesystem
-        from storage_config import get_storage_dir
-        output_dir = get_storage_dir() / "output"
+        # Local filesystem — tenant-aware via storage_config ContextVar
+        output_dir = get_tenant_output_dir()
         if not output_dir.exists():
             return []
 
@@ -227,8 +226,7 @@ async def _refresh_all_stats():
             if len(parts) > 1 and parts[0].startswith("run_") and parts[1] == "yt_upload.json":
                 run_ids_with_yt.add(parts[0])
     else:
-        from storage_config import get_storage_dir
-        output_dir = get_storage_dir() / "output"
+        output_dir = get_tenant_output_dir()
         run_ids_with_yt = set()
         if output_dir.exists():
             for entry in output_dir.iterdir():

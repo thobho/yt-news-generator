@@ -8,9 +8,16 @@ Environment variables:
     S3_BUCKET: S3 bucket name (required if STORAGE_BACKEND=s3)
     S3_REGION: AWS region (default: "us-east-1")
     DEV_MODE: Set to "1" or "true" to force local storage (default: auto-detect)
+
+Multi-tenant support:
+    All storage functions are tenant-aware via a ContextVar (_tenant_prefix).
+    Set the current tenant prefix with set_tenant_prefix() before calling storage
+    functions, or use the FastAPI storage_dep dependency (added in task 06).
+    Default prefix is "tenants/pl" (the original single-tenant data location).
 """
 
 import os
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
@@ -24,6 +31,20 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 # Storage directory for local mode
 STORAGE_DIR = PROJECT_ROOT / "storage"
+
+# Current tenant storage prefix — set per-request via set_tenant_prefix().
+# Default "tenants/pl" maps to the original single-tenant storage location.
+_tenant_prefix: ContextVar[str] = ContextVar("tenant_prefix", default="tenants/pl")
+
+
+def set_tenant_prefix(prefix: str) -> None:
+    """Set the tenant storage prefix for the current async context."""
+    _tenant_prefix.set(prefix)
+
+
+def get_tenant_prefix() -> str:
+    """Get the current tenant storage prefix (e.g. 'tenants/pl')."""
+    return _tenant_prefix.get()
 
 
 def is_dev_mode() -> bool:
@@ -75,64 +96,67 @@ def get_storage_dir() -> Path:
     return STORAGE_DIR
 
 
+def get_tenant_output_dir() -> Path:
+    """
+    Get the output directory path for the current tenant (local mode only).
+    e.g. storage/tenants/pl/output
+    """
+    return STORAGE_DIR / _tenant_prefix.get() / "output"
+
+
 def get_data_storage() -> StorageBackend:
     """
-    Get storage backend for the data/ directory.
-    Contains prompts, media, and news seeds.
+    Get storage backend for the data/ directory of the current tenant.
+    Contains prompts, media, news seeds, and settings.
     """
+    prefix = _tenant_prefix.get()
     if is_s3_enabled():
         config = get_s3_config()
         return S3StorageBackend(
             bucket=config["bucket"],
-            prefix="data",
+            prefix=f"{prefix}/data",
             region=config["region"]
         )
-    return LocalStorageBackend(STORAGE_DIR / "data")
+    return LocalStorageBackend(STORAGE_DIR / prefix / "data")
 
 
 def get_output_storage() -> StorageBackend:
     """
-    Get storage backend for the output/ directory.
+    Get storage backend for the output/ directory of the current tenant.
     Contains run directories with generated content.
     """
+    prefix = _tenant_prefix.get()
     if is_s3_enabled():
         config = get_s3_config()
         return S3StorageBackend(
             bucket=config["bucket"],
-            prefix="output",
+            prefix=f"{prefix}/output",
             region=config["region"]
         )
-    return LocalStorageBackend(STORAGE_DIR / "output")
+    return LocalStorageBackend(STORAGE_DIR / prefix / "output")
 
 
 def get_config_storage() -> StorageBackend:
     """
     Get storage backend for configuration (settings.json).
-    Stored in data/ folder to keep state across deploys.
+    Alias for get_data_storage() — stored in the tenant data/ folder.
     """
-    if is_s3_enabled():
-        config = get_s3_config()
-        return S3StorageBackend(
-            bucket=config["bucket"],
-            prefix="data",
-            region=config["region"]
-        )
-    return LocalStorageBackend(STORAGE_DIR / "data")
+    return get_data_storage()
 
 
 def get_run_storage(run_id: str) -> StorageBackend:
     """
-    Get storage backend for a specific run directory.
-    Convenience function that returns output storage with run prefix.
+    Get storage backend for a specific run directory of the current tenant.
     """
+    prefix = _tenant_prefix.get()
     if is_s3_enabled():
         config = get_s3_config()
         return S3StorageBackend(
             bucket=config["bucket"],
-            prefix=f"output/{run_id}",
+            prefix=f"{prefix}/output/{run_id}",
             region=config["region"]
         )
-    return LocalStorageBackend(STORAGE_DIR / "output" / run_id)
+    return LocalStorageBackend(STORAGE_DIR / prefix / "output" / run_id)
 
 
 # For modules that need the raw project root path (e.g., Remotion)
@@ -142,8 +166,8 @@ def get_project_root() -> Path:
 
 
 def ensure_storage_dirs() -> None:
-    """Create local storage directories if they don't exist."""
+    """Create local storage directories for the current tenant if they don't exist."""
     if not is_s3_enabled():
-        (STORAGE_DIR / "data").mkdir(parents=True, exist_ok=True)
-        (STORAGE_DIR / "output").mkdir(parents=True, exist_ok=True)
-        (STORAGE_DIR / "config").mkdir(parents=True, exist_ok=True)
+        prefix = _tenant_prefix.get()
+        (STORAGE_DIR / prefix / "data").mkdir(parents=True, exist_ok=True)
+        (STORAGE_DIR / prefix / "output").mkdir(parents=True, exist_ok=True)

@@ -17,14 +17,14 @@ from ..services.cache import get_cache
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from storage_config import get_output_storage, get_run_storage, get_storage_dir, is_s3_enabled
+from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, get_tenant_prefix, is_s3_enabled
 from storage import S3StorageBackend
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
-# Path to output directory (uses storage directory)
+# Path to output directory — tenant-aware via storage_config ContextVar
 def _get_output_dir() -> Path:
-    return get_storage_dir() / "output"
+    return get_tenant_output_dir()
 
 
 def parse_run_timestamp(run_id: str) -> Optional[datetime]:
@@ -186,9 +186,11 @@ class RunsListResponse(BaseModel):
 async def list_runs(limit: int = 20, offset: int = 0) -> RunsListResponse:
     """List runs with pagination support."""
     cache = get_cache()
+    tenant_prefix = get_tenant_prefix()
+    runs_list_key = f"runs_list:{tenant_prefix}"
 
     # Check cache first
-    cached = cache.get("runs_list")
+    cached = cache.get(runs_list_key)
     if cached is not None:
         # Apply pagination to cached result
         total = len(cached)
@@ -289,7 +291,7 @@ async def list_runs(limit: int = 20, offset: int = 0) -> RunsListResponse:
     runs.sort(key=lambda r: r.timestamp, reverse=True)
 
     # Cache the full result
-    cache.set("runs_list", runs)
+    cache.set(runs_list_key, runs)
 
     # Apply pagination
     total = len(runs)
@@ -323,9 +325,11 @@ def _read_text_file(run_storage, key: str) -> Optional[str]:
 async def get_run(run_id: str):
     """Get full run details."""
     cache = get_cache()
+    tenant_prefix = get_tenant_prefix()
+    run_cache_key = f"run:{tenant_prefix}:{run_id}"
 
     # Check cache first
-    cached = cache.get(f"run:{run_id}")
+    cached = cache.get(run_cache_key)
     if cached is not None:
         return cached
 
@@ -420,7 +424,7 @@ async def get_run(run_id: str):
     )
 
     # Cache the result
-    cache.set(f"run:{run_id}", result)
+    cache.set(run_cache_key, result)
 
     return result
 

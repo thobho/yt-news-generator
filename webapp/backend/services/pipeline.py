@@ -14,15 +14,17 @@ from typing import Optional
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 
-# Storage paths (will be set after storage_config import)
+# Storage paths — tenant-aware via storage_config ContextVar
 def _get_output_dir() -> Path:
-    return get_storage_dir() / "output"
+    return get_tenant_output_dir()
 
 def _get_data_dir() -> Path:
-    return get_storage_dir() / "data"
+    from storage_config import get_tenant_prefix
+    return get_storage_dir() / get_tenant_prefix() / "data"
 
 def _get_seeds_dir() -> Path:
-    return get_storage_dir() / "data" / "news-seeds"
+    from storage_config import get_tenant_prefix
+    return get_storage_dir() / get_tenant_prefix() / "data" / "news-seeds"
 
 # Add src to path for imports
 sys.path.insert(0, str(SRC_DIR))
@@ -33,6 +35,7 @@ from storage_config import (
     get_output_storage,
     get_run_storage,
     get_storage_dir,
+    get_tenant_output_dir,
     is_s3_enabled,
     ensure_storage_dirs,
 )
