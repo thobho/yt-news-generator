@@ -16,6 +16,7 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
+from .config.tenant_registry import load_tenants
 from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler
 from .services import auth as auth_service
 from .services import scheduler as scheduler_service
@@ -127,7 +128,9 @@ app.include_router(scheduler.router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize scheduler on startup."""
+    """Initialize tenant registry and scheduler on startup."""
+    tenants = load_tenants()
+    logger.info(f"Loaded {len(tenants)} tenant(s): {[t.id for t in tenants]}")
     scheduler_service.init_scheduler()
 
 

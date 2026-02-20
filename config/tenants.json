@@ -1,0 +1,18 @@
+[
+  {
+    "id": "pl",
+    "display_name": "BalancedNews",
+    "language": "pl",
+    "news_source": "infopigula",
+    "storage_prefix": "tenants/pl",
+    "credentials_dir": "credentials/pl"
+  },
+  {
+    "id": "us",
+    "display_name": "BalancedNews US",
+    "language": "en",
+    "news_source": "stub",
+    "storage_prefix": "tenants/us",
+    "credentials_dir": "credentials/us"
+  }
+]
