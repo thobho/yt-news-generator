@@ -14,6 +14,9 @@ Multi-tenant support:
     Set the current tenant prefix with set_tenant_prefix() before calling storage
     functions, or use the FastAPI storage_dep dependency (added in task 06).
     Default prefix is "tenants/pl" (the original single-tenant data location).
+
+    Credential paths are similarly scoped via _credentials_dir ContextVar.
+    Default is "credentials/pl".
 """
 
 import os
@@ -36,6 +39,10 @@ STORAGE_DIR = PROJECT_ROOT / "storage"
 # Default "tenants/pl" maps to the original single-tenant storage location.
 _tenant_prefix: ContextVar[str] = ContextVar("tenant_prefix", default="tenants/pl")
 
+# Current tenant credentials directory — set per-request via set_credentials_dir().
+# Default "credentials/pl" matches the actual per-tenant credential files.
+_credentials_dir: ContextVar[str] = ContextVar("credentials_dir", default="credentials/pl")
+
 
 def set_tenant_prefix(prefix: str) -> None:
     """Set the tenant storage prefix for the current async context."""
@@ -45,6 +52,16 @@ def set_tenant_prefix(prefix: str) -> None:
 def get_tenant_prefix() -> str:
     """Get the current tenant storage prefix (e.g. 'tenants/pl')."""
     return _tenant_prefix.get()
+
+
+def set_credentials_dir(cdir: str) -> None:
+    """Set the tenant credentials directory for the current async context."""
+    _credentials_dir.set(cdir)
+
+
+def get_credentials_dir() -> str:
+    """Get the current tenant credentials directory (e.g. 'credentials/pl')."""
+    return _credentials_dir.get()
 
 
 def is_dev_mode() -> bool:

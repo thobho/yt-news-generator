@@ -22,6 +22,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from logging_config import get_logger
 from storage_config import get_config_storage, get_data_storage
 
+from . import settings as settings_service
+
 from . import infopigula
 from . import pipeline
 from . import prompts as prompts_service
@@ -711,10 +713,11 @@ def _schedule_job(config: SchedulerConfig) -> None:
         logger.error("Invalid generation_time format: %s", config.generation_time)
         return
 
+    timezone = settings_service.load_settings().timezone
     trigger = CronTrigger(
         hour=hour,
         minute=minute,
-        timezone="Europe/Warsaw"
+        timezone=timezone,
     )
 
     _scheduler.add_job(
@@ -726,8 +729,8 @@ def _schedule_job(config: SchedulerConfig) -> None:
     )
 
     next_run = _get_next_run_time()
-    logger.info("Scheduled daily generation at %s Warsaw time (next: %s)",
-                config.generation_time, next_run)
+    logger.info("Scheduled daily generation at %s %s time (next: %s)",
+                config.generation_time, timezone, next_run)
 
 
 def init_scheduler() -> None:

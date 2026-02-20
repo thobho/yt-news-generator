@@ -36,9 +36,6 @@ except ImportError:
     WARSAW_TZ = ZoneInfo("Europe/Warsaw")
 
 PROJECT_ROOT = get_project_root()
-CREDENTIALS_DIR = PROJECT_ROOT / "credentials"
-CLIENT_SECRETS_PATH = CREDENTIALS_DIR / "client_secrets.json"
-TOKEN_PATH = CREDENTIALS_DIR / "token.json"
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -85,35 +82,44 @@ def get_scheduled_publish_time(schedule_option: str = "evening") -> str | None:
     return publish_utc.strftime("%Y-%m-%dT%H:%M:%S.0Z")
 
 
-def authenticate() -> Credentials:
-    """Authenticate with OAuth2, reusing cached token if available."""
+def authenticate(credentials_dir: str = "credentials/pl") -> Credentials:
+    """Authenticate with OAuth2, reusing cached token if available.
+
+    Args:
+        credentials_dir: Directory containing client_secrets.json and token.json.
+    """
+    creds_path = PROJECT_ROOT / credentials_dir
+    token_path = creds_path / "token.json"
+    client_secrets_path = creds_path / "client_secrets.json"
+
     creds = None
 
-    if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+    if token_path.exists():
+        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             logger.debug("Refreshing expired credentials")
             creds.refresh(Request())
         else:
-            if not CLIENT_SECRETS_PATH.exists():
+            if not client_secrets_path.exists():
                 logger.error(
                     "Client secrets not found at %s. "
                     "Download OAuth 2.0 credentials from Google Cloud Console "
-                    "and save as credentials/client_secrets.json",
-                    CLIENT_SECRETS_PATH,
+                    "and save as %s/client_secrets.json",
+                    client_secrets_path,
+                    credentials_dir,
                 )
                 sys.exit(1)
 
             flow = InstalledAppFlow.from_client_secrets_file(
-                str(CLIENT_SECRETS_PATH), SCOPES
+                str(client_secrets_path), SCOPES
             )
             creds = flow.run_local_server(port=0)
 
         # Save token for next run
-        CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
-        with open(TOKEN_PATH, "w") as f:
+        creds_path.mkdir(parents=True, exist_ok=True)
+        with open(token_path, "w") as f:
             f.write(creds.to_json())
 
     return creds
@@ -238,10 +244,10 @@ def upload_video(youtube, video_path: Path, metadata: dict, publish_at: str | No
     return video_id
 
 
-def delete_from_youtube(video_id: str) -> None:
+def delete_from_youtube(video_id: str, credentials_dir: str = "credentials/pl") -> None:
     """Delete a video from YouTube by its video ID."""
     logger.info("Deleting video from YouTube: %s", video_id)
-    creds = authenticate()
+    creds = authenticate(credentials_dir)
     youtube = build("youtube", "v3", credentials=creds)
     youtube.videos().delete(id=video_id).execute()
     logger.info("Video deleted from YouTube: %s", video_id)
@@ -251,7 +257,8 @@ def upload_to_youtube(
     video_path: Union[Path, str],
     metadata_path: Union[Path, str],
     storage: StorageBackend = None,
-    schedule_option: str = "auto"
+    schedule_option: str = "auto",
+    credentials_dir: str = "credentials/pl",
 ) -> tuple[str, str | None]:
     """
     Full upload pipeline: authenticate, parse metadata, upload, add to playlist.
@@ -291,7 +298,7 @@ def upload_to_youtube(
     else:
         logger.info("Publishing immediately")
 
-    creds = authenticate()
+    creds = authenticate(credentials_dir)
     youtube = build("youtube", "v3", credentials=creds)
 
     # YouTube API needs a local file path
@@ -320,6 +327,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Upload video to YouTube")
     parser.add_argument("video", type=Path, help="Path to video file")
     parser.add_argument("metadata", type=Path, help="Path to yt_metadata.md")
+    parser.add_argument(
+        "--credentials-dir",
+        default="credentials/pl",
+        help="Directory containing client_secrets.json and token.json (default: credentials/pl)",
+    )
     args = parser.parse_args()
 
-    upload_to_youtube(args.video, args.metadata)
+    upload_to_youtube(args.video, args.metadata, credentials_dir=args.credentials_dir)

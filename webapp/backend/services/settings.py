@@ -88,6 +88,7 @@ class Settings(BaseModel):
     tts_engine: TTSEngine = "elevenlabs"
     image_engine: ImageEngine = "dalle"
     fal_model: str = "fal-ai/flux-2-pro"
+    timezone: str = "Europe/Warsaw"
 
 
 def get_default_settings() -> Settings:

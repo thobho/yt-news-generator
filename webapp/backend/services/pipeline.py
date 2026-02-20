@@ -31,6 +31,7 @@ sys.path.insert(0, str(SRC_DIR))
 
 from logging_config import get_logger
 from storage_config import (
+    get_credentials_dir,
     get_data_storage,
     get_output_storage,
     get_run_storage,
@@ -648,7 +649,8 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
     video_id, publish_at = yt_upload(
         keys["video"], keys["yt_metadata"],
         storage=run_storage,
-        schedule_option=schedule_option
+        schedule_option=schedule_option,
+        credentials_dir=get_credentials_dir(),
     )
 
     # Increment episode counter after successful upload
@@ -696,7 +698,7 @@ def delete_youtube_for_run(run_id: str) -> dict:
         raise ValueError("No video_id found in upload info.")
 
     # Delete from YouTube
-    delete_from_youtube(video_id)
+    delete_from_youtube(video_id, credentials_dir=get_credentials_dir())
 
     # Remove yt_upload.json
     run_storage.delete(keys["yt_upload"])
