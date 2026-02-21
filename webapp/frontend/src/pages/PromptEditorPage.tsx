@@ -87,7 +87,7 @@ export default function PromptEditorPage() {
     if (!isNew && promptType && promptId) {
       loadPrompt();
     }
-  }, [promptType, promptId, isNew]);
+  }, [promptType, promptId, isNew, tenantId]);
 
   async function loadPrompt() {
     if (!promptType || !promptId) return;

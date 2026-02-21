@@ -124,6 +124,7 @@ export default function AnalyticsPage() {
   const loadRuns = async () => {
     try {
       setLoading(true)
+      setRuns([])
       const data = await fetchAnalyticsRuns(tenantId)
       setRuns(data)
       setError(null)
@@ -136,7 +137,7 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     loadRuns()
-  }, [])
+  }, [tenantId])
 
   const handleRefreshRun = async (runId: string) => {
     setRefreshingRuns((prev) => new Set(prev).add(runId))

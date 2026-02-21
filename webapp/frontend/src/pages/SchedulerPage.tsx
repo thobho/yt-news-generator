@@ -111,6 +111,11 @@ export default function SchedulerPage() {
     }
   }
 
+  // Reset form when tenant changes so it reinitializes from the new tenant's config
+  useEffect(() => {
+    setIsInitialized(false)
+  }, [tenantId])
+
   useEffect(() => {
     loadStatus()
     // Poll status every 30 seconds - but don't overwrite form state
@@ -126,7 +131,7 @@ export default function SchedulerPage() {
       .catch((err) => {
         console.error('Failed to fetch prompts:', err)
       })
-  }, [])
+  }, [tenantId])
 
   const handleToggle = async () => {
     if (!status) return

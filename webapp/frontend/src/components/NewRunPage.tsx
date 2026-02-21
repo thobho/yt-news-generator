@@ -61,6 +61,11 @@ export default function NewRunPage() {
   const [submitStatus, setSubmitStatus] = useState<string | null>(null)
 
   useEffect(() => {
+    setNewsItems([])
+    setSelectedIds(new Set())
+    setNewsError(null)
+    setLoadingNews(true)
+
     fetchInfoPigulaNews(tenantId)
       .then((data) => {
         setNewsItems(data.items)
@@ -78,7 +83,7 @@ export default function NewRunPage() {
       .catch((err) => {
         console.error('Failed to fetch prompts:', err)
       })
-  }, [])
+  }, [tenantId])
 
   const toggleItem = (id: string) => {
     setSelectedIds((prev) => {

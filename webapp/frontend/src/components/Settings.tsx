@@ -24,6 +24,8 @@ export default function Settings({ onClose }: SettingsProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    setSettings(null)
+    setLoading(true)
     Promise.all([fetchSettings(tenantId), fetchAvailableSettings(tenantId)])
       .then(([settingsData, availableData]) => {
         setSettings(settingsData)
@@ -31,7 +33,7 @@ export default function Settings({ onClose }: SettingsProps) {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [tenantId])
 
   const handleSettingChange = async (update: Partial<SettingsType>) => {
     if (!settings) return

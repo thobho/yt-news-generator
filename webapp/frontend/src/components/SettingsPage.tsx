@@ -20,7 +20,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadPrompts();
-  }, []);
+  }, [tenantId]);
 
   async function loadPrompts() {
     try {

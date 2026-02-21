@@ -90,12 +90,13 @@ export default function RunList() {
   }
 
   useEffect(() => {
+    setRuns([])
     loadRuns()
     loadRunningTasks()
     // Poll for running tasks every 3 seconds
     const interval = setInterval(loadRunningTasks, 3000)
     return () => clearInterval(interval)
-  }, [])
+  }, [loadRuns])
 
   const getRunningTaskInfo = (runId: string) => {
     const tasks = runningTasks[runId]

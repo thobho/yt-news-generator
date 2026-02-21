@@ -68,7 +68,7 @@ export default function WorkflowActions({
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [runId, currentTask, isRunning, onRefresh])
+  }, [runId, currentTask, isRunning, onRefresh, tenantId])
 
   const runTask = async (
     taskFn: () => Promise<{ task_id: string }>,
