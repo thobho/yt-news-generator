@@ -14,6 +14,7 @@ import {
   fetchRunningTasksForRun,
   ScheduleOption,
 } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 interface WorkflowActionsProps {
   runId: string
@@ -28,6 +29,8 @@ export default function WorkflowActions({
   onEditDialogue,
   onRefresh,
 }: WorkflowActionsProps) {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [isRunning, setIsRunning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -40,7 +43,7 @@ export default function WorkflowActions({
 
     const checkRunningTasks = async () => {
       try {
-        const result = await fetchRunningTasksForRun(runId)
+        const result = await fetchRunningTasksForRun(tenantId, runId)
         const taskTypes = Object.keys(result.tasks)
         if (taskTypes.length > 0) {
           const firstTask = result.tasks[taskTypes[0]]
@@ -68,7 +71,7 @@ export default function WorkflowActions({
   }, [runId, currentTask, isRunning, onRefresh])
 
   const runTask = async (
-    taskFn: (id: string) => Promise<{ task_id: string }>,
+    taskFn: () => Promise<{ task_id: string }>,
     taskName: string
   ) => {
     setIsRunning(true)
@@ -76,9 +79,9 @@ export default function WorkflowActions({
     setStatus(`Starting ${taskName}...`)
 
     try {
-      const { task_id } = await taskFn(runId)
+      const { task_id } = await taskFn()
 
-      const result = await pollTaskUntilDone(task_id, (taskStatus: TaskStatus) => {
+      const result = await pollTaskUntilDone(tenantId, task_id, (taskStatus: TaskStatus) => {
         if (taskStatus.message) {
           setStatus(taskStatus.message)
         }
@@ -100,16 +103,16 @@ export default function WorkflowActions({
     }
   }
 
-  const handleGenerateAudio = () => runTask(generateAudio, 'Audio generation')
-  const handleGenerateImages = () => runTask(generateImages, 'Image generation')
-  const handleGenerateVideo = () => runTask(generateVideo, 'Video rendering')
+  const handleGenerateAudio = () => runTask(() => generateAudio(tenantId, runId), 'Audio generation')
+  const handleGenerateImages = () => runTask(() => generateImages(tenantId, runId), 'Image generation')
+  const handleGenerateVideo = () => runTask(() => generateVideo(tenantId, runId), 'Video rendering')
   const handleUploadYoutube = () => runTask(
-    (id: string) => uploadToYoutube(id, scheduleOption),
+    () => uploadToYoutube(tenantId, runId, scheduleOption),
     'YouTube upload'
   )
 
   const handleDrop = async (
-    dropFn: (id: string) => Promise<{ status: string; deleted: string[] }>,
+    dropFn: () => Promise<{ status: string; deleted: string[] }>,
     itemName: string
   ) => {
     if (!confirm(`Are you sure you want to drop ${itemName}? This cannot be undone.`)) {
@@ -120,7 +123,7 @@ export default function WorkflowActions({
     setStatus(`Dropping ${itemName}...`)
 
     try {
-      await dropFn(runId)
+      await dropFn()
       setStatus(`${itemName} dropped!`)
       setTimeout(() => {
         setStatus(null)
@@ -133,9 +136,9 @@ export default function WorkflowActions({
     }
   }
 
-  const handleDropAudio = () => handleDrop(dropAudio, 'Audio')
-  const handleDropVideo = () => handleDrop(dropVideo, 'Video')
-  const handleDropImages = () => handleDrop(dropImages, 'Images')
+  const handleDropAudio = () => handleDrop(() => dropAudio(tenantId, runId), 'Audio')
+  const handleDropVideo = () => handleDrop(() => dropVideo(tenantId, runId), 'Video')
+  const handleDropImages = () => handleDrop(() => dropImages(tenantId, runId), 'Images')
 
   const handleDeleteYoutube = async () => {
     if (!confirm('Are you sure you want to remove this video from YouTube? This cannot be undone.')) {
@@ -146,7 +149,7 @@ export default function WorkflowActions({
     setStatus('Removing from YouTube...')
 
     try {
-      await deleteYoutube(runId)
+      await deleteYoutube(tenantId, runId)
       setStatus('Removed from YouTube!')
       setTimeout(() => {
         setStatus(null)

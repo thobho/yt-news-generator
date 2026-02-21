@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 import Settings from './Settings'
 
 const PAGE_SIZE = 20
@@ -34,6 +35,8 @@ function MediaIcons({ run }: { run: RunSummary }) {
 }
 
 export default function RunList() {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [runs, setRuns] = useState<RunSummary[]>([])
   const [runningTasks, setRunningTasks] = useState<AllRunningTasks>({})
   const [loading, setLoading] = useState(true)
@@ -45,7 +48,7 @@ export default function RunList() {
 
   const loadRuns = useCallback(() => {
     setLoading(true)
-    fetchRuns(PAGE_SIZE, 0)
+    fetchRuns(tenantId, PAGE_SIZE, 0)
       .then((response) => {
         setRuns(response.runs)
         setHasMore(response.has_more)
@@ -53,12 +56,12 @@ export default function RunList() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [tenantId])
 
   const loadMore = () => {
     if (loadingMore || !hasMore) return
     setLoadingMore(true)
-    fetchRuns(PAGE_SIZE, runs.length)
+    fetchRuns(tenantId, PAGE_SIZE, runs.length)
       .then((response) => {
         setRuns((prev) => [...prev, ...response.runs])
         setHasMore(response.has_more)
@@ -68,7 +71,7 @@ export default function RunList() {
   }
 
   const loadRunningTasks = () => {
-    fetchAllRunningTasks()
+    fetchAllRunningTasks(tenantId)
       .then(setRunningTasks)
       .catch(() => {}) // Silently fail
   }
@@ -79,7 +82,7 @@ export default function RunList() {
       return
     }
     try {
-      await deleteRun(runId)
+      await deleteRun(tenantId, runId)
       loadRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete run')

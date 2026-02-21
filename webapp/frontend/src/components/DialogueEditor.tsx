@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Dialogue, DialogueItem, updateDialogue } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 interface DialogueEditorProps {
   runId: string
@@ -9,6 +10,8 @@ interface DialogueEditorProps {
 }
 
 export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: DialogueEditorProps) {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [editedDialogue, setEditedDialogue] = useState<Dialogue>({ ...dialogue })
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,7 +27,7 @@ export default function DialogueEditor({ runId, dialogue, onSave, onCancel }: Di
     setError(null)
 
     try {
-      await updateDialogue(runId, editedDialogue)
+      await updateDialogue(tenantId, runId, editedDialogue)
       onSave(editedDialogue)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')

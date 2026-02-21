@@ -8,12 +8,15 @@ import {
   Settings as SettingsType,
   AvailableSettings,
 } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 interface SettingsProps {
   onClose?: () => void
 }
 
 export default function Settings({ onClose }: SettingsProps) {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [settings, setSettings] = useState<SettingsType | null>(null)
   const [available, setAvailable] = useState<AvailableSettings | null>(null)
   const [loading, setLoading] = useState(true)
@@ -21,7 +24,7 @@ export default function Settings({ onClose }: SettingsProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    Promise.all([fetchSettings(), fetchAvailableSettings()])
+    Promise.all([fetchSettings(tenantId), fetchAvailableSettings(tenantId)])
       .then(([settingsData, availableData]) => {
         setSettings(settingsData)
         setAvailable(availableData)
@@ -37,7 +40,7 @@ export default function Settings({ onClose }: SettingsProps) {
     setError(null)
 
     try {
-      const updated = await updateSettings(update)
+      const updated = await updateSettings(tenantId, update)
       setSettings(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
@@ -190,7 +193,7 @@ export default function Settings({ onClose }: SettingsProps) {
           <button
             onClick={async () => {
               try {
-                const { auth_url } = await startYouTubeOAuth()
+                const { auth_url } = await startYouTubeOAuth(tenantId)
                 window.location.href = auth_url
               } catch (err) {
                 alert(err instanceof Error ? err.message : 'Failed to start OAuth')
@@ -203,7 +206,7 @@ export default function Settings({ onClose }: SettingsProps) {
           <button
             onClick={async () => {
               try {
-                const token = await fetchYouTubeToken()
+                const token = await fetchYouTubeToken(tenantId)
                 const blob = new Blob([JSON.stringify(token)], { type: 'application/json' })
                 const url = URL.createObjectURL(blob)
                 const a = document.createElement('a')

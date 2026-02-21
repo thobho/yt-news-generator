@@ -7,8 +7,11 @@ import {
   PromptTypeInfo,
   PromptType,
 } from '../api/client';
+import { useTenant } from '../context/TenantContext';
 
 export default function SettingsPage() {
+  const { currentTenant } = useTenant();
+  const tenantId = currentTenant?.id ?? 'pl';
   const [promptTypes, setPromptTypes] = useState<PromptTypeInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +25,7 @@ export default function SettingsPage() {
   async function loadPrompts() {
     try {
       setLoading(true);
-      const data = await fetchAllPrompts();
+      const data = await fetchAllPrompts(tenantId);
       setPromptTypes(data.types);
       setError(null);
     } catch (err) {
@@ -34,7 +37,7 @@ export default function SettingsPage() {
 
   async function handleSetActive(promptType: PromptType, promptId: string) {
     try {
-      await setActivePrompt(promptType, promptId);
+      await setActivePrompt(tenantId, promptType, promptId);
       await loadPrompts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to set active prompt');
@@ -46,7 +49,7 @@ export default function SettingsPage() {
       return;
     }
     try {
-      await deletePrompt(promptType, promptId);
+      await deletePrompt(tenantId, promptType, promptId);
       await loadPrompts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete prompt');

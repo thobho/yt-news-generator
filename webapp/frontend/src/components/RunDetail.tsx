@@ -12,6 +12,7 @@ import {
   regenerateImage,
   pollTaskUntilDone,
 } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 import WorkflowActions from './WorkflowActions'
 import DialogueEditor from './DialogueEditor'
 
@@ -112,6 +113,8 @@ function MediaTab({
   imagesMetadata: ImagesMetadata | null
   onImagesUpdate: (metadata: ImagesMetadata) => void
 }) {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [editingImageId, setEditingImageId] = useState<string | null>(null)
   const [editingPrompt, setEditingPrompt] = useState('')
@@ -120,7 +123,7 @@ function MediaTab({
 
   const getImageUrl = (imageInfo: ImageInfo): string | null => {
     if (!imageInfo.file) return null
-    return `/api/runs/${runId}/images/${imageInfo.file}`
+    return `/api/tenants/${tenantId}/runs/${runId}/images/${imageInfo.file}`
   }
 
   const handleEditPrompt = (image: ImageInfo) => {
@@ -137,7 +140,7 @@ function MediaTab({
         img.id === editingImageId ? { ...img, prompt: editingPrompt } : img
       )
       const updatedMetadata = { ...imagesMetadata, images: updatedImages }
-      await updateImagesMetadata(runId, updatedMetadata)
+      await updateImagesMetadata(tenantId, runId, updatedMetadata)
       onImagesUpdate(updatedMetadata)
       setEditingImageId(null)
     } catch (err) {
@@ -151,8 +154,8 @@ function MediaTab({
   const handleRegenerate = async (imageId: string) => {
     setRegeneratingIds((prev) => new Set(prev).add(imageId))
     try {
-      const { task_id } = await regenerateImage(runId, imageId)
-      const result = await pollTaskUntilDone(task_id)
+      const { task_id } = await regenerateImage(tenantId, runId, imageId)
+      const result = await pollTaskUntilDone(tenantId, task_id)
       if (result.status === 'error') {
         alert(`Regeneration failed: ${result.message}`)
       } else {
@@ -424,6 +427,8 @@ function YouTubeTab({
 
 export default function RunDetail() {
   const { runId } = useParams<{ runId: string }>()
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [run, setRun] = useState<RunDetailType | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -434,7 +439,7 @@ export default function RunDetail() {
     if (!runId) return
 
     try {
-      const data = await fetchRun(runId)
+      const data = await fetchRun(tenantId, runId)
       setRun(data)
       setError(null)
     } catch (err) {
@@ -442,7 +447,7 @@ export default function RunDetail() {
     } finally {
       setLoading(false)
     }
-  }, [runId])
+  }, [runId, tenantId])
 
   useEffect(() => {
     loadRun()
