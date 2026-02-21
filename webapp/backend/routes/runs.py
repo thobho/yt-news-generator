@@ -5,10 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import storage_dep
 from ..models import RunSummary, RunDetail, RunFiles, WorkflowState, YouTubeUpload
 from ..services import pipeline
 from ..services.cache import get_cache
@@ -20,7 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, get_tenant_prefix, is_s3_enabled
 from storage import S3StorageBackend
 
-router = APIRouter(prefix="/api/runs", tags=["runs"])
+router = APIRouter(tags=["runs"])
 
 # Path to output directory — tenant-aware via storage_config ContextVar
 def _get_output_dir() -> Path:
@@ -183,7 +185,7 @@ class RunsListResponse(BaseModel):
 
 
 @router.get("")
-async def list_runs(limit: int = 20, offset: int = 0) -> RunsListResponse:
+async def list_runs(limit: int = 20, offset: int = 0, tenant: TenantConfig = Depends(storage_dep)) -> RunsListResponse:
     """List runs with pagination support."""
     cache = get_cache()
     tenant_prefix = get_tenant_prefix()
@@ -322,7 +324,7 @@ def _read_text_file(run_storage, key: str) -> Optional[str]:
 
 
 @router.get("/{run_id}", response_model=RunDetail)
-async def get_run(run_id: str):
+async def get_run(run_id: str, tenant: TenantConfig = Depends(storage_dep)):
     """Get full run details."""
     cache = get_cache()
     tenant_prefix = get_tenant_prefix()
@@ -393,17 +395,18 @@ async def get_run(run_id: str):
     )
 
     # Build file URLs
+    tenant_id = tenant.id
     files = RunFiles()
     if exists_video:
-        files.video = f"/api/runs/{run_id}/video"
+        files.video = f"/api/tenants/{tenant_id}/runs/{run_id}/video"
     if exists_audio:
-        files.audio = f"/api/runs/{run_id}/audio"
+        files.audio = f"/api/tenants/{tenant_id}/runs/{run_id}/audio"
 
     # Get image files from images metadata
     if images_meta:
         for img in images_meta.get("images", []):
             if img.get("file"):
-                files.images.append(f"/api/runs/{run_id}/images/{img['file']}")
+                files.images.append(f"/api/tenants/{tenant_id}/runs/{run_id}/images/{img['file']}")
 
     # Get workflow state
     workflow_state = await asyncio.to_thread(pipeline.get_workflow_state_for_run, run_id)
@@ -430,7 +433,7 @@ async def get_run(run_id: str):
 
 
 @router.get("/{run_id}/video")
-async def get_video(run_id: str):
+async def get_video(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Serve video file."""
     run_storage = get_run_storage(run_id)
 
@@ -448,7 +451,7 @@ async def get_video(run_id: str):
 
 
 @router.get("/{run_id}/audio")
-async def get_audio(run_id: str):
+async def get_audio(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Serve audio file."""
     run_storage = get_run_storage(run_id)
 
@@ -466,7 +469,7 @@ async def get_audio(run_id: str):
 
 
 @router.get("/{run_id}/images/{filename}")
-async def get_image(run_id: str, filename: str):
+async def get_image(run_id: str, filename: str, _: TenantConfig = Depends(storage_dep)):
     """Serve image files."""
     # Validate filename to prevent path traversal
     if ".." in filename or "/" in filename:
@@ -489,7 +492,7 @@ async def get_image(run_id: str, filename: str):
 
 
 @router.delete("/{run_id}")
-async def delete_run(run_id: str):
+async def delete_run(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete an entire run and all its files."""
     run_storage = get_run_storage(run_id)
 

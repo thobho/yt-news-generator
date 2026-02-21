@@ -10,8 +10,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import storage_dep
 from ..models import AnalyticsRun, YouTubeStats
 
 # Add src to path for storage imports
@@ -23,7 +25,7 @@ from storage_config import get_output_storage, get_run_storage, get_tenant_outpu
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+router = APIRouter(tags=["analytics"])
 
 
 def parse_run_timestamp(run_id: str) -> Optional[datetime]:
@@ -143,7 +145,7 @@ async def _build_analytics_run(run_id: str) -> Optional[AnalyticsRun]:
 
 
 @router.get("/runs", response_model=list[AnalyticsRun])
-async def list_analytics_runs():
+async def list_analytics_runs(_: TenantConfig = Depends(storage_dep)):
     """List runs with YouTube uploads older than 48 hours, with cached stats."""
     output_storage = get_output_storage()
     runs = []
@@ -188,7 +190,7 @@ async def list_analytics_runs():
 
 
 @router.post("/runs/{run_id}/refresh", response_model=AnalyticsRun)
-async def refresh_run_stats(run_id: str):
+async def refresh_run_stats(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Fetch fresh stats from YouTube Analytics API for a specific run."""
     from ..services.youtube_analytics import get_or_fetch_stats
 
@@ -247,7 +249,7 @@ async def _refresh_all_stats():
 
 
 @router.post("/refresh-all")
-async def refresh_all_stats(background_tasks: BackgroundTasks):
+async def refresh_all_stats(background_tasks: BackgroundTasks, _: TenantConfig = Depends(storage_dep)):
     """Start background task to refresh stats for all eligible runs."""
     background_tasks.add_task(_refresh_all_stats)
     return {"status": "started", "message": "Refreshing stats for all eligible runs in background"}

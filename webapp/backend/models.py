@@ -3,6 +3,11 @@ from typing import Optional, Any
 from datetime import datetime
 
 
+class TenantInfo(BaseModel):
+    id: str
+    display_name: str
+
+
 class YouTubeStats(BaseModel):
     views: int
     estimatedMinutesWatched: float

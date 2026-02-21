@@ -1,19 +1,17 @@
 """
 News routes — fetch today's news for a tenant via its configured NewsSource.
-
-URL is still /api/infopigula/news until Task 06 renames it to
-/api/tenants/{tenant_id}/news and wires in the tenant path parameter.
 """
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..config.tenant_registry import get_tenant
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import tenant_dep
 from ..services.news_source import get_news_source
 
-router = APIRouter(prefix="/api/infopigula", tags=["infopigula"])
+router = APIRouter(tags=["infopigula"])
 
 
 class NewsSourceModel(BaseModel):
@@ -38,9 +36,8 @@ class NewsResponse(BaseModel):
 
 
 @router.get("/news", response_model=NewsResponse)
-async def get_news():
-    """Fetch the latest news release for the pl tenant (default until Task 06)."""
-    tenant = get_tenant("pl")
+async def get_news(tenant: TenantConfig = Depends(tenant_dep)):
+    """Fetch the latest news release for the tenant."""
     source = get_news_source(tenant)
     try:
         data = await source.fetch_news()

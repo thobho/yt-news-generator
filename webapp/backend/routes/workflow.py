@@ -7,7 +7,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 
 # Add src to path for logging and storage
@@ -15,15 +15,17 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from logging_config import get_logger
-from storage_config import get_run_storage, get_tenant_output_dir, is_s3_enabled
+from storage_config import get_run_storage, get_tenant_output_dir, is_s3_enabled, set_tenant_prefix, set_credentials_dir
 
 logger = get_logger(__name__)
 
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import storage_dep
 from ..services import pipeline
 from ..services.cache import get_cache
 from ..models import PromptSelections
 
-router = APIRouter(prefix="/api/workflow", tags=["workflow"])
+router = APIRouter(tags=["workflow"])
 
 def _get_output_dir() -> Path:
     return get_tenant_output_dir()
@@ -137,7 +139,7 @@ def get_run_dir(run_id: str) -> Path:
 # Endpoints
 
 @router.post("/create-seed", response_model=CreateSeedResponse)
-async def create_seed(request: CreateSeedRequest):
+async def create_seed(request: CreateSeedRequest, tenant: TenantConfig = Depends(storage_dep)):
     """Create a new seed and run directory."""
     if not request.news_text.strip():
         raise HTTPException(status_code=400, detail="News text cannot be empty")
@@ -159,7 +161,7 @@ async def create_seed(request: CreateSeedRequest):
 
 
 @router.get("/{run_id}/state", response_model=WorkflowState)
-async def get_workflow_state(run_id: str):
+async def get_workflow_state(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Get current workflow state for a run."""
     validate_run_exists(run_id)
     state = pipeline.get_workflow_state_for_run(run_id)
@@ -167,7 +169,7 @@ async def get_workflow_state(run_id: str):
 
 
 @router.post("/{run_id}/generate-dialogue")
-async def generate_dialogue(run_id: str, background_tasks: BackgroundTasks):
+async def generate_dialogue(run_id: str, background_tasks: BackgroundTasks, tenant: TenantConfig = Depends(storage_dep)):
     """Start dialogue generation (runs in background)."""
     validate_run_exists(run_id)
 
@@ -177,7 +179,12 @@ async def generate_dialogue(run_id: str, background_tasks: BackgroundTasks):
 
     _tasks[task_id] = TaskStatus(status="running", message="Generating dialogue...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             result = pipeline.generate_dialogue_for_run(run_id)
             _tasks[task_id] = TaskStatus(
@@ -201,7 +208,7 @@ async def generate_dialogue(run_id: str, background_tasks: BackgroundTasks):
 
 
 @router.put("/{run_id}/dialogue")
-async def update_dialogue(run_id: str, request: DialogueUpdateRequest):
+async def update_dialogue(run_id: str, request: DialogueUpdateRequest, _: TenantConfig = Depends(storage_dep)):
     """Update dialogue JSON for a run."""
     validate_run_exists(run_id)
 
@@ -221,7 +228,7 @@ async def update_dialogue(run_id: str, request: DialogueUpdateRequest):
 
 
 @router.post("/{run_id}/generate-audio")
-async def generate_audio(run_id: str, background_tasks: BackgroundTasks):
+async def generate_audio(run_id: str, background_tasks: BackgroundTasks, tenant: TenantConfig = Depends(storage_dep)):
     """Start audio generation (runs in background)."""
     validate_run_exists(run_id)
 
@@ -238,7 +245,12 @@ async def generate_audio(run_id: str, background_tasks: BackgroundTasks):
 
     _tasks[task_id] = TaskStatus(status="running", message="Generating audio...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             pipeline.generate_audio_for_run(run_id)
             _tasks[task_id] = TaskStatus(
@@ -260,7 +272,7 @@ async def generate_audio(run_id: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/{run_id}/generate-images")
-async def generate_images(run_id: str, background_tasks: BackgroundTasks):
+async def generate_images(run_id: str, background_tasks: BackgroundTasks, tenant: TenantConfig = Depends(storage_dep)):
     """Start image generation (runs in background)."""
     validate_run_exists(run_id)
 
@@ -277,7 +289,12 @@ async def generate_images(run_id: str, background_tasks: BackgroundTasks):
 
     _tasks[task_id] = TaskStatus(status="running", message="Generating images...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             pipeline.generate_images_for_run(run_id)
             _tasks[task_id] = TaskStatus(
@@ -299,7 +316,7 @@ async def generate_images(run_id: str, background_tasks: BackgroundTasks):
 
 
 @router.post("/{run_id}/generate-video")
-async def generate_video(run_id: str, background_tasks: BackgroundTasks):
+async def generate_video(run_id: str, background_tasks: BackgroundTasks, tenant: TenantConfig = Depends(storage_dep)):
     """Start video generation (runs in background)."""
     validate_run_exists(run_id)
 
@@ -316,7 +333,12 @@ async def generate_video(run_id: str, background_tasks: BackgroundTasks):
 
     _tasks[task_id] = TaskStatus(status="running", message="Rendering video...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             video_key = pipeline.generate_video_for_run(run_id)
 
@@ -349,6 +371,7 @@ async def generate_video(run_id: str, background_tasks: BackgroundTasks):
 async def upload_youtube(
     run_id: str,
     background_tasks: BackgroundTasks,
+    tenant: TenantConfig = Depends(storage_dep),
     request: YouTubeUploadRequest = None
 ):
     """Upload video to YouTube (runs in background)."""
@@ -368,7 +391,12 @@ async def upload_youtube(
     schedule_option = request.schedule_option if request else "auto"
     _tasks[task_id] = TaskStatus(status="running", message="Uploading to YouTube...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             result = pipeline.upload_to_youtube_for_run(run_id, schedule_option=schedule_option)
             _tasks[task_id] = TaskStatus(
@@ -391,7 +419,7 @@ async def upload_youtube(
 
 
 @router.delete("/{run_id}/youtube")
-async def delete_youtube(run_id: str):
+async def delete_youtube(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete uploaded video from YouTube and remove upload record."""
     validate_run_exists(run_id)
 
@@ -410,7 +438,7 @@ async def delete_youtube(run_id: str):
 
 
 @router.get("/task/{task_id}", response_model=TaskStatus)
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, _: TenantConfig = Depends(storage_dep)):
     """Get status of a background task."""
     if task_id not in _tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -419,13 +447,13 @@ async def get_task_status(task_id: str):
 
 
 @router.get("/tasks/running")
-async def get_all_running():
+async def get_all_running(_: TenantConfig = Depends(storage_dep)):
     """Get all running tasks across all runs (for list view)."""
     return get_all_running_tasks()
 
 
 @router.get("/{run_id}/tasks/running")
-async def get_run_running_tasks(run_id: str):
+async def get_run_running_tasks(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Get running tasks for a specific run."""
     tasks = get_running_tasks_for_run(run_id)
     return {
@@ -435,7 +463,7 @@ async def get_run_running_tasks(run_id: str):
 
 
 @router.put("/{run_id}/images")
-async def update_images(run_id: str, request: ImagesUpdateRequest):
+async def update_images(run_id: str, request: ImagesUpdateRequest, _: TenantConfig = Depends(storage_dep)):
     """Update images.json for a run."""
     validate_run_exists(run_id)
 
@@ -447,7 +475,7 @@ async def update_images(run_id: str, request: ImagesUpdateRequest):
 
 
 @router.post("/{run_id}/regenerate-image/{image_id}")
-async def regenerate_image(run_id: str, image_id: str, background_tasks: BackgroundTasks):
+async def regenerate_image(run_id: str, image_id: str, background_tasks: BackgroundTasks, tenant: TenantConfig = Depends(storage_dep)):
     """Regenerate a single image by ID."""
     validate_run_exists(run_id)
 
@@ -457,7 +485,12 @@ async def regenerate_image(run_id: str, image_id: str, background_tasks: Backgro
 
     _tasks[task_id] = TaskStatus(status="running", message=f"Regenerating {image_id}...")
 
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+
     def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
         try:
             result = pipeline.regenerate_single_image_for_run(run_id, image_id)
             _tasks[task_id] = TaskStatus(
@@ -480,7 +513,7 @@ async def regenerate_image(run_id: str, image_id: str, background_tasks: Backgro
 
 
 @router.delete("/{run_id}/audio")
-async def drop_audio(run_id: str):
+async def drop_audio(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete audio and timeline for a run, allowing regeneration."""
     validate_run_exists(run_id)
 
@@ -499,7 +532,7 @@ async def drop_audio(run_id: str):
 
 
 @router.delete("/{run_id}/video")
-async def drop_video(run_id: str):
+async def drop_video(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete video for a run, allowing regeneration."""
     validate_run_exists(run_id)
 
@@ -518,7 +551,7 @@ async def drop_video(run_id: str):
 
 
 @router.delete("/{run_id}/images")
-async def drop_images(run_id: str):
+async def drop_images(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete all images for a run, allowing regeneration."""
     validate_run_exists(run_id)
 
