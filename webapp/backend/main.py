@@ -137,7 +137,7 @@ async def startup_event():
     """Initialize tenant registry and scheduler on startup."""
     tenants = load_tenants()
     logger.info(f"Loaded {len(tenants)} tenant(s): {[t.id for t in tenants]}")
-    scheduler_service.init_scheduler()
+    scheduler_service.init_scheduler(tenants)
 
 
 @app.on_event("shutdown")

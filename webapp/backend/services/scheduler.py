@@ -1,6 +1,7 @@
 """
 Scheduler service - handles automated daily video generation.
 Uses APScheduler with AsyncIOScheduler for job scheduling.
+One APScheduler job per tenant: generate_pl, generate_us, etc.
 """
 
 import asyncio
@@ -20,14 +21,15 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from logging_config import get_logger
-from storage_config import get_config_storage, get_data_storage
+from storage_config import get_config_storage, get_data_storage, set_tenant_prefix, set_credentials_dir
 
 from . import settings as settings_service
-
-from . import infopigula
 from . import pipeline
 from . import prompts as prompts_service
 from . import youtube_analytics
+from .news_source import get_news_source
+
+from ..config.tenant_registry import TenantConfig, load_tenants
 
 logger = get_logger(__name__)
 
@@ -56,7 +58,7 @@ class ScheduledRunConfig(BaseModel):
 class SchedulerConfig(BaseModel):
     """Scheduler configuration."""
     enabled: bool = False
-    generation_time: str = "10:00"  # HH:MM format, Warsaw timezone
+    generation_time: str = "10:00"  # HH:MM format
     publish_time: str = "evening"  # Schedule option: "now" or "evening"
     runs: list[ScheduledRunConfig] = []  # Per-run configurations
 
@@ -80,11 +82,24 @@ class SchedulerStatus(BaseModel):
 
 # Global scheduler instance
 _scheduler: Optional[AsyncIOScheduler] = None
-_config: Optional[SchedulerConfig] = None
 
+
+# ---------------------------------------------------------------------------
+# Tenant context helper
+# ---------------------------------------------------------------------------
+
+def _set_tenant_context(tenant: TenantConfig) -> None:
+    """Set storage ContextVars for the given tenant (needed in scheduled jobs)."""
+    set_tenant_prefix(tenant.storage_prefix)
+    set_credentials_dir(tenant.credentials_dir)
+
+
+# ---------------------------------------------------------------------------
+# Config / state I/O  (use ContextVar-based storage — caller must set context)
+# ---------------------------------------------------------------------------
 
 def _load_config() -> SchedulerConfig:
-    """Load scheduler config from settings storage."""
+    """Load scheduler config from tenant's config storage."""
     try:
         storage = get_config_storage()
         if storage.exists("scheduler_config.json"):
@@ -97,14 +112,14 @@ def _load_config() -> SchedulerConfig:
 
 
 def _save_config(config: SchedulerConfig) -> None:
-    """Save scheduler config to storage."""
+    """Save scheduler config to tenant's config storage."""
     storage = get_config_storage()
     content = json.dumps(config.model_dump(), indent=2)
     storage.write_text("scheduler_config.json", content)
 
 
 def _load_state() -> SchedulerState:
-    """Load scheduler state from storage."""
+    """Load scheduler state from tenant's config storage."""
     try:
         storage = get_config_storage()
         if storage.exists(SCHEDULER_STATE_KEY):
@@ -117,23 +132,18 @@ def _load_state() -> SchedulerState:
 
 
 def _save_state(state: SchedulerState) -> None:
-    """Save scheduler state to storage."""
+    """Save scheduler state to tenant's config storage."""
     storage = get_config_storage()
     content = json.dumps(state.model_dump(), indent=2)
     storage.write_text(SCHEDULER_STATE_KEY, content)
 
 
+# ---------------------------------------------------------------------------
+# News selection helpers (unchanged — work on whatever tenant context is set)
+# ---------------------------------------------------------------------------
+
 async def select_news_random(count: int, items: list[dict]) -> list[dict]:
-    """
-    Select news items randomly from provided list.
-
-    Args:
-        count: Number of news items to select
-        items: List of available news items
-
-    Returns:
-        List of selected news items
-    """
+    """Select news items randomly from provided list."""
     logger.info("Selecting %d random news items from %d available", count, len(items))
 
     if not items:
@@ -150,12 +160,7 @@ async def select_news_random(count: int, items: list[dict]) -> list[dict]:
 
 
 def _get_news_selection_prompt() -> tuple[str, float]:
-    """
-    Get the news selection prompt content and temperature.
-
-    Returns:
-        Tuple of (prompt_content, temperature)
-    """
+    """Get the news selection prompt content and temperature."""
     active_id = prompts_service.get_active_prompt_id("news-selection")
     if active_id:
         prompt = prompts_service.get_prompt("news-selection", active_id)
@@ -216,7 +221,7 @@ def _format_historical_data(runs_with_stats: list[dict]) -> str:
     for run in runs_with_stats:
         stats = run.get("yt_stats", {})
         source = run.get("source_info", {})
-        seed = run.get("news_seed", "")[:200]  # First 200 chars
+        seed = run.get("news_seed", "")[:200]
 
         line = (
             f"- Title: {source.get('title', 'Unknown')}\n"
@@ -250,20 +255,9 @@ def _format_available_news(items: list[dict]) -> str:
 
 
 def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
-    """
-    Get recent runs with their seeds and YouTube stats.
-
-    Only returns runs that have YouTube uploads and stats.
-
-    Args:
-        limit: Maximum number of runs to return
-
-    Returns:
-        List of run dicts with seed and stats info
-    """
+    """Get recent runs with their seeds and YouTube stats."""
     from storage_config import get_run_storage
 
-    # Get all runs sorted by date (newest first)
     runs = pipeline.list_runs()
     keys = pipeline.get_run_keys()
 
@@ -272,7 +266,6 @@ def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
         run_id = run_info["run_id"]
         run_storage = get_run_storage(run_id)
 
-        # Check if run has YouTube upload and stats
         if not run_storage.exists(keys["yt_upload"]):
             continue
 
@@ -280,11 +273,9 @@ def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
             continue
 
         try:
-            # Get seed data
             seed_content = run_storage.read_text(keys["seed"])
             seed_data = json.loads(seed_content)
 
-            # Get stats
             stats_content = run_storage.read_text("yt_stats.json")
             stats_data = json.loads(stats_content)
 
@@ -306,23 +297,12 @@ def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
 
 
 def _refresh_stats_for_recent_runs(limit: int = 60) -> int:
-    """
-    Refresh YouTube stats for recent runs that have uploads.
-    Only refreshes if stats are older than 24 hours.
-    Parallelized to speed up the process.
-
-    Args:
-        limit: Maximum number of runs to process
-
-    Returns:
-        Number of runs updated
-    """
+    """Refresh YouTube stats for recent runs that have uploads."""
     from concurrent.futures import ThreadPoolExecutor
-    
+
     logger.info("Starting parallel YouTube stats refresh for up to %d runs", limit)
     runs = pipeline.list_runs()
-    
-    # Filter runs that actually have YT uploads to avoid unnecessary threads
+
     candidate_runs = []
     for run_info in runs[:limit]:
         run_id = run_info["run_id"]
@@ -331,7 +311,6 @@ def _refresh_stats_for_recent_runs(limit: int = 60) -> int:
     def refresh_task(run_id):
         try:
             logger.info("  Starting refresh task for run: %s", run_id)
-            # Only refresh if older than 24 hours
             result = youtube_analytics.get_or_fetch_stats(run_id, force=False, max_age_hours=24)
             logger.info("  Completed refresh task for run: %s (result: %s)", run_id, "updated" if result else "cached/skipped")
             return 1 if result else 0
@@ -339,45 +318,31 @@ def _refresh_stats_for_recent_runs(limit: int = 60) -> int:
             logger.error("  Error in refresh task for %s: %s", run_id, e)
             return 0
 
-    # Use max 10 threads to avoid hitting API rate limits too hard
     updated = 0
     with ThreadPoolExecutor(max_workers=10) as executor:
         results = list(executor.map(refresh_task, candidate_runs))
         updated = sum(results)
 
-    logger.info("Refreshed YouTube stats for %d runs (using 24h cache and parallel fetch)", updated)
+    logger.info("Refreshed YouTube stats for %d runs", updated)
     return updated
 
 
 async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
-    """
-    Select news items using LLM based on historical performance from provided list.
-
-    Args:
-        count: Number of news items to select
-        items: List of available news items
-
-    Returns:
-        List of selected news items
-    """
+    """Select news items using LLM based on historical performance."""
     logger.info("Selecting %d news items using LLM from %d available", count, len(items))
 
     if not items:
         logger.warning("No news items available for LLM selection")
         return []
 
-    # Refresh stats for recent runs first
     logger.info("Refreshing YouTube stats for recent runs...")
     await asyncio.to_thread(_refresh_stats_for_recent_runs, 60)
 
-    # Get historical data
     runs_with_stats = await asyncio.to_thread(_get_recent_runs_with_stats, 60)
     logger.info("Found %d historical runs with YouTube stats", len(runs_with_stats))
 
-    # Get prompt
     prompt_template, temperature = _get_news_selection_prompt()
 
-    # Format data for prompt
     historical_data = _format_historical_data(runs_with_stats)
     available_news = _format_available_news(items)
 
@@ -387,12 +352,10 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
         count=count
     )
 
-    # Log full prompt for debugging
     logger.info("=== FINAL LLM NEWS SELECTION PROMPT ===")
     logger.info(prompt)
     logger.info("========================================")
 
-    # Call LLM with structured output
     try:
         import openai
         logger.info("Calling OpenAI API (model=gpt-4o)...")
@@ -422,7 +385,7 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
                             },
                             "reasoning": {
                                 "type": "string",
-                                "description": "Data-driven justification for the selection, referencing historical parallels and patterns"
+                                "description": "Data-driven justification for the selection"
                             }
                         },
                         "required": ["patterns_identified", "selected_ids", "reasoning"],
@@ -442,11 +405,9 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
 
         logger.info("LLM reasoning: %s", reasoning)
 
-        # Map IDs to news items
         id_to_item = {item.get("id"): item for item in items}
         selected = [id_to_item[id_] for id_ in selected_ids if id_ in id_to_item]
 
-        # Attach reasoning to items for test display
         for item in selected:
             item["_llm_reasoning"] = reasoning
 
@@ -463,39 +424,23 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
 
 
 async def select_news(mode: SelectionMode, count: int, items: list[dict]) -> list[dict]:
-    """
-    Select news items for video generation.
-
-    Args:
-        mode: Selection mode ("random" or "llm")
-        count: Number of news items to select
-        items: List of available news items
-
-    Returns:
-        List of selected news items
-    """
+    """Select news items for video generation."""
     if mode == "llm":
         return await select_news_llm(count, items)
     else:
         return await select_news_random(count, items)
 
 
+# ---------------------------------------------------------------------------
+# Pipeline execution
+# ---------------------------------------------------------------------------
+
 async def run_auto_generation_for_news(
     news_item: dict,
     publish_time: str,
     prompts: Optional[dict] = None
 ) -> tuple[str, Optional[str]]:
-    """
-    Run the full generation pipeline for a single news item.
-
-    Args:
-        news_item: News item dict from InfoPigula
-        publish_time: Schedule option for YouTube
-        prompts: Optional prompt selections
-
-    Returns:
-        Tuple of (run_id, error_message). error_message is None on success.
-    """
+    """Run the full generation pipeline for a single news item."""
     run_id = None
     try:
         source_info = {
@@ -515,27 +460,21 @@ async def run_auto_generation_for_news(
 
         logger.info("Created run %s for auto-generation", run_id)
 
-        # Generate dialogue
         logger.info("[%s] Generating dialogue...", run_id)
         await asyncio.to_thread(pipeline.generate_dialogue_for_run, run_id)
 
-        # Generate audio
         logger.info("[%s] Generating audio...", run_id)
         await asyncio.to_thread(pipeline.generate_audio_for_run, run_id)
 
-        # Generate images
         logger.info("[%s] Generating images...", run_id)
         await asyncio.to_thread(pipeline.generate_images_for_run, run_id)
 
-        # Generate video
         logger.info("[%s] Generating video...", run_id)
         await asyncio.to_thread(pipeline.generate_video_for_run, run_id)
 
-        # Generate YT metadata
         logger.info("[%s] Generating YouTube metadata...", run_id)
         await asyncio.to_thread(pipeline.generate_yt_metadata_for_run, run_id)
 
-        # Upload to YouTube
         logger.info("[%s] Uploading to YouTube (schedule: %s)...", run_id, publish_time)
         await asyncio.to_thread(
             pipeline.upload_to_youtube_for_run,
@@ -552,14 +491,12 @@ async def run_auto_generation_for_news(
         return run_id or "unknown", error_msg
 
 
-async def run_auto_generation() -> dict:
+async def run_auto_generation(tenant: TenantConfig) -> dict:
     """
-    Main scheduled job: select news and generate videos.
-
-    Returns:
-        Dict with results summary
+    Main scheduled job: select news and generate videos for a specific tenant.
+    Caller must have already set tenant context (or call _set_tenant_context first).
     """
-    logger.info("=== Starting scheduled auto-generation ===")
+    logger.info("=== Starting auto-generation for tenant: %s ===", tenant.id)
 
     config = _load_config()
     state = _load_state()
@@ -568,40 +505,39 @@ async def run_auto_generation() -> dict:
     state.last_run_runs = []
     state.last_run_errors = []
 
-    # Get enabled runs from config
     enabled_runs = [r for r in config.runs if r.enabled]
     if not enabled_runs:
         state.last_run_status = "error"
         state.last_run_errors = ["No runs configured"]
         _save_state(state)
-        logger.error("Auto-generation aborted: no runs configured")
+        logger.error("Auto-generation aborted for %s: no runs configured", tenant.id)
         return {"status": "error", "message": "No runs configured"}
 
-    # Fetch available news from InfoPigula
+    # Fetch news using the tenant's configured news source
     try:
-        data = await infopigula.fetch_news()
+        source = get_news_source(tenant)
+        data = await source.fetch_news()
         available_items = data.get("items", [])
     except Exception as e:
-        logger.error("Failed to fetch news from InfoPigula: %s", e)
+        logger.error("Failed to fetch news for tenant %s: %s", tenant.id, e)
         available_items = []
 
     if not available_items:
         state.last_run_status = "error"
-        state.last_run_errors = ["No news items available from InfoPigula"]
+        state.last_run_errors = ["No news items available"]
         _save_state(state)
-        logger.error("Auto-generation aborted: no news items available")
+        logger.error("Auto-generation aborted for %s: no news available", tenant.id)
         return {"status": "error", "message": "No news available"}
 
-    # Determine selection mode for each enabled run and group them
+    # Group runs by selection mode
     runs_by_mode: dict[str, list[int]] = {"llm": [], "random": []}
     for i, run_config in enumerate(enabled_runs):
         mode = run_config.selection_mode or "random"
         runs_by_mode[mode].append(i)
 
-    selected_news_map = {} # run_index -> news_item
+    selected_news_map: dict[int, dict] = {}
     remaining_items = list(available_items)
 
-    # First handle LLM selections
     if runs_by_mode["llm"]:
         count = len(runs_by_mode["llm"])
         selected = await select_news_llm(count, remaining_items)
@@ -609,11 +545,9 @@ async def run_auto_generation() -> dict:
             if i < len(selected):
                 item = selected[i]
                 selected_news_map[idx] = item
-                # Remove selected items from remaining to avoid duplicates
                 item_id = item.get("id")
                 remaining_items = [it for it in remaining_items if it.get("id") != item_id]
 
-    # Then handle random selections
     if runs_by_mode["random"]:
         count = len(runs_by_mode["random"])
         selected = await select_news_random(count, remaining_items)
@@ -621,7 +555,6 @@ async def run_auto_generation() -> dict:
             if i < len(selected):
                 item = selected[i]
                 selected_news_map[idx] = item
-                # Remove selected items from remaining
                 item_id = item.get("id")
                 remaining_items = [it for it in remaining_items if it.get("id") != item_id]
 
@@ -629,23 +562,20 @@ async def run_auto_generation() -> dict:
         state.last_run_status = "error"
         state.last_run_errors = ["No news items selected"]
         _save_state(state)
-        logger.error("Auto-generation aborted: no news selected")
+        logger.error("Auto-generation aborted for %s: no news selected", tenant.id)
         return {"status": "error", "message": "No news selected"}
 
-    # Generate videos for each selected news with per-run config
     results = []
-    # Use sorted indices to process in order
     for idx in sorted(selected_news_map.keys()):
         news_item = selected_news_map[idx]
         run_config = enabled_runs[idx]
 
-        # Use run-specific prompts (or None to use active prompts)
         prompts_dict = None
         if run_config.prompts:
             prompts_dict = run_config.prompts.model_dump(exclude_none=True)
 
-        logger.info("Processing run %d/%d (original index %d) with prompts: %s",
-                    len(results) + 1, len(selected_news_map), idx, prompts_dict)
+        logger.info("Processing run %d/%d (index %d) for tenant %s",
+                    len(results) + 1, len(selected_news_map), idx, tenant.id)
 
         run_id, error = await run_auto_generation_for_news(
             news_item,
@@ -658,7 +588,6 @@ async def run_auto_generation() -> dict:
         if error:
             state.last_run_errors.append(error)
 
-    # Determine overall status
     successful = sum(1 for r in results if r["error"] is None)
     if successful == len(results) and len(results) == len(enabled_runs):
         state.last_run_status = "success"
@@ -669,8 +598,8 @@ async def run_auto_generation() -> dict:
 
     _save_state(state)
 
-    logger.info("=== Auto-generation complete: %d/%d successful ===",
-                successful, len(results))
+    logger.info("=== Auto-generation complete for %s: %d/%d successful ===",
+                tenant.id, successful, len(results))
 
     return {
         "status": state.last_run_status,
@@ -681,71 +610,75 @@ async def run_auto_generation() -> dict:
     }
 
 
-def _get_next_run_time() -> Optional[str]:
-    """Get the next scheduled run time as ISO string."""
-    global _scheduler
-    if _scheduler is None:
-        return None
+async def _run_tenant_pipeline(tenant: TenantConfig) -> None:
+    """APScheduler job coroutine — sets tenant context then runs auto-generation."""
+    _set_tenant_context(tenant)
+    logger.info("=== Scheduled job fired for tenant: %s ===", tenant.id)
+    try:
+        result = await run_auto_generation(tenant)
+        logger.info("=== Scheduled job complete for tenant: %s (status: %s) ===",
+                    tenant.id, result.get("status"))
+    except Exception as e:
+        logger.error("Scheduled job error for tenant %s: %s", tenant.id, e, exc_info=True)
 
-    job = _scheduler.get_job("daily_generation")
-    if job and job.next_run_time:
-        return job.next_run_time.isoformat()
-    return None
 
+# ---------------------------------------------------------------------------
+# Scheduler management
+# ---------------------------------------------------------------------------
 
-def _schedule_job(config: SchedulerConfig) -> None:
-    """Schedule the daily generation job based on config."""
+def _schedule_tenant_job(tenant: TenantConfig, config: SchedulerConfig, timezone: str) -> None:
+    """Schedule (or reschedule) the cron job for a specific tenant."""
     global _scheduler
     if _scheduler is None:
         return
 
-    existing = _scheduler.get_job("daily_generation")
-    if existing:
-        _scheduler.remove_job("daily_generation")
+    job_id = f"generate_{tenant.id}"
+    if _scheduler.get_job(job_id):
+        _scheduler.remove_job(job_id)
 
     if not config.enabled:
-        logger.info("Scheduler is disabled, job not scheduled")
+        logger.info("Scheduler disabled for tenant %s — job not scheduled", tenant.id)
         return
 
     try:
         hour, minute = map(int, config.generation_time.split(":"))
     except ValueError:
-        logger.error("Invalid generation_time format: %s", config.generation_time)
+        logger.error("Invalid generation_time '%s' for tenant %s", config.generation_time, tenant.id)
         return
 
-    timezone = settings_service.load_settings().timezone
-    trigger = CronTrigger(
-        hour=hour,
-        minute=minute,
-        timezone=timezone,
-    )
-
+    trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone)
     _scheduler.add_job(
-        run_auto_generation,
+        _run_tenant_pipeline,
         trigger=trigger,
-        id="daily_generation",
-        name="Daily Video Auto-Generation",
+        id=job_id,
+        name=f"Daily generation ({tenant.id})",
         replace_existing=True,
+        args=[tenant],
     )
 
-    next_run = _get_next_run_time()
-    logger.info("Scheduled daily generation at %s %s time (next: %s)",
-                config.generation_time, timezone, next_run)
+    job = _scheduler.get_job(job_id)
+    next_run = str(job.next_run_time) if job and job.next_run_time else None
+    logger.info("Scheduled job %s at %s %s (next: %s)", job_id, config.generation_time, timezone, next_run)
 
 
-def init_scheduler() -> None:
-    """Initialize the scheduler on application startup."""
-    global _scheduler, _config
+def init_scheduler(tenants: list[TenantConfig]) -> None:
+    """Initialize the scheduler on application startup with one job per tenant."""
+    global _scheduler
 
-    logger.info("Initializing scheduler...")
+    logger.info("Initializing scheduler for %d tenant(s)...", len(tenants))
 
     _scheduler = AsyncIOScheduler()
-    _config = _load_config()
-
     _scheduler.start()
     logger.info("Scheduler started")
 
-    _schedule_job(_config)
+    for tenant in tenants:
+        _set_tenant_context(tenant)
+        config = _load_config()
+        tenant_settings = settings_service.load_settings()
+        if config.enabled:
+            _schedule_tenant_job(tenant, config, tenant_settings.timezone)
+        else:
+            logger.info("Scheduler disabled for tenant %s — skipping job", tenant.id)
 
 
 def shutdown_scheduler() -> None:
@@ -758,13 +691,20 @@ def shutdown_scheduler() -> None:
         _scheduler = None
 
 
-def get_scheduler_status() -> SchedulerStatus:
-    """Get current scheduler status."""
-    global _scheduler
+# ---------------------------------------------------------------------------
+# Per-tenant API functions (called by route handlers)
+# ---------------------------------------------------------------------------
 
+def get_tenant_scheduler_status(tenant: TenantConfig) -> SchedulerStatus:
+    """Get scheduler status for a specific tenant."""
+    _set_tenant_context(tenant)
     config = _load_config()
     state = _load_state()
-    state.next_run_at = _get_next_run_time()
+
+    job_id = f"generate_{tenant.id}"
+    job = _scheduler.get_job(job_id) if _scheduler else None
+    if job and job.next_run_time:
+        state.next_run_at = str(job.next_run_time)
 
     return SchedulerStatus(
         enabled=config.enabled,
@@ -774,10 +714,33 @@ def get_scheduler_status() -> SchedulerStatus:
     )
 
 
-def update_scheduler_config(updates: dict) -> SchedulerConfig:
-    """Update scheduler configuration."""
-    global _config
+def enable_tenant_scheduler(tenant: TenantConfig) -> SchedulerConfig:
+    """Enable the scheduler for a specific tenant."""
+    _set_tenant_context(tenant)
+    config = _load_config()
+    config.enabled = True
+    _save_config(config)
+    tenant_settings = settings_service.load_settings()
+    _schedule_tenant_job(tenant, config, tenant_settings.timezone)
+    return config
 
+
+def disable_tenant_scheduler(tenant: TenantConfig) -> SchedulerConfig:
+    """Disable the scheduler for a specific tenant."""
+    _set_tenant_context(tenant)
+    config = _load_config()
+    config.enabled = False
+    _save_config(config)
+    job_id = f"generate_{tenant.id}"
+    if _scheduler and _scheduler.get_job(job_id):
+        _scheduler.remove_job(job_id)
+        logger.info("Removed job %s", job_id)
+    return config
+
+
+def update_tenant_scheduler_config(tenant: TenantConfig, updates: dict) -> SchedulerConfig:
+    """Update scheduler configuration for a specific tenant and reschedule."""
+    _set_tenant_context(tenant)
     config = _load_config()
 
     if "enabled" in updates:
@@ -797,67 +760,50 @@ def update_scheduler_config(updates: dict) -> SchedulerConfig:
             ]
 
     _save_config(config)
-    _config = config
-
-    _schedule_job(config)
-
+    tenant_settings = settings_service.load_settings()
+    _schedule_tenant_job(tenant, config, tenant_settings.timezone)
     return config
 
 
-def enable_scheduler() -> SchedulerConfig:
-    """Enable the scheduler."""
-    return update_scheduler_config({"enabled": True})
+async def trigger_tenant_run(tenant: TenantConfig) -> dict:
+    """Manually trigger a generation run for a specific tenant."""
+    _set_tenant_context(tenant)
+    logger.info("Manual trigger requested for tenant: %s", tenant.id)
+    return await run_auto_generation(tenant)
 
 
-def disable_scheduler() -> SchedulerConfig:
-    """Disable the scheduler."""
-    return update_scheduler_config({"enabled": False})
-
-
-async def trigger_manual_run() -> dict:
-    """Manually trigger a generation run (for testing)."""
-    logger.info("Manual trigger requested")
-    return await run_auto_generation()
-
-
-async def test_news_selection() -> dict:
-    """
-    Test news selection without running generation.
-    Returns selected news items for preview.
-    """
+async def test_tenant_news_selection(tenant: TenantConfig) -> dict:
+    """Test news selection without running generation for a specific tenant."""
+    _set_tenant_context(tenant)
     config = _load_config()
 
-    # Get enabled runs from config
     enabled_runs = [r for r in config.runs if r.enabled]
     if not enabled_runs:
-        # Default fallback if no runs
         enabled_runs = [ScheduledRunConfig(enabled=True, selection_mode="random")]
 
-    logger.info("Testing news selection for %d runs", len(enabled_runs))
+    logger.info("Testing news selection for tenant %s (%d runs)", tenant.id, len(enabled_runs))
 
-    # Fetch available news
     try:
-        data = await infopigula.fetch_news()
+        source = get_news_source(tenant)
+        data = await source.fetch_news()
         available_items = data.get("items", [])
     except Exception as e:
-        logger.error("Failed to fetch news from InfoPigula: %s", e)
+        logger.error("Failed to fetch news for tenant %s: %s", tenant.id, e)
         available_items = []
 
     if not available_items:
         return {"selection_mode": "error", "count": 0, "selected": []}
 
-    # Determine selection mode for each enabled run and group them
     runs_by_mode: dict[str, list[int]] = {"llm": [], "random": []}
     for i, run_config in enumerate(enabled_runs):
         mode = run_config.selection_mode or "random"
         if mode not in runs_by_mode:
-            mode = "random"  # Fallback
+            mode = "random"
         runs_by_mode[mode].append(i)
 
-    selected_news_map = {} # run_index -> news_item
+    selected_news_map: dict[int, dict] = {}
     remaining_items = list(available_items)
 
-    # First handle LLM selections
     if runs_by_mode["llm"]:
         count = len(runs_by_mode["llm"])
         selected = await select_news_llm(count, remaining_items)
@@ -868,7 +814,6 @@ async def test_news_selection() -> dict:
                 item_id = item.get("id")
                 remaining_items = [it for it in remaining_items if it.get("id") != item_id]
 
-    # Then handle random selections
     if runs_by_mode["random"]:
         count = len(runs_by_mode["random"])
         selected = await select_news_random(count, remaining_items)
@@ -879,17 +824,12 @@ async def test_news_selection() -> dict:
                 item_id = item.get("id")
                 remaining_items = [it for it in remaining_items if it.get("id") != item_id]
 
-    # Reassemble selected news in order
-    selected_items = []
-    for idx in sorted(selected_news_map.keys()):
-        selected_items.append(selected_news_map[idx])
+    selected_items = [selected_news_map[idx] for idx in sorted(selected_news_map.keys())]
 
-    # Extract reasoning if present (from LLM mode)
     reasoning = None
     if selected_items and "_llm_reasoning" in selected_items[0]:
         reasoning = selected_items[0]["_llm_reasoning"]
 
-    # Determine mode label based on run configs
     if len(runs_by_mode["llm"]) > 0 and len(runs_by_mode["random"]) > 0:
         mode_label = "mixed"
     elif len(runs_by_mode["llm"]) > 0:
