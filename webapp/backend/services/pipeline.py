@@ -5,6 +5,7 @@ Each step is isolated and can be called independently.
 
 import json
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -544,11 +545,11 @@ def generate_video_for_run(run_id: str) -> str:
     # Get current episode number for DYSKUSJA counter
     episode_number = settings_service.get_episode_number()
 
-    # Build command
-    from ..core.storage_config import get_tenant_prefix
+    # Build command — run as module so relative imports in video.py work
+    from ..core.storage_config import get_tenant_prefix, get_project_root
+    _project_root = get_project_root()
     cmd = [
-        sys.executable,
-        str(SRC_DIR / "generate_video.py"),
+        sys.executable, "-m", "webapp.backend.generation.video",
         "--audio", keys["audio"],
         "--timeline", keys["timeline"],
         "--images", keys["images_dir"],
@@ -562,8 +563,7 @@ def generate_video_for_run(run_id: str) -> str:
         # For local mode, use full paths
         run_dir = _get_output_dir() / run_id
         cmd = [
-            sys.executable,
-            str(SRC_DIR / "generate_video.py"),
+            sys.executable, "-m", "webapp.backend.generation.video",
             "--audio", str(run_dir / keys["audio"]),
             "--timeline", str(run_dir / keys["timeline"]),
             "--images", str(run_dir / keys["images_dir"]),
@@ -571,7 +571,7 @@ def generate_video_for_run(run_id: str) -> str:
             "-o", str(run_dir / keys["video"]),
         ]
 
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, cwd=_project_root)
 
     return keys["video"]
 
