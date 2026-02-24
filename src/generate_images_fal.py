@@ -53,6 +53,7 @@ def generate_image(
             "num_images": 1,
             "output_format": "png",
         },
+        timeout=300,
     )
     response.raise_for_status()
 
@@ -60,7 +61,7 @@ def generate_image(
     image_url = data["images"][0]["url"]
 
     # Download the image
-    image_response = requests.get(image_url)
+    image_response = requests.get(image_url, timeout=30)
     image_response.raise_for_status()
 
     if storage is not None:
