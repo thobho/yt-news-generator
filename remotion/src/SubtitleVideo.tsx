@@ -495,10 +495,17 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
     (s) => s.chunk && !s.type
   );
 
+  // How long (ms) to keep the current chunk visible after its last word ends.
+  // - Fixes the bug where textTimeMs <= end_ms caused the chunk to vanish 500ms
+  //   before the audio finished (last word's emphasis glow was cut off).
+  // - The extra 300ms gives the highlight animation time to breathe before
+  //   the next chunk snaps in.
+  const CHUNK_HOLD_AFTER_MS = 300;
+
   const currentChunkIndex = chunkSegments.findIndex(
     (s) =>
-      textTimeMs >= s.start_ms &&
-      textTimeMs <= s.end_ms
+      textTimeMs >= s.start_ms &&          // enters 500ms early (preview)
+      currentTimeMs <= s.end_ms + CHUNK_HOLD_AFTER_MS  // exits 300ms after last word
   );
 
   const currentChunk =
