@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
 import { useTenant } from '../context/TenantContext'
-import Settings from './Settings'
 
 const PAGE_SIZE = 20
 
@@ -44,8 +43,6 @@ export default function RunList() {
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-
   const loadRuns = useCallback(() => {
     setLoading(true)
     fetchRuns(tenantId, PAGE_SIZE, 0)
@@ -119,19 +116,7 @@ export default function RunList() {
     <div>
       <div className="page-header">
         <h1>Runs</h1>
-        <div className="header-actions">
-          <button
-            className="settings-toggle"
-            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-          >
-            Quick Settings
-          </button>
-        </div>
       </div>
-
-      {isSettingsOpen && (
-        <Settings onClose={() => setIsSettingsOpen(false)} />
-      )}
 
       {runs.length === 0 ? (
         <div className="card empty-state">

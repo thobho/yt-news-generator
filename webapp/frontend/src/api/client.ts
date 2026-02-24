@@ -116,6 +116,7 @@ export interface WorkflowState {
   can_generate_images?: boolean;
   can_generate_video: boolean;
   can_upload: boolean;
+  can_fast_upload?: boolean;
   can_delete_youtube?: boolean;
   // Regeneration options
   can_drop_audio?: boolean;
@@ -292,6 +293,19 @@ export async function uploadToYoutube(tenantId: string, runId: string, scheduleO
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || 'Failed to start YouTube upload');
+  }
+  return response.json();
+}
+
+export async function fastUpload(tenantId: string, runId: string, scheduleOption: ScheduleOption = 'evening'): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/fast-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ schedule_option: scheduleOption }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to start fast upload');
   }
   return response.json();
 }

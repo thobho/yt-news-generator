@@ -31,6 +31,14 @@ class InfoPigulaNewsSource(NewsSource):
         return await fetch_news_from_infopigula()
 
 
+class NewsAPINewsSource(NewsSource):
+    """US news from newsapi.org."""
+
+    async def fetch_news(self) -> dict:
+        from .newsapi import fetch_news_from_newsapi
+        return await fetch_news_from_newsapi()
+
+
 class StubNewsSource(NewsSource):
     """Placeholder for tenants whose news source is not yet implemented."""
 
@@ -44,6 +52,7 @@ class StubNewsSource(NewsSource):
 
 _SOURCES: dict[str, type[NewsSource]] = {
     "infopigula": InfoPigulaNewsSource,
+    "newsapi": NewsAPINewsSource,
     "stub": StubNewsSource,
 }
 

@@ -85,14 +85,14 @@ export default function Settings({ onClose }: SettingsProps) {
 
   return (
     <div className="settings-panel">
-      <div className="settings-header">
-        <h3>Settings</h3>
-        {onClose && (
+      {onClose && (
+        <div className="settings-header">
+          <h3>Settings</h3>
           <button className="close-btn" onClick={onClose}>
             x
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {error && <div className="error" style={{ marginBottom: '12px' }}>{error}</div>}
 

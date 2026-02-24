@@ -427,11 +427,11 @@ def update_dialogue(run_dir: Path, dialogue_data: dict) -> dict:
     return update_dialogue_for_run(run_dir.name, dialogue_data)
 
 
-def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "Bella") -> dict:
+def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "Bella", language: str = "pl") -> dict:
     """Generate audio from dialogue."""
     settings = settings_service.load_settings()
     tts_engine = settings.tts_engine
-    logger.info("Starting audio generation for run: %s (engine=%s)", run_id, tts_engine)
+    logger.info("Starting audio generation for run: %s (engine=%s, language=%s)", run_id, tts_engine, language)
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -448,6 +448,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
             voice_a="male",
             voice_b="female",
             storage=run_storage,
+            language=language,
         )
     else:
         from generate_audio import generate_audio as gen_audio
@@ -458,6 +459,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
             voice_a,
             voice_b,
             storage=run_storage,
+            language=language,
         )
 
     # Return timeline data
@@ -551,6 +553,7 @@ def generate_video_for_run(run_id: str) -> str:
     episode_number = settings_service.get_episode_number()
 
     # Build command
+    from storage_config import get_tenant_prefix
     cmd = [
         sys.executable,
         str(SRC_DIR / "generate_video.py"),
@@ -560,6 +563,7 @@ def generate_video_for_run(run_id: str) -> str:
         "--episode", str(episode_number),
         "-o", keys["video"],
         "--run-id", run_id,
+        "--tenant-prefix", get_tenant_prefix(),
     ]
 
     if not is_s3_enabled():
@@ -676,6 +680,40 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
 def upload_to_youtube(run_dir: Path) -> dict:
     """Upload video to YouTube (legacy interface)."""
     return upload_to_youtube_for_run(run_dir.name)
+
+
+def fast_upload_for_run(run_id: str, language: str = "pl", schedule_option: str = "evening") -> dict:
+    """
+    Run all remaining pipeline steps sequentially and upload to YouTube.
+
+    Picks up from wherever the run is — skips steps already completed.
+    Steps: audio → images → video → yt_metadata → youtube upload.
+    """
+    logger.info("Starting fast upload for run: %s (language=%s, schedule=%s)", run_id, language, schedule_option)
+    run_storage = get_run_storage(run_id)
+    keys = get_run_keys()
+
+    if not run_storage.exists(keys["dialogue"]):
+        raise FileNotFoundError("Dialogue not found. Generate dialogue first.")
+
+    if not (run_storage.exists(keys["audio"]) and run_storage.exists(keys["timeline"])):
+        logger.info("Fast upload: generating audio")
+        generate_audio_for_run(run_id, language=language)
+
+    if not run_storage.exists(keys["images_json"]):
+        logger.info("Fast upload: generating images")
+        generate_images_for_run(run_id)
+
+    if not run_storage.exists(keys["video"]):
+        logger.info("Fast upload: rendering video")
+        generate_video_for_run(run_id)
+
+    if not run_storage.exists(keys["yt_metadata"]):
+        logger.info("Fast upload: generating YouTube metadata")
+        generate_yt_metadata_for_run(run_id)
+
+    logger.info("Fast upload: uploading to YouTube")
+    return upload_to_youtube_for_run(run_id, schedule_option=schedule_option)
 
 
 def delete_youtube_for_run(run_id: str) -> dict:
@@ -987,6 +1025,7 @@ def get_workflow_state_for_run(run_id: str) -> dict:
         "can_generate_images": has_audio and not has_images,
         "can_generate_video": has_audio and has_images and not has_video,
         "can_upload": can_upload,
+        "can_fast_upload": has_dialogue and not has_yt_upload,
         "can_delete_youtube": has_yt_upload,
         # Regeneration options
         "can_drop_audio": has_audio,

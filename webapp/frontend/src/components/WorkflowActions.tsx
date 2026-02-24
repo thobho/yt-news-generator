@@ -5,6 +5,7 @@ import {
   generateImages,
   generateVideo,
   uploadToYoutube,
+  fastUpload,
   pollTaskUntilDone,
   TaskStatus,
   dropAudio,
@@ -111,6 +112,11 @@ export default function WorkflowActions({
     'YouTube upload'
   )
 
+  const handleFastUpload = () => runTask(
+    () => fastUpload(tenantId, runId, scheduleOption),
+    'Fast upload'
+  )
+
   const handleDrop = async (
     dropFn: () => Promise<{ status: string; deleted: string[] }>,
     itemName: string
@@ -203,6 +209,35 @@ export default function WorkflowActions({
           <button onClick={handleGenerateAudio} disabled={isRunning} className="primary">
             Generate Audio
           </button>
+        )}
+
+        {workflow.can_fast_upload && (
+          <div className="upload-section">
+            <div className="schedule-options">
+              <label className="schedule-label">Schedule:</label>
+              <div className="schedule-buttons">
+                <button
+                  type="button"
+                  className={`schedule-btn ${scheduleOption === 'now' ? 'active' : ''}`}
+                  onClick={() => setScheduleOption('now')}
+                  disabled={isRunning}
+                >
+                  Now
+                </button>
+                <button
+                  type="button"
+                  className={`schedule-btn ${scheduleOption === 'evening' ? 'active' : ''}`}
+                  onClick={() => setScheduleOption('evening')}
+                  disabled={isRunning}
+                >
+                  18-20h
+                </button>
+              </div>
+            </div>
+            <button onClick={handleFastUpload} disabled={isRunning} className="primary upload">
+              ⚡ Fast YT Upload
+            </button>
+          </div>
         )}
 
         {workflow.can_generate_images && (

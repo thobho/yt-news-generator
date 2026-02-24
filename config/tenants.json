@@ -11,7 +11,7 @@
     "id": "us",
     "display_name": "BalancedNews US",
     "language": "en",
-    "news_source": "stub",
+    "news_source": "newsapi",
     "storage_prefix": "tenants/us",
     "credentials_dir": "credentials/us"
   }

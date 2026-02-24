@@ -8,6 +8,7 @@ import {
   PromptType,
 } from '../api/client';
 import { useTenant } from '../context/TenantContext';
+import Settings from './Settings';
 
 export default function SettingsPage() {
   const { currentTenant } = useTenant();
@@ -88,9 +89,13 @@ export default function SettingsPage() {
           <Link to="/" className="back-link">
             &larr; Back to Runs
           </Link>
-          <h1>Prompt Settings</h1>
+          <h1>Settings</h1>
         </div>
       </div>
+
+      <Settings />
+
+      <h2 style={{ marginTop: '32px', marginBottom: '16px' }}>Prompts</h2>
 
       <div className="prompt-types">
         {promptTypes.map((typeInfo) => (

@@ -69,6 +69,7 @@ class WorkflowState(BaseModel):
     can_generate_images: bool = False
     can_generate_video: bool
     can_upload: bool
+    can_fast_upload: bool = False
     can_delete_youtube: bool = False
     # Regeneration options
     can_drop_audio: bool = False
@@ -247,12 +248,13 @@ async def generate_audio(run_id: str, background_tasks: BackgroundTasks, tenant:
 
     _storage_prefix = tenant.storage_prefix
     _cred_dir = tenant.credentials_dir
+    _language = tenant.language
 
     def run_task():
         set_tenant_prefix(_storage_prefix)
         set_credentials_dir(_cred_dir)
         try:
-            pipeline.generate_audio_for_run(run_id)
+            pipeline.generate_audio_for_run(run_id, language=_language)
             _tasks[task_id] = TaskStatus(
                 status="completed",
                 message="Audio generated successfully"
@@ -410,6 +412,56 @@ async def upload_youtube(
                 status="error",
                 message=str(e)
             )
+        finally:
+            get_cache().invalidate_run(run_id)
+
+    background_tasks.add_task(run_task)
+
+    return {"task_id": task_id, "status": "started"}
+
+
+@router.post("/{run_id}/fast-upload")
+async def fast_upload(
+    run_id: str,
+    background_tasks: BackgroundTasks,
+    tenant: TenantConfig = Depends(storage_dep),
+    request: YouTubeUploadRequest = None,
+):
+    """Run all remaining pipeline steps and upload to YouTube (runs in background)."""
+    validate_run_exists(run_id)
+
+    state = pipeline.get_workflow_state_for_run(run_id)
+    if not state["can_fast_upload"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot fast upload at this stage"
+        )
+
+    task_id = f"{run_id}:fast_upload"
+    if task_id in _tasks and _tasks[task_id].status == "running":
+        raise HTTPException(status_code=409, detail="Task already running")
+
+    schedule_option = request.schedule_option if request else "evening"
+    _tasks[task_id] = TaskStatus(status="running", message="Starting fast upload pipeline...")
+
+    _storage_prefix = tenant.storage_prefix
+    _cred_dir = tenant.credentials_dir
+    _language = tenant.language
+
+    def run_task():
+        set_tenant_prefix(_storage_prefix)
+        set_credentials_dir(_cred_dir)
+        try:
+            _tasks[task_id] = TaskStatus(status="running", message="Generating audio...")
+            result = pipeline.fast_upload_for_run(run_id, language=_language, schedule_option=schedule_option)
+            _tasks[task_id] = TaskStatus(
+                status="completed",
+                message="Uploaded to YouTube successfully",
+                result=result,
+            )
+        except Exception as e:
+            logger.exception("Fast upload failed")
+            _tasks[task_id] = TaskStatus(status="error", message=str(e))
         finally:
             get_cache().invalidate_run(run_id)
 

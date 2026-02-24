@@ -35,11 +35,19 @@ interface ImageInfo {
   file: string;
 }
 
+export interface VideoI18n {
+  cta_intro_headline?: string;
+  cta_intro_subline?: string;
+  cta_end_headline?: string;
+  cta_end_subline?: string;
+}
+
 export interface SubtitleVideoProps {
   audioFile: string;
   segments: Segment[];
   images: ImageInfo[];
   episodeNumber?: number; // Episode counter starting from 6
+  i18n?: VideoI18n;
 }
 
 /* =========================
@@ -264,8 +272,8 @@ interface CTAProps {
 const CallToAction: React.FC<CTAProps> = ({
   startFrame,
   durationFrames,
-  headline = "Mniej emocji. Więcej debat.",
-  subline = "Źródła w opisie",
+  headline,
+  subline,
   showArrow = true,
   visibleDurationFrames,
 }) => {
@@ -456,6 +464,7 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
   segments,
   images,
   episodeNumber,
+  i18n = {},
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -749,14 +758,16 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
             <CallToAction
               startFrame={Math.floor(5 * fps)}
               durationFrames={Math.floor(0.8 * fps)}
-              headline="Zajrzyj do źródeł ↓"
-              subline={"Więcej informacji w opisie"}
+              headline={i18n.cta_intro_headline ?? "Zajrzyj do źródeł ↓"}
+              subline={i18n.cta_intro_subline ?? "Więcej informacji w opisie"}
               showArrow={false}
               visibleDurationFrames={Math.floor(3 * fps)}
             />
             <CallToAction
               startFrame={ctaStartFrame}
               durationFrames={ctaDurationFrames}
+              headline={i18n.cta_end_headline}
+              subline={i18n.cta_end_subline}
             />
           </>
         );
