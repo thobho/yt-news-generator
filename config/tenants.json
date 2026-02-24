@@ -5,7 +5,8 @@
     "language": "pl",
     "news_source": "infopigula",
     "storage_prefix": "tenants/pl",
-    "credentials_dir": "credentials/pl"
+    "credentials_dir": "credentials/pl",
+    "timezone": "Europe/Warsaw"
   },
   {
     "id": "us",
@@ -13,6 +14,7 @@
     "language": "en",
     "news_source": "newsapi",
     "storage_prefix": "tenants/us",
-    "credentials_dir": "credentials/us"
+    "credentials_dir": "credentials/us",
+    "timezone": "America/New_York"
   }
 ]

@@ -34,16 +34,29 @@ import {
 } from '../api/client'
 import { useTenant } from '../context/TenantContext'
 
-function formatDateTime(isoString: string | null): string {
+function getTzAbbr(timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' })
+    .formatToParts(new Date())
+  return parts.find((p) => p.type === 'timeZoneName')?.value ?? timezone
+}
+
+function getEveningLabel(timezone: string | undefined): string {
+  if (!timezone) return '18-20h'
+  return timezone.startsWith('America/') ? '6–8 PM' : '18-20h'
+}
+
+function formatDateTime(isoString: string | null, timezone: string): string {
   if (!isoString) return 'N/A'
   const date = new Date(isoString)
-  return date.toLocaleString('pl-PL', {
+  const locale = timezone.startsWith('America/') ? 'en-US' : 'pl-PL'
+  return date.toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    timeZone: timezone,
   })
 }
 
@@ -56,6 +69,7 @@ function StatusChip({ status }: { status: string | null }) {
 export default function SchedulerPage() {
   const { currentTenant } = useTenant()
   const tenantId = currentTenant?.id ?? 'pl'
+  const tenantTz = currentTenant?.timezone ?? 'Europe/Warsaw'
   const [status, setStatus] = useState<SchedulerStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -285,7 +299,7 @@ export default function SchedulerPage() {
             />
             {status?.enabled && status?.state?.next_run_at && (
               <Typography variant="body2" color="text.secondary">
-                Next run: {formatDateTime(status.state.next_run_at)}
+                Next run: {formatDateTime(status.state.next_run_at, tenantTz)}
               </Typography>
             )}
           </Stack>
@@ -300,7 +314,7 @@ export default function SchedulerPage() {
             <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
                 <Typography variant="body2">
-                  {formatDateTime(status.state.last_run_at)}
+                  {formatDateTime(status.state.last_run_at, tenantTz)}
                 </Typography>
                 <StatusChip status={status.state.last_run_status} />
               </Stack>
@@ -346,13 +360,13 @@ export default function SchedulerPage() {
 
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
             <TextField
-              label="Generation Time (Warsaw)"
+              label={`Generation Time (${getTzAbbr(tenantTz)})`}
               value={generationTime}
               onChange={(e) => setGenerationTime(e.target.value)}
               size="small"
               placeholder="HH:MM"
-              helperText="Time to generate videos"
-              sx={{ width: 180 }}
+              helperText={`Local time in ${tenantTz}`}
+              sx={{ width: 220 }}
             />
             <FormControl size="small" sx={{ minWidth: 180 }}>
               <InputLabel>Publish Time</InputLabel>
@@ -362,7 +376,7 @@ export default function SchedulerPage() {
                 onChange={(e) => setPublishTime(e.target.value)}
               >
                 <MenuItem value="now">Immediately</MenuItem>
-                <MenuItem value="evening">Evening (18:00-20:00)</MenuItem>
+                <MenuItem value="evening">Evening ({getEveningLabel(tenantTz)})</MenuItem>
               </Select>
             </FormControl>
           </Box>

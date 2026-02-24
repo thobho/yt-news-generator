@@ -15,6 +15,7 @@ class TenantConfig(BaseModel):
     news_source: str
     storage_prefix: str
     credentials_dir: str
+    timezone: str = "Europe/Warsaw"
 
 
 @lru_cache

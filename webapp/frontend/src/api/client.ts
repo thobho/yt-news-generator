@@ -45,6 +45,7 @@ export async function logout(): Promise<void> {
 export interface Tenant {
   id: string;
   display_name: string;
+  timezone: string;
 }
 
 export async function fetchTenants(): Promise<Tenant[]> {

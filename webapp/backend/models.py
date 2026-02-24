@@ -6,6 +6,7 @@ from datetime import datetime
 class TenantInfo(BaseModel):
     id: str
     display_name: str
+    timezone: str = "Europe/Warsaw"
 
 
 class YouTubeStats(BaseModel):

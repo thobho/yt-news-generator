@@ -13,4 +13,4 @@ router = APIRouter(tags=["tenants"])
 @router.get("/tenants", response_model=list[TenantInfo])
 async def list_tenants():
     """List all configured tenants."""
-    return [TenantInfo(id=t.id, display_name=t.display_name) for t in load_tenants()]
+    return [TenantInfo(id=t.id, display_name=t.display_name, timezone=t.timezone) for t in load_tenants()]

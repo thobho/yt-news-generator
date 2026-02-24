@@ -32,6 +32,7 @@ export default function WorkflowActions({
 }: WorkflowActionsProps) {
   const { currentTenant } = useTenant()
   const tenantId = currentTenant?.id ?? 'pl'
+  const eveningLabel = currentTenant?.timezone?.startsWith('America/') ? '6–8 PM' : '18-20h'
   const [isRunning, setIsRunning] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -230,7 +231,7 @@ export default function WorkflowActions({
                   onClick={() => setScheduleOption('evening')}
                   disabled={isRunning}
                 >
-                  18-20h
+                  {eveningLabel}
                 </button>
               </div>
             </div>
@@ -271,7 +272,7 @@ export default function WorkflowActions({
                   onClick={() => setScheduleOption('evening')}
                   disabled={isRunning}
                 >
-                  18-20h
+                  {eveningLabel}
                 </button>
               </div>
             </div>

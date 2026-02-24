@@ -629,7 +629,7 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
 
     Args:
         run_id: The run ID
-        schedule_option: One of "8:00", "18:00", "1hour", or "auto"
+        schedule_option: One of "now", "evening", or "auto"
     """
     logger.info("Starting YouTube upload for run: %s (schedule: %s)", run_id, schedule_option)
     from upload_youtube import upload_to_youtube as yt_upload, parse_yt_metadata
@@ -649,12 +649,16 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
     # Get current episode number (before upload, for logging)
     current_episode = settings_service.get_episode_number()
 
+    # Read tenant timezone for evening schedule
+    settings = settings_service.load_settings()
+
     # Do the upload
     video_id, publish_at = yt_upload(
         keys["video"], keys["yt_metadata"],
         storage=run_storage,
         schedule_option=schedule_option,
         credentials_dir=get_credentials_dir(),
+        timezone_str=settings.timezone,
     )
 
     # Increment episode counter after successful upload

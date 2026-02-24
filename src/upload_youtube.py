@@ -29,11 +29,15 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 try:
-    import zoneinfo
-    WARSAW_TZ = zoneinfo.ZoneInfo("Europe/Warsaw")
+    import zoneinfo as _zoneinfo
+    def _get_tz(name: str):
+        return _zoneinfo.ZoneInfo(name)
 except ImportError:
-    from backports.zoneinfo import ZoneInfo
-    WARSAW_TZ = ZoneInfo("Europe/Warsaw")
+    from backports import zoneinfo as _zoneinfo
+    def _get_tz(name: str):
+        return _zoneinfo.ZoneInfo(name)
+
+WARSAW_TZ = _get_tz("Europe/Warsaw")
 
 PROJECT_ROOT = get_project_root()
 
@@ -46,14 +50,16 @@ SCOPES = [
 PLAYLIST_TITLE = "Daily News"
 
 
-def get_scheduled_publish_time(schedule_option: str = "evening") -> str | None:
+def get_scheduled_publish_time(schedule_option: str = "evening", timezone_str: str = "Europe/Warsaw") -> str | None:
     """
-    Calculate publish time in Europe/Warsaw timezone based on schedule option.
+    Calculate publish time in the given timezone based on schedule option.
 
     Args:
         schedule_option: One of:
             - "now" - Publish immediately (returns None, video will be public)
-            - "evening" - Random time between 18:00-20:00 today, or next day if after 19:00
+            - "evening" - Random time between 18:00-20:00 today in the tenant timezone,
+                          or next day if already past 19:00
+        timezone_str: IANA timezone name (e.g. "Europe/Warsaw", "America/New_York")
 
     Returns ISO 8601 string in UTC for the YouTube API, or None for immediate publish.
     """
@@ -63,8 +69,9 @@ def get_scheduled_publish_time(schedule_option: str = "evening") -> str | None:
     if schedule_option == "now":
         return None
 
-    # "evening" - random time between 18:00 and 20:00
-    now = datetime.now(WARSAW_TZ)
+    # "evening" - random time between 18:00 and 20:00 in the tenant's local timezone
+    local_tz = _get_tz(timezone_str)
+    now = datetime.now(local_tz)
 
     # Random minutes within 18:00-20:00 range (0-120 minutes from 18:00)
     random_minutes = random.randint(0, 120)
@@ -259,6 +266,7 @@ def upload_to_youtube(
     storage: StorageBackend = None,
     schedule_option: str = "auto",
     credentials_dir: str = "credentials/pl",
+    timezone_str: str = "Europe/Warsaw",
 ) -> tuple[str, str | None]:
     """
     Full upload pipeline: authenticate, parse metadata, upload, add to playlist.
@@ -268,6 +276,7 @@ def upload_to_youtube(
         metadata_path: Path/key to yt_metadata.md
         storage: Optional storage backend. If provided, downloads files from storage.
         schedule_option: One of "now" (publish immediately) or "evening" (random 18:00-20:00)
+        timezone_str: IANA timezone name used for the "evening" window calculation
 
     Returns:
         Tuple of (video_id, publish_at). publish_at is None if published immediately.
@@ -289,7 +298,7 @@ def upload_to_youtube(
             sys.exit(1)
 
     metadata = parse_yt_metadata(metadata_path, storage)
-    publish_at = get_scheduled_publish_time(schedule_option)
+    publish_at = get_scheduled_publish_time(schedule_option, timezone_str)
 
     logger.info("Title: %s", metadata['title'])
     logger.info("Tags: %s", ', '.join(metadata['tags']))
