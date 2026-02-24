@@ -27,13 +27,10 @@ from typing import Union
 
 from generate_audio import (
     PAUSE_BETWEEN_SEGMENTS_MS,
-    chunk_segment,
     chunk_segment_aligned,
     extract_segments,
-    distribute_sources,
-    get_source_for_time,
 )
-from align_audio import transcribe_with_timestamps, align_text_to_audio, is_whisper_available
+from align_audio import transcribe_with_timestamps, align_text_to_audio
 from logging_config import get_logger
 from storage import StorageBackend
 from storage_config import get_data_storage
@@ -52,11 +49,6 @@ VOICE_REFS = {
 # Target format for merging – must match between segments and silence
 _MERGE_SAMPLE_RATE = 44100
 _FADE_MS = 15  # fade-in/out at segment edges to eliminate TTS edge noise
-
-# Alignment settings
-USE_WHISPER_ALIGNMENT = True  # Set to False to use old word-count method
-MIN_CHUNK_WORDS = 3  # Minimum words per subtitle chunk
-MAX_CHUNK_WORDS = 8  # Maximum words per subtitle chunk
 
 # Parallelization settings
 TTS_MAX_WORKERS = 5  # Max parallel TTS requests
@@ -236,7 +228,7 @@ def generate_audio(
 
         # Run Whisper alignment (can also be parallelized but API cost is per-minute)
         alignments = []
-        if USE_WHISPER_ALIGNMENT and timeline is not None and is_whisper_available():
+        if timeline is not None:
             logger.info("Running Whisper alignment on %d segments", n_segments)
             for i, (audio_file, text) in enumerate(zip(audio_files, segment_texts)):
                 try:
@@ -274,8 +266,7 @@ def generate_audio(
         for i, ((speaker, text, emphasis, sources), dur, aligned) in enumerate(
             zip(segments, durations, alignments)
         ):
-            if aligned and USE_WHISPER_ALIGNMENT:
-                # Use Whisper-aligned timestamps (offset by current position)
+            if aligned:
                 aligned_offset = [
                     {
                         "word": w["word"],
@@ -288,18 +279,9 @@ def generate_audio(
                     aligned_offset, speaker, emphasis, sources, t, t + dur
                 )
                 timeline_segments.extend(chunks)
-                logger.debug("Used Whisper alignment for segment %d (%d chunks)", i + 1, len(chunks))
+                logger.debug("Whisper aligned segment %d (%d chunks)", i + 1, len(chunks))
             else:
-                # Fall back to word-count proportional distribution
-                base = {
-                    "speaker": speaker,
-                    "text": text,
-                    "start_ms": t,
-                    "end_ms": t + dur,
-                    "emphasis": emphasis,
-                    "sources": sources,
-                }
-                timeline_segments.extend(chunk_segment(base))
+                logger.warning("No alignment for segment %d, skipping chunks", i + 1)
 
             t += dur
 

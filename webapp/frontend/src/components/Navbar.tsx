@@ -19,6 +19,7 @@ const navItems = [
   { label: 'Runs', path: '/' },
   { label: 'Analytics', path: '/analytics' },
   { label: 'Scheduler', path: '/scheduler' },
+  { label: 'Logs', path: '/logs' },
   { label: 'Settings', path: '/settings' },
 ]
 

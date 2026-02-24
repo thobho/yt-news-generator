@@ -17,7 +17,7 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 from .config.tenant_registry import load_tenants
-from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler, tenants
+from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler, tenants, logs
 from .services import auth as auth_service
 from .services import scheduler as scheduler_service
 
@@ -121,6 +121,7 @@ app.include_router(auth.router)  # Auth routes first (public)
 
 # Tenant-agnostic endpoints
 app.include_router(tenants.router, prefix="/api")
+app.include_router(logs.router, prefix="/api")
 
 # Tenant-scoped endpoints
 _TENANT = "/api/tenants/{tenant_id}"

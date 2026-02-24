@@ -18,7 +18,7 @@ from typing import Union
 
 from elevenlabs import ElevenLabs
 
-from align_audio import transcribe_with_timestamps, align_text_to_audio, is_whisper_available
+from align_audio import transcribe_with_timestamps, align_text_to_audio
 from logging_config import get_logger
 from storage import StorageBackend
 
@@ -40,94 +40,9 @@ VOICE_IDS = {
     "Josh": "TxGEqnHWrfWFTfGW9XjX",
 }
 
-CONNECTORS = {
-    "i", "ale", "że", "bo", "który", "która",
-    "którzy", "które", "oraz", "ponieważ"
-}
-
-MIN_WORDS = 2
-MAX_WORDS = 6
 MIN_SOURCE_DURATION_MS = 5000  # Minimum 5 seconds per source display
-
-USE_WHISPER_ALIGNMENT = True  # Set to False to use word-count proportional method
 MIN_CHUNK_WORDS = 3
 MAX_CHUNK_WORDS = 8
-
-
-# ==========================
-# SEMANTIC CHUNKING
-# ==========================
-
-# Punctuation that should attach to the previous word (no space before)
-TRAILING_PUNCT = {".", ",", "!", "?", ":", ";", ")", "]", "}", "…", "—", "-"}
-# Punctuation that should attach to the next word (no space after)
-LEADING_PUNCT = {"(", "[", "{", "„", "\"", "'"}
-
-
-def tokenize(text: str) -> list[str]:
-    return re.findall(r"\w+|[^\w\s]", text, re.UNICODE)
-
-
-def join_tokens(tokens: list[str]) -> str:
-    """Join tokens with proper punctuation handling (no space before trailing punct)."""
-    if not tokens:
-        return ""
-
-    result = []
-    prev_token = None
-    for i, token in enumerate(tokens):
-        if i == 0:
-            result.append(token)
-        elif token in TRAILING_PUNCT:
-            # No space before trailing punctuation (., ! etc.)
-            result.append(token)
-        elif prev_token in LEADING_PUNCT:
-            # No space after leading punctuation ((, „ etc.)
-            result.append(token)
-        else:
-            result.append(" " + token)
-        prev_token = token
-
-    return "".join(result).strip()
-
-
-def semantic_chunks(text: str) -> list[str]:
-    tokens = tokenize(text)
-    chunks = []
-    current = []
-
-    for token in tokens:
-        # Skip adding lone punctuation to empty chunk
-        if not current and token in TRAILING_PUNCT:
-            # Attach to previous chunk if exists
-            if chunks:
-                chunks[-1] = chunks[-1] + token
-            continue
-
-        current.append(token)
-        clean_words = [x for x in current if re.match(r"\w+", x)]
-        wc = len(clean_words)
-
-        # Check if we should break here
-        should_break = (
-            wc >= MAX_WORDS
-            or token in {".", "?", "!"}
-            or (wc >= MIN_WORDS and token.lower() in CONNECTORS)
-        )
-
-        if should_break:
-            chunk_text = join_tokens(current)
-            if chunk_text:
-                chunks.append(chunk_text)
-            current = []
-
-    # Handle remaining tokens
-    if current:
-        chunk_text = join_tokens(current)
-        if chunk_text:
-            chunks.append(chunk_text)
-
-    return chunks
 
 
 def chunk_segment_aligned(
@@ -280,68 +195,6 @@ def get_source_for_time(source_ranges: list[dict], time_ms: int) -> dict | None:
         if sr["start_ms"] <= time_ms < sr["end_ms"]:
             return sr["source"]
     return None
-
-
-def chunk_segment(segment: dict) -> list[dict]:
-    chunks = semantic_chunks(segment["text"])
-    start = segment["start_ms"]
-    end = segment["end_ms"]
-    duration = end - start
-    emphasis = segment.get("emphasis", [])
-    sources = segment.get("sources", [])
-
-    # Distribute sources across the segment duration
-    source_ranges = distribute_sources(sources, start, end)
-
-    lengths = [len(c.split()) for c in chunks]
-    total_words = sum(lengths)
-
-    result = []
-    current_time = start
-
-    for chunk, words in zip(chunks, lengths):
-        part = int(duration * (words / total_words))
-        chunk_end = current_time + part
-        chunk_data = {
-            "speaker": segment["speaker"],
-            "text": chunk,
-            "start_ms": current_time,
-            "end_ms": chunk_end,
-            "chunk": True
-        }
-        # Add emphasis words that appear in this chunk
-        # Check both full phrases AND individual words from emphasis phrases
-        if emphasis:
-            chunk_lower = chunk.lower()
-            chunk_emphasis = []
-            for phrase in emphasis:
-                phrase_lower = phrase.lower()
-                # First check if the full phrase is in the chunk
-                if phrase_lower in chunk_lower:
-                    chunk_emphasis.append(phrase)
-                else:
-                    # Check if any word from the phrase appears in the chunk
-                    phrase_words = phrase_lower.split()
-                    for word in phrase_words:
-                        # Skip short words and check whole word boundaries
-                        if len(word) > 2 and re.search(rf'\b{re.escape(word)}\b', chunk_lower):
-                            chunk_emphasis.append(word)
-            if chunk_emphasis:
-                chunk_data["emphasis"] = chunk_emphasis
-
-        # Find the source active at the midpoint of this chunk
-        chunk_midpoint = current_time + part // 2
-        active_source = get_source_for_time(source_ranges, chunk_midpoint)
-        if active_source:
-            chunk_data["source"] = active_source
-
-        result.append(chunk_data)
-        current_time = chunk_end
-
-    if result:
-        result[-1]["end_ms"] = end
-
-    return result
 
 
 # ==========================
@@ -499,10 +352,7 @@ def generate_audio(
         audio_files = []
         durations = []
         alignments = []
-
-        use_whisper = USE_WHISPER_ALIGNMENT and is_whisper_available()
-        if use_whisper:
-            logger.info("Whisper alignment enabled (language=%s)", language)
+        logger.info("Whisper alignment enabled (language=%s)", language)
 
         for i, (speaker, text, _emphasis, _sources) in enumerate(segments):
             out = tmp / f"seg_{i:03}.mp3"
@@ -512,13 +362,12 @@ def generate_audio(
             durations.append(dur)
 
             alignment = None
-            if use_whisper:
-                try:
-                    whisper_words = transcribe_with_timestamps(out, language=language)
-                    alignment = align_text_to_audio(text, whisper_words, start_offset_ms=0)
-                    logger.debug("Aligned %d words for segment %d", len(alignment), i + 1)
-                except Exception as e:
-                    logger.warning("Whisper alignment failed for segment %d: %s", i + 1, e)
+            try:
+                whisper_words = transcribe_with_timestamps(out, language=language)
+                alignment = align_text_to_audio(text, whisper_words, start_offset_ms=0)
+                logger.debug("Aligned %d words for segment %d", len(alignment), i + 1)
+            except Exception as e:
+                logger.warning("Whisper alignment failed for segment %d: %s", i + 1, e)
             alignments.append(alignment)
 
         logger.info("Merging %d audio segments", len(audio_files))
@@ -544,7 +393,7 @@ def generate_audio(
     for i, ((speaker, text, emphasis, sources), dur, aligned) in enumerate(
         zip(segments, durations, alignments)
     ):
-        if aligned and USE_WHISPER_ALIGNMENT:
+        if aligned:
             aligned_offset = [
                 {
                     "word": w["word"],
@@ -555,17 +404,9 @@ def generate_audio(
             ]
             chunks = chunk_segment_aligned(aligned_offset, speaker, emphasis, sources, t, t + dur)
             timeline_segments.extend(chunks)
-            logger.debug("Used Whisper alignment for segment %d (%d chunks)", i + 1, len(chunks))
+            logger.debug("Whisper aligned segment %d (%d chunks)", i + 1, len(chunks))
         else:
-            base = {
-                "speaker": speaker,
-                "text": text,
-                "start_ms": t,
-                "end_ms": t + dur,
-                "emphasis": emphasis,
-                "sources": sources,
-            }
-            timeline_segments.extend(chunk_segment(base))
+            logger.warning("No alignment for segment %d, skipping chunks", i + 1)
 
         t += dur
 

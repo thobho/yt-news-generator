@@ -885,3 +885,25 @@ export async function triggerSchedulerRun(tenantId: string): Promise<{ status: s
   }
   return response.json();
 }
+
+// Logs
+
+export interface LogsResponse {
+  lines: string[];
+  file: string;
+  total_lines: number;
+}
+
+export async function fetchLogs(
+  file: 'app' | 'error' = 'app',
+  lines: number = 500,
+  search?: string,
+): Promise<LogsResponse> {
+  const params = new URLSearchParams({ file, lines: String(lines) });
+  if (search) params.set('search', search);
+  const response = await fetch(`${API_BASE}/logs?${params}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch logs');
+  }
+  return response.json();
+}
