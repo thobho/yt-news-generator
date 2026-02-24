@@ -16,7 +16,8 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler
+from .config.tenant_registry import load_tenants
+from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler, tenants
 from .services import auth as auth_service
 from .services import scheduler as scheduler_service
 
@@ -31,6 +32,7 @@ PUBLIC_PATHS = [
     "/api/auth/status",
     "/api/auth/login",
     "/api/auth/logout",
+    "/api/tenants",
     "/health",
 ]
 
@@ -116,19 +118,27 @@ app.add_middleware(AuthMiddleware)
 
 # Include routes
 app.include_router(auth.router)  # Auth routes first (public)
-app.include_router(runs.router)
-app.include_router(workflow.router)
-app.include_router(settings.router)
-app.include_router(prompts.router)
-app.include_router(infopigula.router)
-app.include_router(analytics.router)
-app.include_router(scheduler.router)
+
+# Tenant-agnostic endpoints
+app.include_router(tenants.router, prefix="/api")
+
+# Tenant-scoped endpoints
+_TENANT = "/api/tenants/{tenant_id}"
+app.include_router(runs.router, prefix=f"{_TENANT}/runs")
+app.include_router(workflow.router, prefix=f"{_TENANT}/workflow")
+app.include_router(settings.router, prefix=f"{_TENANT}/settings")
+app.include_router(prompts.router, prefix=f"{_TENANT}/prompts")
+app.include_router(infopigula.router, prefix=_TENANT)
+app.include_router(analytics.router, prefix=f"{_TENANT}/analytics")
+app.include_router(scheduler.router, prefix=f"{_TENANT}/scheduler")
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize scheduler on startup."""
-    scheduler_service.init_scheduler()
+    """Initialize tenant registry and scheduler on startup."""
+    tenants = load_tenants()
+    logger.info(f"Loaded {len(tenants)} tenant(s): {[t.id for t in tenants]}")
+    scheduler_service.init_scheduler(tenants)
 
 
 @app.on_event("shutdown")

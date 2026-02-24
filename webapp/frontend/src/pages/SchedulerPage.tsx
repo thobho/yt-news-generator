@@ -32,6 +32,7 @@ import {
   PromptSelections,
   ScheduledRunConfig,
 } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 function formatDateTime(isoString: string | null): string {
   if (!isoString) return 'N/A'
@@ -53,6 +54,8 @@ function StatusChip({ status }: { status: string | null }) {
 }
 
 export default function SchedulerPage() {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [status, setStatus] = useState<SchedulerStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [isInitialized, setIsInitialized] = useState(false)
@@ -76,7 +79,7 @@ export default function SchedulerPage() {
 
   const loadStatus = async (forceInit = false) => {
     try {
-      const data = await fetchSchedulerStatus()
+      const data = await fetchSchedulerStatus(tenantId)
       setStatus(data)
 
       // Only initialize form with current config on first load or forceInit
@@ -108,6 +111,11 @@ export default function SchedulerPage() {
     }
   }
 
+  // Reset form when tenant changes so it reinitializes from the new tenant's config
+  useEffect(() => {
+    setIsInitialized(false)
+  }, [tenantId])
+
   useEffect(() => {
     loadStatus()
     // Poll status every 30 seconds - but don't overwrite form state
@@ -116,14 +124,14 @@ export default function SchedulerPage() {
   }, [isInitialized])
 
   useEffect(() => {
-    fetchAllPrompts()
+    fetchAllPrompts(tenantId)
       .then((data) => {
         setPromptTypes(data.types)
       })
       .catch((err) => {
         console.error('Failed to fetch prompts:', err)
       })
-  }, [])
+  }, [tenantId])
 
   const handleToggle = async () => {
     if (!status) return
@@ -132,10 +140,10 @@ export default function SchedulerPage() {
     setSuccess(null)
     try {
       if (status.enabled) {
-        await disableScheduler()
+        await disableScheduler(tenantId)
         setSuccess('Scheduler disabled')
       } else {
-        await enableScheduler()
+        await enableScheduler(tenantId)
         setSuccess('Scheduler enabled')
       }
       await loadStatus()
@@ -151,7 +159,7 @@ export default function SchedulerPage() {
     setError(null)
     setSuccess(null)
     try {
-      await updateSchedulerConfig({
+      await updateSchedulerConfig(tenantId, {
         generation_time: generationTime,
         publish_time: publishTime,
         runs: runs,
@@ -215,7 +223,7 @@ export default function SchedulerPage() {
     setError(null)
     setSuccess(null)
     try {
-      const result = await triggerSchedulerRun()
+      const result = await triggerSchedulerRun(tenantId)
       setSuccess(result.message)
       // Start polling more frequently after trigger
       setTimeout(loadStatus, 5000)

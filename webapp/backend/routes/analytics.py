@@ -10,8 +10,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import storage_dep
 from ..models import AnalyticsRun, YouTubeStats
 
 # Add src to path for storage imports
@@ -19,11 +21,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from logging_config import get_logger
-from storage_config import get_output_storage, get_run_storage, is_s3_enabled
+from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, is_s3_enabled
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+router = APIRouter(tags=["analytics"])
 
 
 def parse_run_timestamp(run_id: str) -> Optional[datetime]:
@@ -143,7 +145,7 @@ async def _build_analytics_run(run_id: str) -> Optional[AnalyticsRun]:
 
 
 @router.get("/runs", response_model=list[AnalyticsRun])
-async def list_analytics_runs():
+async def list_analytics_runs(_: TenantConfig = Depends(storage_dep)):
     """List runs with YouTube uploads older than 48 hours, with cached stats."""
     output_storage = get_output_storage()
     runs = []
@@ -165,9 +167,8 @@ async def list_analytics_runs():
         ])
         runs = [r for r in analytics_runs if r is not None]
     else:
-        # Local filesystem
-        from storage_config import get_storage_dir
-        output_dir = get_storage_dir() / "output"
+        # Local filesystem — tenant-aware via storage_config ContextVar
+        output_dir = get_tenant_output_dir()
         if not output_dir.exists():
             return []
 
@@ -189,7 +190,7 @@ async def list_analytics_runs():
 
 
 @router.post("/runs/{run_id}/refresh", response_model=AnalyticsRun)
-async def refresh_run_stats(run_id: str):
+async def refresh_run_stats(run_id: str, _: TenantConfig = Depends(storage_dep)):
     """Fetch fresh stats from YouTube Analytics API for a specific run."""
     from ..services.youtube_analytics import get_or_fetch_stats
 
@@ -227,8 +228,7 @@ async def _refresh_all_stats():
             if len(parts) > 1 and parts[0].startswith("run_") and parts[1] == "yt_upload.json":
                 run_ids_with_yt.add(parts[0])
     else:
-        from storage_config import get_storage_dir
-        output_dir = get_storage_dir() / "output"
+        output_dir = get_tenant_output_dir()
         run_ids_with_yt = set()
         if output_dir.exists():
             for entry in output_dir.iterdir():
@@ -249,7 +249,7 @@ async def _refresh_all_stats():
 
 
 @router.post("/refresh-all")
-async def refresh_all_stats(background_tasks: BackgroundTasks):
+async def refresh_all_stats(background_tasks: BackgroundTasks, _: TenantConfig = Depends(storage_dep)):
     """Start background task to refresh stats for all eligible runs."""
     background_tasks.add_task(_refresh_all_stats)
     return {"status": "started", "message": "Refreshing stats for all eligible runs in background"}

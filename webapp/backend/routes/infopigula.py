@@ -1,18 +1,20 @@
 """
-InfoPigula routes - API endpoints for fetching news from infopigula.pl.
+News routes — fetch today's news for a tenant via its configured NewsSource.
 """
 
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..services import infopigula
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import tenant_dep
+from ..services.news_source import get_news_source
 
-router = APIRouter(prefix="/api/infopigula", tags=["infopigula"])
+router = APIRouter(tags=["infopigula"])
 
 
-class NewsSource(BaseModel):
+class NewsSourceModel(BaseModel):
     name: str
     url: str
 
@@ -24,7 +26,7 @@ class NewsItem(BaseModel):
     category: str
     rating: float
     total_votes: int
-    source: NewsSource
+    source: NewsSourceModel
 
 
 class NewsResponse(BaseModel):
@@ -34,10 +36,11 @@ class NewsResponse(BaseModel):
 
 
 @router.get("/news", response_model=NewsResponse)
-async def get_news():
-    """Fetch the latest news release from InfoPigula."""
+async def get_news(tenant: TenantConfig = Depends(tenant_dep)):
+    """Fetch the latest news release for the tenant."""
+    source = get_news_source(tenant)
     try:
-        data = await infopigula.fetch_news()
+        data = await source.fetch_news()
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:

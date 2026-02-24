@@ -50,7 +50,7 @@ class RunsCache:
         Uses longer TTL for runs_list since it's expensive to compute.
         """
         if ttl is None:
-            ttl = self._runs_list_ttl if key == "runs_list" else self._default_ttl
+            ttl = self._runs_list_ttl if key.startswith("runs_list:") else self._default_ttl
         with self._lock:
             self._cache[key] = CacheEntry(
                 value=value,
@@ -62,19 +62,26 @@ class RunsCache:
         with self._lock:
             self._cache.pop(key, None)
 
-    def invalidate_run(self, run_id: str) -> None:
+    def invalidate_run(self, run_id: str, tenant_prefix: str = None) -> None:
         """
         Invalidate cache for a specific run.
         Also invalidates the runs list since run state may have changed.
+        tenant_prefix: pass explicitly from background tasks where ContextVar may not be set.
         """
+        if tenant_prefix is None:
+            from storage_config import get_tenant_prefix
+            tenant_prefix = get_tenant_prefix()
         with self._lock:
-            self._cache.pop(f"run:{run_id}", None)
-            self._cache.pop("runs_list", None)
+            self._cache.pop(f"run:{tenant_prefix}:{run_id}", None)
+            self._cache.pop(f"runs_list:{tenant_prefix}", None)
 
-    def invalidate_runs_list(self) -> None:
+    def invalidate_runs_list(self, tenant_prefix: str = None) -> None:
         """Invalidate just the runs list cache."""
+        if tenant_prefix is None:
+            from storage_config import get_tenant_prefix
+            tenant_prefix = get_tenant_prefix()
         with self._lock:
-            self._cache.pop("runs_list", None)
+            self._cache.pop(f"runs_list:{tenant_prefix}", None)
 
     def invalidate_all(self) -> None:
         """Clear the entire cache."""

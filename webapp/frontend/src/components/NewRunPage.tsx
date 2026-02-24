@@ -11,6 +11,7 @@ import {
   PromptTypeInfo,
   PromptSelections,
 } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 type Tab = 'browse' | 'custom'
 
@@ -35,6 +36,8 @@ function formatSeedText(items: InfoPigulaNewsItem[]): string {
 
 export default function NewRunPage() {
   const navigate = useNavigate()
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [activeTab, setActiveTab] = useState<Tab>('browse')
 
   // Browse tab state
@@ -58,7 +61,12 @@ export default function NewRunPage() {
   const [submitStatus, setSubmitStatus] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchInfoPigulaNews()
+    setNewsItems([])
+    setSelectedIds(new Set())
+    setNewsError(null)
+    setLoadingNews(true)
+
+    fetchInfoPigulaNews(tenantId)
       .then((data) => {
         setNewsItems(data.items)
         setNewsTitle(data.title)
@@ -68,14 +76,14 @@ export default function NewRunPage() {
       })
       .finally(() => setLoadingNews(false))
 
-    fetchAllPrompts()
+    fetchAllPrompts(tenantId)
       .then((data) => {
         setPromptTypes(data.types)
       })
       .catch((err) => {
         console.error('Failed to fetch prompts:', err)
       })
-  }, [])
+  }, [tenantId])
 
   const toggleItem = (id: string) => {
     setSelectedIds((prev) => {
@@ -136,11 +144,11 @@ export default function NewRunPage() {
           const itemSeedText = formatSeedText([item])
           const itemLabel = item.title || `item ${index + 1}`
           setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
-          const { run_id } = await createSeed(itemSeedText, promptSelections)
+          const { run_id } = await createSeed(tenantId, itemSeedText, promptSelections)
           setSubmitStatus(`Starting dialogue generation (${index + 1}/${total})...`)
-          const { task_id } = await generateDialogue(run_id)
+          const { task_id } = await generateDialogue(tenantId, run_id)
           setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
-          const result = await pollTaskUntilDone(task_id, (taskStatus: TaskStatus) => {
+          const result = await pollTaskUntilDone(tenantId, task_id, (taskStatus: TaskStatus) => {
             if (taskStatus.message) {
               setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
             }
@@ -153,11 +161,11 @@ export default function NewRunPage() {
         navigate('/')
       } else {
         setSubmitStatus('Creating seed...')
-        const { run_id } = await createSeed(seedText, promptSelections)
+        const { run_id } = await createSeed(tenantId, seedText, promptSelections)
         setSubmitStatus('Starting dialogue generation...')
-        const { task_id } = await generateDialogue(run_id)
+        const { task_id } = await generateDialogue(tenantId, run_id)
         setSubmitStatus('Generating dialogue (this may take a minute)...')
-        const result = await pollTaskUntilDone(task_id, (taskStatus: TaskStatus) => {
+        const result = await pollTaskUntilDone(tenantId, task_id, (taskStatus: TaskStatus) => {
           if (taskStatus.message) {
             setSubmitStatus(taskStatus.message)
           }

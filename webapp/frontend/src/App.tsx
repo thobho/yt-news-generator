@@ -3,6 +3,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import Box from '@mui/material/Box'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { TenantProvider, useTenant } from './context/TenantContext'
 import Navbar from './components/Navbar'
 import RunList from './components/RunList'
 import RunDetail from './components/RunDetail'
@@ -31,8 +32,9 @@ const theme = createTheme({
 
 function AppContent() {
   const { isAuthenticated, isAuthEnabled, isLoading } = useAuth()
+  const { loading: tenantLoading } = useTenant()
 
-  if (isLoading) {
+  if (isLoading || tenantLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
         Loading...
@@ -67,9 +69,11 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
+      <TenantProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </TenantProvider>
     </ThemeProvider>
   )
 }

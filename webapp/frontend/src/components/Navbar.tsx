@@ -8,10 +8,12 @@ import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
+import Select from '@mui/material/Select'
 import MenuIcon from '@mui/icons-material/Menu'
 import useMediaQuery from '@mui/material/useMediaQuery'
 import { useTheme } from '@mui/material/styles'
 import { useAuth } from '../context/AuthContext'
+import { useTenant } from '../context/TenantContext'
 
 const navItems = [
   { label: 'Runs', path: '/' },
@@ -23,6 +25,7 @@ const navItems = [
 export default function Navbar() {
   const location = useLocation()
   const { logout, isAuthEnabled } = useAuth()
+  const { tenants, currentTenant, setCurrentTenant } = useTenant()
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'))
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
@@ -38,19 +41,46 @@ export default function Navbar() {
   return (
     <AppBar position="static" sx={{ mb: 3 }}>
       <Toolbar>
-        <Typography
-          variant="h6"
-          component={Link}
-          to="/"
-          sx={{
-            flexGrow: 1,
-            textDecoration: 'none',
-            color: 'inherit',
-            fontWeight: 'bold',
-          }}
-        >
-          YT News Generator
-        </Typography>
+        <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography
+            variant="h6"
+            component={Link}
+            to="/"
+            sx={{
+              textDecoration: 'none',
+              color: 'inherit',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            YT News Generator
+          </Typography>
+
+          {tenants.length > 0 && (
+            <Select
+              value={currentTenant?.id ?? ''}
+              onChange={(e) => {
+                const selected = tenants.find((t) => t.id === e.target.value)
+                if (selected) setCurrentTenant(selected)
+              }}
+              variant="standard"
+              disableUnderline
+              sx={{
+                color: 'inherit',
+                fontWeight: 'bold',
+                fontSize: '0.95rem',
+                '& .MuiSelect-icon': { color: 'inherit' },
+                '& .MuiSelect-select': { py: 0 },
+              }}
+            >
+              {tenants.map((t) => (
+                <MenuItem key={t.id} value={t.id}>
+                  {t.display_name}
+                </MenuItem>
+              ))}
+            </Select>
+          )}
+        </Box>
 
         {isMobile ? (
           <>

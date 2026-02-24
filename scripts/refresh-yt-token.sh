@@ -2,7 +2,8 @@
 # Regenerate YouTube OAuth2 token.
 # Opens browser for Google consent flow, saves new token.
 #
-# Usage: ./scripts/refresh-yt-token.sh
+# Usage: ./scripts/refresh-yt-token.sh [tenant]
+#   tenant: pl (default) or us
 
 set -euo pipefail
 
@@ -10,7 +11,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
-echo "=== YouTube Token Refresh ==="
+TENANT="${1:-pl}"
+CREDS_DIR="credentials/${TENANT}"
+
+echo "=== YouTube Token Refresh (tenant: ${TENANT}) ==="
 
 # Activate venv
 if [ -f "venv/bin/activate" ]; then
@@ -21,7 +25,7 @@ else
 fi
 
 # Remove old token
-rm -f credentials/token.json
+rm -f "${CREDS_DIR}/token.json"
 echo "Old token removed."
 echo "Opening browser for authentication..."
 echo ""
@@ -33,7 +37,8 @@ sys.path.insert(0, 'src')
 from upload_youtube import authenticate
 from googleapiclient.discovery import build
 
-creds = authenticate()
+creds_dir = 'credentials/${TENANT}'
+creds = authenticate(creds_dir)
 youtube = build('youtube', 'v3', credentials=creds)
 response = youtube.channels().list(part='snippet,id', mine=True).execute()
 
@@ -42,8 +47,8 @@ print('Authenticated channel:')
 for ch in response.get('items', []):
     print(f'  {ch[\"snippet\"][\"title\"]} (ID: {ch[\"id\"]})')
 print()
-print('Token saved to: credentials/token.json')
+print(f'Token saved to: {creds_dir}/token.json')
 print()
 print('Next step: update GitHub secret YT_TOKEN with:')
-print('  cat credentials/token.json')
+print(f'  cat {creds_dir}/token.json')
 "

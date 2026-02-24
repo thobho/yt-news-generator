@@ -28,6 +28,7 @@ from typing import Union
 from generate_audio import (
     PAUSE_BETWEEN_SEGMENTS_MS,
     chunk_segment,
+    chunk_segment_aligned,
     extract_segments,
     distribute_sources,
     get_source_for_time,
@@ -60,117 +61,6 @@ MAX_CHUNK_WORDS = 8  # Maximum words per subtitle chunk
 # Parallelization settings
 TTS_MAX_WORKERS = 5  # Max parallel TTS requests
 FFMPEG_MAX_WORKERS = 4  # Max parallel FFmpeg processes
-
-
-def chunk_segment_aligned(
-    aligned_words: list[dict],
-    speaker: str,
-    emphasis: list[str],
-    sources: list,
-    start_ms: int,
-    end_ms: int,
-) -> list[dict]:
-    """
-    Build subtitle chunks from word-aligned timestamps.
-
-    Groups words into readable chunks (3-8 words) while respecting
-    natural break points (punctuation).
-    """
-    import re
-
-    if not aligned_words:
-        return []
-
-    # Distribute sources across the segment duration
-    source_ranges = distribute_sources(sources, start_ms, end_ms)
-
-    chunks = []
-    current_words = []
-    current_start = None
-
-    for word_data in aligned_words:
-        word = word_data["word"]
-        word_start = word_data["start_ms"]
-        word_end = word_data["end_ms"]
-
-        if current_start is None:
-            current_start = word_start
-
-        current_words.append(word)
-
-        # Check if we should break here
-        ends_sentence = word.rstrip()[-1] in ".?!" if word.strip() else False
-        has_comma = "," in word
-        word_count = len(current_words)
-
-        should_break = (
-            word_count >= MAX_CHUNK_WORDS
-            or (word_count >= MIN_CHUNK_WORDS and (ends_sentence or has_comma))
-        )
-
-        if should_break:
-            chunk_text = " ".join(current_words)
-            chunk_end = word_end
-
-            chunk_data = {
-                "speaker": speaker,
-                "text": chunk_text,
-                "start_ms": current_start,
-                "end_ms": chunk_end,
-                "chunk": True,
-            }
-
-            # Add emphasis words that appear in this chunk
-            if emphasis:
-                chunk_lower = chunk_text.lower()
-                chunk_emphasis = []
-                for phrase in emphasis:
-                    phrase_lower = phrase.lower()
-                    if phrase_lower in chunk_lower:
-                        chunk_emphasis.append(phrase)
-                    else:
-                        for emp_word in phrase_lower.split():
-                            if len(emp_word) > 2 and re.search(
-                                rf"\b{re.escape(emp_word)}\b", chunk_lower
-                            ):
-                                chunk_emphasis.append(emp_word)
-                if chunk_emphasis:
-                    chunk_data["emphasis"] = chunk_emphasis
-
-            # Find active source at chunk midpoint
-            chunk_midpoint = current_start + (chunk_end - current_start) // 2
-            active_source = get_source_for_time(source_ranges, chunk_midpoint)
-            if active_source:
-                chunk_data["source"] = active_source
-
-            chunks.append(chunk_data)
-            current_words = []
-            current_start = None
-
-    # Handle remaining words
-    if current_words:
-        chunk_text = " ".join(current_words)
-        chunk_data = {
-            "speaker": speaker,
-            "text": chunk_text,
-            "start_ms": current_start,
-            "end_ms": aligned_words[-1]["end_ms"],
-            "chunk": True,
-        }
-
-        if emphasis:
-            chunk_lower = chunk_text.lower()
-            chunk_emphasis = []
-            for phrase in emphasis:
-                phrase_lower = phrase.lower()
-                if phrase_lower in chunk_lower:
-                    chunk_emphasis.append(phrase)
-            if chunk_emphasis:
-                chunk_data["emphasis"] = chunk_emphasis
-
-        chunks.append(chunk_data)
-
-    return chunks
 
 
 def _normalize_single_wav(args: tuple) -> Path:
@@ -273,6 +163,7 @@ def generate_audio(
     voice_a: str = DEFAULT_VOICE_A,
     voice_b: str = DEFAULT_VOICE_B,
     storage: StorageBackend = None,
+    language: str = "pl",
 ):
     """Generate audio from dialogue using Chatterbox TTS on RunPod Serverless.
 
@@ -349,7 +240,7 @@ def generate_audio(
             logger.info("Running Whisper alignment on %d segments", n_segments)
             for i, (audio_file, text) in enumerate(zip(audio_files, segment_texts)):
                 try:
-                    whisper_words = transcribe_with_timestamps(audio_file, language="pl")
+                    whisper_words = transcribe_with_timestamps(audio_file, language=language)
                     aligned = align_text_to_audio(text, whisper_words, start_offset_ms=0)
                     alignments.append(aligned)
                     logger.debug("Aligned %d words for segment %d", len(aligned), i + 1)

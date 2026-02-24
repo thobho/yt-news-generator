@@ -40,6 +40,19 @@ export async function logout(): Promise<void> {
   }
 }
 
+// Tenant types and functions
+
+export interface Tenant {
+  id: string;
+  display_name: string;
+}
+
+export async function fetchTenants(): Promise<Tenant[]> {
+  const res = await fetch(`${API_BASE}/tenants`);
+  if (!res.ok) throw new Error('Failed to fetch tenants');
+  return res.json();
+}
+
 export interface RunSummary {
   id: string;
   timestamp: string;
@@ -103,6 +116,7 @@ export interface WorkflowState {
   can_generate_images?: boolean;
   can_generate_video: boolean;
   can_upload: boolean;
+  can_fast_upload?: boolean;
   can_delete_youtube?: boolean;
   // Regeneration options
   can_drop_audio?: boolean;
@@ -172,16 +186,16 @@ export interface RunsListResponse {
   has_more: boolean;
 }
 
-export async function fetchRuns(limit: number = 20, offset: number = 0): Promise<RunsListResponse> {
-  const response = await fetch(`${API_BASE}/runs?limit=${limit}&offset=${offset}`);
+export async function fetchRuns(tenantId: string, limit: number = 20, offset: number = 0): Promise<RunsListResponse> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/runs?limit=${limit}&offset=${offset}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch runs: ${response.statusText}`);
   }
   return response.json();
 }
 
-export async function fetchRun(runId: string): Promise<RunDetail> {
-  const response = await fetch(`${API_BASE}/runs/${runId}`);
+export async function fetchRun(tenantId: string, runId: string): Promise<RunDetail> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/runs/${runId}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch run: ${response.statusText}`);
   }
@@ -191,6 +205,7 @@ export async function fetchRun(runId: string): Promise<RunDetail> {
 // Workflow functions
 
 export async function createSeed(
+  tenantId: string,
   newsText: string,
   prompts?: PromptSelections
 ): Promise<{ run_id: string; seed_path: string }> {
@@ -198,7 +213,7 @@ export async function createSeed(
   if (prompts) {
     body.prompts = prompts;
   }
-  const response = await fetch(`${API_BASE}/workflow/create-seed`, {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/create-seed`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -210,8 +225,8 @@ export async function createSeed(
   return response.json();
 }
 
-export async function generateDialogue(runId: string): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/generate-dialogue`, {
+export async function generateDialogue(tenantId: string, runId: string): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/generate-dialogue`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -221,8 +236,8 @@ export async function generateDialogue(runId: string): Promise<{ task_id: string
   return response.json();
 }
 
-export async function updateDialogue(runId: string, dialogue: Dialogue): Promise<{ status: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/dialogue`, {
+export async function updateDialogue(tenantId: string, runId: string, dialogue: Dialogue): Promise<{ status: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/dialogue`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ dialogue }),
@@ -234,8 +249,8 @@ export async function updateDialogue(runId: string, dialogue: Dialogue): Promise
   return response.json();
 }
 
-export async function generateAudio(runId: string): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/generate-audio`, {
+export async function generateAudio(tenantId: string, runId: string): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/generate-audio`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -245,8 +260,8 @@ export async function generateAudio(runId: string): Promise<{ task_id: string }>
   return response.json();
 }
 
-export async function generateImages(runId: string): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/generate-images`, {
+export async function generateImages(tenantId: string, runId: string): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/generate-images`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -256,8 +271,8 @@ export async function generateImages(runId: string): Promise<{ task_id: string }
   return response.json();
 }
 
-export async function generateVideo(runId: string): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/generate-video`, {
+export async function generateVideo(tenantId: string, runId: string): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/generate-video`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -269,8 +284,8 @@ export async function generateVideo(runId: string): Promise<{ task_id: string }>
 
 export type ScheduleOption = 'now' | 'evening';
 
-export async function uploadToYoutube(runId: string, scheduleOption: ScheduleOption = 'evening'): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/upload-youtube`, {
+export async function uploadToYoutube(tenantId: string, runId: string, scheduleOption: ScheduleOption = 'evening'): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/upload-youtube`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ schedule_option: scheduleOption }),
@@ -282,8 +297,21 @@ export async function uploadToYoutube(runId: string, scheduleOption: ScheduleOpt
   return response.json();
 }
 
-export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
-  const response = await fetch(`${API_BASE}/workflow/task/${taskId}`);
+export async function fastUpload(tenantId: string, runId: string, scheduleOption: ScheduleOption = 'evening'): Promise<{ task_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/fast-upload`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ schedule_option: scheduleOption }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to start fast upload');
+  }
+  return response.json();
+}
+
+export async function getTaskStatus(tenantId: string, taskId: string): Promise<TaskStatus> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/task/${taskId}`);
   if (!response.ok) {
     throw new Error('Failed to get task status');
   }
@@ -292,12 +320,13 @@ export async function getTaskStatus(taskId: string): Promise<TaskStatus> {
 
 // Polling helper
 export async function pollTaskUntilDone(
+  tenantId: string,
   taskId: string,
   onProgress?: (status: TaskStatus) => void,
   intervalMs: number = 2000
 ): Promise<TaskStatus> {
   while (true) {
-    const status = await getTaskStatus(taskId);
+    const status = await getTaskStatus(tenantId, taskId);
     if (onProgress) onProgress(status);
 
     if (status.status === 'completed' || status.status === 'error') {
@@ -311,10 +340,11 @@ export async function pollTaskUntilDone(
 // Image functions
 
 export async function updateImagesMetadata(
+  tenantId: string,
   runId: string,
   images: ImagesMetadata
 ): Promise<{ status: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/images`, {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/images`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ images }),
@@ -327,10 +357,11 @@ export async function updateImagesMetadata(
 }
 
 export async function regenerateImage(
+  tenantId: string,
   runId: string,
   imageId: string
 ): Promise<{ task_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/regenerate-image/${imageId}`, {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/regenerate-image/${imageId}`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -383,16 +414,16 @@ export interface AvailableSettings {
   fal_models: FalModelInfo[];
 }
 
-export async function fetchSettings(): Promise<Settings> {
-  const response = await fetch(`${API_BASE}/settings`);
+export async function fetchSettings(tenantId: string): Promise<Settings> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings`);
   if (!response.ok) {
     throw new Error('Failed to fetch settings');
   }
   return response.json();
 }
 
-export async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
-  const response = await fetch(`${API_BASE}/settings`, {
+export async function updateSettings(tenantId: string, settings: Partial<Settings>): Promise<Settings> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -404,24 +435,24 @@ export async function updateSettings(settings: Partial<Settings>): Promise<Setti
   return response.json();
 }
 
-export async function fetchAvailableSettings(): Promise<AvailableSettings> {
-  const response = await fetch(`${API_BASE}/settings/available`);
+export async function fetchAvailableSettings(tenantId: string): Promise<AvailableSettings> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/available`);
   if (!response.ok) {
     throw new Error('Failed to fetch available settings');
   }
   return response.json();
 }
 
-export async function fetchYouTubeToken(): Promise<Record<string, unknown>> {
-  const response = await fetch(`${API_BASE}/settings/youtube-token`);
+export async function fetchYouTubeToken(tenantId: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/youtube-token`);
   if (!response.ok) {
     throw new Error('Failed to fetch YouTube token');
   }
   return response.json();
 }
 
-export async function startYouTubeOAuth(): Promise<{ auth_url: string }> {
-  const response = await fetch(`${API_BASE}/settings/youtube-token/refresh`, {
+export async function startYouTubeOAuth(tenantId: string): Promise<{ auth_url: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/youtube-token/refresh`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -443,19 +474,19 @@ export interface AllRunningTasks {
   };
 }
 
-export async function fetchAllRunningTasks(): Promise<AllRunningTasks> {
-  const response = await fetch(`${API_BASE}/workflow/tasks/running`);
+export async function fetchAllRunningTasks(tenantId: string): Promise<AllRunningTasks> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/tasks/running`);
   if (!response.ok) {
     throw new Error('Failed to fetch running tasks');
   }
   return response.json();
 }
 
-export async function fetchRunningTasksForRun(runId: string): Promise<{
+export async function fetchRunningTasksForRun(tenantId: string, runId: string): Promise<{
   run_id: string;
   tasks: { [taskType: string]: RunningTaskInfo };
 }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/tasks/running`);
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/tasks/running`);
   if (!response.ok) {
     throw new Error('Failed to fetch running tasks');
   }
@@ -464,8 +495,8 @@ export async function fetchRunningTasksForRun(runId: string): Promise<{
 
 // Drop functions for regeneration
 
-export async function dropAudio(runId: string): Promise<{ status: string; deleted: string[] }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/audio`, {
+export async function dropAudio(tenantId: string, runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/audio`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -475,8 +506,8 @@ export async function dropAudio(runId: string): Promise<{ status: string; delete
   return response.json();
 }
 
-export async function dropVideo(runId: string): Promise<{ status: string; deleted: string[] }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/video`, {
+export async function dropVideo(tenantId: string, runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/video`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -486,8 +517,8 @@ export async function dropVideo(runId: string): Promise<{ status: string; delete
   return response.json();
 }
 
-export async function dropImages(runId: string): Promise<{ status: string; deleted: string[] }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/images`, {
+export async function dropImages(tenantId: string, runId: string): Promise<{ status: string; deleted: string[] }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/images`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -497,8 +528,8 @@ export async function dropImages(runId: string): Promise<{ status: string; delet
   return response.json();
 }
 
-export async function deleteYoutube(runId: string): Promise<{ status: string; deleted_video_id: string }> {
-  const response = await fetch(`${API_BASE}/workflow/${runId}/youtube`, {
+export async function deleteYoutube(tenantId: string, runId: string): Promise<{ status: string; deleted_video_id: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/workflow/${runId}/youtube`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -510,8 +541,8 @@ export async function deleteYoutube(runId: string): Promise<{ status: string; de
 
 // Delete run
 
-export async function deleteRun(runId: string): Promise<{ status: string; deleted_count: number }> {
-  const response = await fetch(`${API_BASE}/runs/${runId}`, {
+export async function deleteRun(tenantId: string, runId: string): Promise<{ status: string; deleted_count: number }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/runs/${runId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -521,7 +552,7 @@ export async function deleteRun(runId: string): Promise<{ status: string; delete
   return response.json();
 }
 
-// InfoPigula types and functions
+// News types and functions
 
 export interface InfoPigulaSource {
   name: string
@@ -544,8 +575,8 @@ export interface InfoPigulaNewsResponse {
   items: InfoPigulaNewsItem[]
 }
 
-export async function fetchInfoPigulaNews(): Promise<InfoPigulaNewsResponse> {
-  const response = await fetch(`${API_BASE}/infopigula/news`)
+export async function fetchInfoPigulaNews(tenantId: string): Promise<InfoPigulaNewsResponse> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/news`)
   if (!response.ok) {
     const error = await response.json()
     throw new Error(error.detail || 'Failed to fetch news')
@@ -593,16 +624,16 @@ export interface AllPromptsResponse {
   types: PromptTypeInfo[];
 }
 
-export async function fetchAllPrompts(): Promise<AllPromptsResponse> {
-  const response = await fetch(`${API_BASE}/prompts`);
+export async function fetchAllPrompts(tenantId: string): Promise<AllPromptsResponse> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts`);
   if (!response.ok) {
     throw new Error('Failed to fetch prompts');
   }
   return response.json();
 }
 
-export async function fetchPrompt(promptType: PromptType, promptId: string): Promise<PromptContent> {
-  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`);
+export async function fetchPrompt(tenantId: string, promptType: PromptType, promptId: string): Promise<PromptContent> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/${promptType}/${promptId}`);
   if (!response.ok) {
     throw new Error('Failed to fetch prompt');
   }
@@ -620,11 +651,12 @@ export interface CreatePromptParams {
 }
 
 export async function createPrompt(
+  tenantId: string,
   promptType: PromptType,
   promptId: string,
   params: CreatePromptParams
 ): Promise<PromptContent> {
-  const response = await fetch(`${API_BASE}/prompts/${promptType}`, {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/${promptType}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -655,11 +687,12 @@ export interface UpdatePromptParams {
 }
 
 export async function updatePrompt(
+  tenantId: string,
   promptType: PromptType,
   promptId: string,
   params: UpdatePromptParams
 ): Promise<PromptContent> {
-  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/${promptType}/${promptId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -678,8 +711,8 @@ export async function updatePrompt(
   return response.json();
 }
 
-export async function deletePrompt(promptType: PromptType, promptId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/prompts/${promptType}/${promptId}`, {
+export async function deletePrompt(tenantId: string, promptType: PromptType, promptId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/${promptType}/${promptId}`, {
     method: 'DELETE',
   });
   if (!response.ok) {
@@ -688,8 +721,8 @@ export async function deletePrompt(promptType: PromptType, promptId: string): Pr
   }
 }
 
-export async function setActivePrompt(promptType: PromptType, promptId: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/prompts/${promptType}/active`, {
+export async function setActivePrompt(tenantId: string, promptType: PromptType, promptId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/${promptType}/active`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt_id: promptId }),
@@ -700,8 +733,8 @@ export async function setActivePrompt(promptType: PromptType, promptId: string):
   }
 }
 
-export async function migratePrompts(): Promise<{ migrated: Record<string, string[]> }> {
-  const response = await fetch(`${API_BASE}/prompts/migrate`, {
+export async function migratePrompts(tenantId: string): Promise<{ migrated: Record<string, string[]> }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompts/migrate`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -734,16 +767,16 @@ export interface AnalyticsRun {
   stats_fetched_at: string | null;
 }
 
-export async function fetchAnalyticsRuns(): Promise<AnalyticsRun[]> {
-  const response = await fetch(`${API_BASE}/analytics/runs`);
+export async function fetchAnalyticsRuns(tenantId: string): Promise<AnalyticsRun[]> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/analytics/runs`);
   if (!response.ok) {
     throw new Error('Failed to fetch analytics runs');
   }
   return response.json();
 }
 
-export async function refreshRunStats(runId: string): Promise<AnalyticsRun> {
-  const response = await fetch(`${API_BASE}/analytics/runs/${runId}/refresh`, {
+export async function refreshRunStats(tenantId: string, runId: string): Promise<AnalyticsRun> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/analytics/runs/${runId}/refresh`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -753,8 +786,8 @@ export async function refreshRunStats(runId: string): Promise<AnalyticsRun> {
   return response.json();
 }
 
-export async function refreshAllStats(): Promise<{ status: string; message: string }> {
-  const response = await fetch(`${API_BASE}/analytics/refresh-all`, {
+export async function refreshAllStats(tenantId: string): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/analytics/refresh-all`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -802,16 +835,16 @@ export interface SchedulerStatus {
   scheduler_running: boolean;
 }
 
-export async function fetchSchedulerStatus(): Promise<SchedulerStatus> {
-  const response = await fetch(`${API_BASE}/scheduler/status`);
+export async function fetchSchedulerStatus(tenantId: string): Promise<SchedulerStatus> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/scheduler/status`);
   if (!response.ok) {
     throw new Error('Failed to fetch scheduler status');
   }
   return response.json();
 }
 
-export async function enableScheduler(): Promise<SchedulerConfig> {
-  const response = await fetch(`${API_BASE}/scheduler/enable`, {
+export async function enableScheduler(tenantId: string): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/scheduler/enable`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -820,8 +853,8 @@ export async function enableScheduler(): Promise<SchedulerConfig> {
   return response.json();
 }
 
-export async function disableScheduler(): Promise<SchedulerConfig> {
-  const response = await fetch(`${API_BASE}/scheduler/disable`, {
+export async function disableScheduler(tenantId: string): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/scheduler/disable`, {
     method: 'POST',
   });
   if (!response.ok) {
@@ -830,8 +863,8 @@ export async function disableScheduler(): Promise<SchedulerConfig> {
   return response.json();
 }
 
-export async function updateSchedulerConfig(config: Partial<SchedulerConfig>): Promise<SchedulerConfig> {
-  const response = await fetch(`${API_BASE}/scheduler/config`, {
+export async function updateSchedulerConfig(tenantId: string, config: Partial<SchedulerConfig>): Promise<SchedulerConfig> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/scheduler/config`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -843,8 +876,8 @@ export async function updateSchedulerConfig(config: Partial<SchedulerConfig>): P
   return response.json();
 }
 
-export async function triggerSchedulerRun(): Promise<{ status: string; message: string }> {
-  const response = await fetch(`${API_BASE}/scheduler/trigger`, {
+export async function triggerSchedulerRun(tenantId: string): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/scheduler/trigger`, {
     method: 'POST',
   });
   if (!response.ok) {

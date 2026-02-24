@@ -18,6 +18,7 @@ import Alert from '@mui/material/Alert'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { fetchAnalyticsRuns, refreshRunStats, refreshAllStats, AnalyticsRun } from '../api/client'
+import { useTenant } from '../context/TenantContext'
 
 type Order = 'asc' | 'desc'
 type OrderBy = 'title' | 'publish_at' | 'views' | 'averageViewPercentage' | 'likes' | 'comments' | 'shares' | 'subscribersGained'
@@ -110,6 +111,8 @@ function getComparator(order: Order, orderBy: OrderBy): (a: AnalyticsRun, b: Ana
 }
 
 export default function AnalyticsPage() {
+  const { currentTenant } = useTenant()
+  const tenantId = currentTenant?.id ?? 'pl'
   const [runs, setRuns] = useState<AnalyticsRun[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -121,7 +124,8 @@ export default function AnalyticsPage() {
   const loadRuns = async () => {
     try {
       setLoading(true)
-      const data = await fetchAnalyticsRuns()
+      setRuns([])
+      const data = await fetchAnalyticsRuns(tenantId)
       setRuns(data)
       setError(null)
     } catch (err) {
@@ -133,12 +137,12 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     loadRuns()
-  }, [])
+  }, [tenantId])
 
   const handleRefreshRun = async (runId: string) => {
     setRefreshingRuns((prev) => new Set(prev).add(runId))
     try {
-      const updated = await refreshRunStats(runId)
+      const updated = await refreshRunStats(tenantId, runId)
       setRuns((prev) => prev.map((r) => (r.id === runId ? updated : r)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to refresh stats')
@@ -154,7 +158,7 @@ export default function AnalyticsPage() {
   const handleRefreshAll = async () => {
     setRefreshingAll(true)
     try {
-      await refreshAllStats()
+      await refreshAllStats(tenantId)
       // Wait a bit then reload to see updated stats
       setTimeout(loadRuns, 2000)
     } catch (err) {

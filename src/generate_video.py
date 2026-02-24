@@ -75,11 +75,15 @@ def prepare_public_dir(
     else:
         shutil.copy(audio_path, public_dir / audio_name)
 
-    # --- Channel logo ---
+    # --- Channel logo + translations ---
     data_storage = get_data_storage()
     if data_storage.exists(CHANNEL_LOGO_KEY):
         with data_storage.get_local_path(CHANNEL_LOGO_KEY) as local_logo:
             shutil.copy(local_logo, public_dir / "channel-logo.png")
+
+    i18n: dict = {}
+    if data_storage.exists("video_i18n.json"):
+        i18n = json.loads(data_storage.read_text("video_i18n.json"))
 
     # --- Timeline ---
     if storage is not None:
@@ -136,6 +140,7 @@ def prepare_public_dir(
         "timeline": timeline_data,
         "images": images,
         "episodeNumber": episode_number,
+        "i18n": i18n,
     }
 
 
@@ -212,13 +217,19 @@ def main():
         "--run-id", type=str,
         help="Run ID for storage operations (required for S3 backend)"
     )
+    parser.add_argument(
+        "--tenant-prefix", type=str,
+        help="Tenant storage prefix (e.g. tenants/us) for S3 backend"
+    )
 
     args = parser.parse_args()
 
     # Determine storage backend
     storage = None
     if is_s3_enabled() and args.run_id:
-        from storage_config import get_run_storage
+        from storage_config import get_run_storage, set_tenant_prefix
+        if args.tenant_prefix:
+            set_tenant_prefix(args.tenant_prefix)
         storage = get_run_storage(args.run_id)
 
     # Validate inputs

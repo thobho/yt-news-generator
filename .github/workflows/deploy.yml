@@ -39,10 +39,13 @@ jobs:
 
       - name: Write credentials
         run: |
-          mkdir -p /tmp/deploy-credentials
+          mkdir -p /tmp/deploy-credentials/pl
+          mkdir -p /tmp/deploy-credentials/us
           echo '${{ secrets.ENV_PRODUCTION }}' > /tmp/deploy-credentials/env.production
-          echo '${{ secrets.YT_CLIENT_SECRETS }}' > /tmp/deploy-credentials/client_secrets.json
-          echo '${{ secrets.YT_TOKEN }}' > /tmp/deploy-credentials/token.json
+          echo '${{ secrets.YT_CLIENT_SECRETS_PL }}' > /tmp/deploy-credentials/pl/client_secrets.json
+          echo '${{ secrets.YT_TOKEN_PL }}' > /tmp/deploy-credentials/pl/token.json
+          echo '${{ secrets.YT_CLIENT_SECRETS_US }}' > /tmp/deploy-credentials/us/client_secrets.json
+          echo '${{ secrets.YT_TOKEN_US }}' > /tmp/deploy-credentials/us/token.json
 
       - name: Sync project files to VPS
         run: |
@@ -66,12 +69,17 @@ jobs:
 
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             deploy@${{ secrets.HOST }} \
-            "mkdir -p /home/deploy/yt-news-generator/credentials"
+            "mkdir -p /home/deploy/yt-news-generator/credentials/pl /home/deploy/yt-news-generator/credentials/us"
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            /tmp/deploy-credentials/client_secrets.json \
-            /tmp/deploy-credentials/token.json \
-            deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/
+            /tmp/deploy-credentials/pl/client_secrets.json \
+            /tmp/deploy-credentials/pl/token.json \
+            deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/pl/
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/deploy-credentials/us/client_secrets.json \
+            /tmp/deploy-credentials/us/token.json \
+            deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/us/
 
       - name: Install dependencies and restart
         run: |
@@ -137,3 +145,4 @@ jobs:
         run: |
           rm -rf /tmp/deploy-credentials
           rm -f ~/.ssh/deploy_key
+          rm -f ~/.ssh/known_hosts

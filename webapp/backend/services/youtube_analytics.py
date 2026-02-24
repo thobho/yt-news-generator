@@ -20,12 +20,11 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from logging_config import get_logger
-from storage_config import get_run_storage, get_project_root
+from storage_config import get_run_storage, get_project_root, get_credentials_dir
 
 logger = get_logger(__name__)
 
-CREDENTIALS_DIR = get_project_root() / "credentials"
-TOKEN_PATH = CREDENTIALS_DIR / "token.json"
+_PROJECT_ROOT = get_project_root()
 
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -34,26 +33,39 @@ SCOPES = [
 ]
 
 
-def get_youtube_analytics_service():
-    """Get authenticated YouTube Analytics API service."""
-    if not TOKEN_PATH.exists():
-        raise RuntimeError("YouTube credentials not found. Run scripts/refresh-yt-token.sh first.")
+def get_youtube_analytics_service(credentials_dir: str = None):
+    """Get authenticated YouTube Analytics API service.
 
-    creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+    Args:
+        credentials_dir: Directory containing token.json (e.g. 'credentials/pl').
+                         Defaults to the current tenant's credentials dir via ContextVar.
+    """
+    cdir = credentials_dir or get_credentials_dir()
+    token_path = _PROJECT_ROOT / cdir / "token.json"
+
+    if not token_path.exists():
+        raise RuntimeError(
+            f"YouTube credentials not found at {token_path}. "
+            "Run scripts/refresh-yt-token.sh first."
+        )
+
+    creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
             # Save refreshed token
-            with open(TOKEN_PATH, "w") as f:
+            with open(token_path, "w") as f:
                 f.write(creds.to_json())
         else:
-            raise RuntimeError("YouTube credentials expired. Delete credentials/token.json and run scripts/refresh-yt-token.sh")
+            raise RuntimeError(
+                f"YouTube credentials expired. Delete {token_path} and run scripts/refresh-yt-token.sh"
+            )
 
     return build("youtubeAnalytics", "v2", credentials=creds)
 
 
-def fetch_video_stats(video_id: str) -> dict:
+def fetch_video_stats(video_id: str, credentials_dir: str = None) -> dict:
     """
     Fetch video statistics from YouTube Analytics API.
 
@@ -65,7 +77,7 @@ def fetch_video_stats(video_id: str) -> dict:
         likes, comments, shares
     """
     logger.info("Fetching YouTube stats from API for video: %s", video_id)
-    analytics = get_youtube_analytics_service()
+    analytics = get_youtube_analytics_service(credentials_dir)
 
     # Get stats from video publish date to today
     # Use a wide date range to capture all data
@@ -114,7 +126,7 @@ def fetch_video_stats(video_id: str) -> dict:
     return stats
 
 
-def get_or_fetch_stats(run_id: str, force: bool = False, max_age_hours: Optional[int] = None) -> Optional[dict]:
+def get_or_fetch_stats(run_id: str, force: bool = False, max_age_hours: Optional[int] = None, credentials_dir: str = None) -> Optional[dict]:
     """
     Get cached stats or fetch fresh from YouTube Analytics API.
 
@@ -169,13 +181,15 @@ def get_or_fetch_stats(run_id: str, force: bool = False, max_age_hours: Optional
             pass
 
     # Check if credentials exist before trying to fetch
-    if not TOKEN_PATH.exists():
-        logger.warning("YouTube token missing, skipping stats fetch for %s", run_id)
+    cdir = credentials_dir or get_credentials_dir()
+    token_path = _PROJECT_ROOT / cdir / "token.json"
+    if not token_path.exists():
+        logger.warning("YouTube token missing at %s, skipping stats fetch for %s", token_path, run_id)
         return None
 
     # Fetch fresh stats
     try:
-        stats = fetch_video_stats(video_id)
+        stats = fetch_video_stats(video_id, credentials_dir=cdir)
     except Exception as e:
         logger.error("Failed to fetch stats for video %s in run %s: %s", video_id, run_id, e)
         return None # Return None instead of raising to allow process to continue

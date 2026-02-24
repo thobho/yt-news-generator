@@ -17,6 +17,7 @@ import {
   updatePrompt,
   PromptType,
 } from '../api/client';
+import { useTenant } from '../context/TenantContext';
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
   dialogue: 'Dialogue Prompt',
@@ -63,6 +64,8 @@ function TemperatureSlider({ label, value, onChange, helperText }: TemperatureSl
 export default function PromptEditorPage() {
   const { promptType, promptId } = useParams<{ promptType: PromptType; promptId: string }>();
   const navigate = useNavigate();
+  const { currentTenant } = useTenant();
+  const tenantId = currentTenant?.id ?? 'pl';
   const isNew = promptId === 'new';
 
   const [loading, setLoading] = useState(!isNew);
@@ -84,13 +87,13 @@ export default function PromptEditorPage() {
     if (!isNew && promptType && promptId) {
       loadPrompt();
     }
-  }, [promptType, promptId, isNew]);
+  }, [promptType, promptId, isNew, tenantId]);
 
   async function loadPrompt() {
     if (!promptType || !promptId) return;
     try {
       setLoading(true);
-      const prompt = await fetchPrompt(promptType, promptId);
+      const prompt = await fetchPrompt(tenantId, promptType, promptId);
       setContent(prompt.content);
       setTemperature(prompt.temperature);
       setStep2Content(prompt.step2_content || '');
@@ -123,7 +126,7 @@ export default function PromptEditorPage() {
       setError(null);
 
       if (isNew) {
-        await createPrompt(promptType, newId.trim(), {
+        await createPrompt(tenantId, promptType, newId.trim(), {
           content,
           temperature,
           step2Content: isDialogue ? step2Content || undefined : undefined,
@@ -132,7 +135,7 @@ export default function PromptEditorPage() {
           step3Temperature: isDialogue ? step3Temperature : undefined,
         });
       } else if (promptId) {
-        await updatePrompt(promptType, promptId, {
+        await updatePrompt(tenantId, promptType, promptId, {
           content,
           temperature,
           step2Content: isDialogue ? step2Content || undefined : undefined,

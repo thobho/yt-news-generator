@@ -2,13 +2,15 @@
 Prompts routes - API endpoints for managing prompt templates.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..config.tenant_registry import TenantConfig
+from ..dependencies import storage_dep
 from ..services import prompts as prompts_service
 from ..services.prompts import PromptType, PROMPT_TYPES, PromptInfo, PromptContent
 
-router = APIRouter(prefix="/api/prompts", tags=["prompts"])
+router = APIRouter(tags=["prompts"])
 
 
 class PromptListResponse(BaseModel):
@@ -50,7 +52,7 @@ class MigrateResponse(BaseModel):
 
 
 @router.get("", response_model=AllPromptsResponse)
-async def list_all_prompts():
+async def list_all_prompts(_: TenantConfig = Depends(storage_dep)):
     """List all prompt types with their prompts."""
     types = []
     for prompt_type in PROMPT_TYPES:
@@ -68,7 +70,7 @@ async def list_all_prompts():
 
 
 @router.get("/{prompt_type}", response_model=PromptListResponse)
-async def list_prompts(prompt_type: PromptType):
+async def list_prompts(prompt_type: PromptType, _: TenantConfig = Depends(storage_dep)):
     """List all prompts of a given type."""
     prompts = prompts_service.list_prompts(prompt_type)
     active_id = prompts_service.get_active_prompt_id(prompt_type)
@@ -80,7 +82,7 @@ async def list_prompts(prompt_type: PromptType):
 
 
 @router.get("/{prompt_type}/{prompt_id}")
-async def get_prompt(prompt_type: PromptType, prompt_id: str):
+async def get_prompt(prompt_type: PromptType, prompt_id: str, _: TenantConfig = Depends(storage_dep)):
     """Get full prompt content."""
     prompt = prompts_service.get_prompt(prompt_type, prompt_id)
     if not prompt:
@@ -89,7 +91,7 @@ async def get_prompt(prompt_type: PromptType, prompt_id: str):
 
 
 @router.post("/{prompt_type}")
-async def create_prompt(prompt_type: PromptType, request: CreatePromptRequest):
+async def create_prompt(prompt_type: PromptType, request: CreatePromptRequest, _: TenantConfig = Depends(storage_dep)):
     """Create a new prompt."""
     try:
         prompt = prompts_service.create_prompt(
@@ -109,7 +111,7 @@ async def create_prompt(prompt_type: PromptType, request: CreatePromptRequest):
 
 
 @router.put("/{prompt_type}/{prompt_id}")
-async def update_prompt(prompt_type: PromptType, prompt_id: str, request: UpdatePromptRequest):
+async def update_prompt(prompt_type: PromptType, prompt_id: str, request: UpdatePromptRequest, _: TenantConfig = Depends(storage_dep)):
     """Update an existing prompt."""
     try:
         prompt = prompts_service.update_prompt(
@@ -128,7 +130,7 @@ async def update_prompt(prompt_type: PromptType, prompt_id: str, request: Update
 
 
 @router.delete("/{prompt_type}/{prompt_id}")
-async def delete_prompt(prompt_type: PromptType, prompt_id: str):
+async def delete_prompt(prompt_type: PromptType, prompt_id: str, _: TenantConfig = Depends(storage_dep)):
     """Delete a prompt."""
     try:
         success = prompts_service.delete_prompt(prompt_type, prompt_id)
@@ -140,7 +142,7 @@ async def delete_prompt(prompt_type: PromptType, prompt_id: str):
 
 
 @router.post("/{prompt_type}/active")
-async def set_active_prompt(prompt_type: PromptType, request: SetActiveRequest):
+async def set_active_prompt(prompt_type: PromptType, request: SetActiveRequest, _: TenantConfig = Depends(storage_dep)):
     """Set the active prompt for a type."""
     try:
         prompts_service.set_active_prompt(prompt_type, request.prompt_id)
@@ -150,7 +152,7 @@ async def set_active_prompt(prompt_type: PromptType, request: SetActiveRequest):
 
 
 @router.post("/migrate")
-async def migrate_prompts():
+async def migrate_prompts(_: TenantConfig = Depends(storage_dep)):
     """Migrate old prompts to new structure."""
     migrated = prompts_service.migrate_old_prompts()
     return MigrateResponse(migrated=migrated)
