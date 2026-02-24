@@ -66,6 +66,7 @@ def chunk_segment_aligned(
 
     chunks = []
     current_words = []
+    current_word_data = []
     current_start = None
 
     for word_data in aligned_words:
@@ -77,6 +78,7 @@ def chunk_segment_aligned(
             current_start = word_start
 
         current_words.append(word)
+        current_word_data.append({"word": word, "start_ms": word_start, "end_ms": word_end})
 
         ends_sentence = word.rstrip()[-1] in ".?!" if word.strip() else False
         has_comma = "," in word
@@ -95,6 +97,7 @@ def chunk_segment_aligned(
                 "start_ms": current_start,
                 "end_ms": word_end,
                 "chunk": True,
+                "words": list(current_word_data),
             }
 
             if emphasis:
@@ -120,6 +123,7 @@ def chunk_segment_aligned(
 
             chunks.append(chunk_data)
             current_words = []
+            current_word_data = []
             current_start = None
 
     if current_words:
@@ -130,6 +134,7 @@ def chunk_segment_aligned(
             "start_ms": current_start,
             "end_ms": aligned_words[-1]["end_ms"],
             "chunk": True,
+            "words": list(current_word_data),
         }
         if emphasis:
             chunk_lower = chunk_text.lower()

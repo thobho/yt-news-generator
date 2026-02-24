@@ -17,6 +17,12 @@ interface SegmentSource {
   text: string;
 }
 
+interface SegmentWord {
+  word: string;
+  start_ms: number;
+  end_ms: number;
+}
+
 interface Segment {
   speaker?: string;
   text: string;
@@ -26,6 +32,7 @@ interface Segment {
   type?: "pause";
   emphasis?: string[];
   source?: SegmentSource;
+  words?: SegmentWord[];
 }
 
 interface ImageInfo {
@@ -62,6 +69,7 @@ interface AnimatedTextProps {
   chunkStartMs: number;
   chunkEndMs: number;
   currentTimeMs: number;
+  words?: SegmentWord[];
 }
 
 const AnimatedText: React.FC<AnimatedTextProps> = ({
@@ -70,15 +78,16 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
   chunkStartMs,
   chunkEndMs,
   currentTimeMs,
+  words: wordTimings,
 }) => {
   const emphasisLower = (emphasis || []).map(w => w.toLowerCase());
 
   // Split text into words while preserving spaces
   const parts = text.split(/(\s+)/);
-  const words = parts.filter(p => p.trim());
-  const totalWords = words.length;
+  const wordParts = parts.filter(p => p.trim());
+  const totalWords = wordParts.length;
 
-  // Calculate timing for each word
+  // Fallback: distribute evenly when no per-word timestamps available
   const chunkDuration = chunkEndMs - chunkStartMs;
   const wordDuration = totalWords > 0 ? chunkDuration / totalWords : chunkDuration;
 
@@ -96,9 +105,11 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
         const currentWordIndex = wordIndex;
         wordIndex++;
 
-        // Calculate when this word starts and ends
-        const wordStartMs = chunkStartMs + currentWordIndex * wordDuration;
-        const wordEndMs = wordStartMs + wordDuration;
+        // Use Whisper-aligned timestamps when available, otherwise distribute evenly
+        const wordStartMs = wordTimings?.[currentWordIndex]?.start_ms
+          ?? (chunkStartMs + currentWordIndex * wordDuration);
+        const wordEndMs = wordTimings?.[currentWordIndex]?.end_ms
+          ?? (wordStartMs + wordDuration);
 
         // How far into speaking this word are we? (0 = not started, 1 = fully spoken)
         const wordProgress = interpolate(
@@ -739,7 +750,8 @@ export const SubtitleVideo: React.FC<SubtitleVideoProps> = ({
                 emphasis={currentChunk.emphasis}
                 chunkStartMs={currentChunk.start_ms}
                 chunkEndMs={currentChunk.end_ms}
-                currentTimeMs={textTimeMs}
+                currentTimeMs={currentTimeMs}
+                words={currentChunk.words}
               />
             </div>
           )}
