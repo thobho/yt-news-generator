@@ -4,6 +4,7 @@ Settings are persisted to a JSON file (local) or S3 (cloud).
 """
 
 import json
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
