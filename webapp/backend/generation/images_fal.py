@@ -94,6 +94,10 @@ def generate_all_images(
     images = prompts_data.get("images", [])
     n_images = len(images)
 
+    if n_images == 0:
+        logger.warning("No images to generate — empty images list")
+        return prompts_data
+
     logger.info("Generating %d images in parallel with fal.ai FLUX (%s)...", n_images, model)
 
     def process_image(idx_and_info):

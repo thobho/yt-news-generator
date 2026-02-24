@@ -24,6 +24,33 @@ from ..core.storage import StorageBackend
 
 logger = get_logger(__name__)
 
+IMAGE_PROMPTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "topic_summary": {"type": "string"},
+        "visual_theme": {"type": "string"},
+        "images": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "purpose": {"type": "string"},
+                    "prompt": {"type": "string"},
+                    "segment_indices": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                    },
+                },
+                "required": ["id", "purpose", "prompt", "segment_indices"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["topic_summary", "visual_theme", "images"],
+    "additionalProperties": False,
+}
+
 
 def load_json(path: Union[Path, str], storage: StorageBackend = None) -> dict:
     """Load JSON file.
@@ -104,7 +131,14 @@ def generate_image_prompts(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
-        response_format={"type": "json_object"},
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "image_prompts",
+                "strict": True,
+                "schema": IMAGE_PROMPTS_SCHEMA,
+            },
+        },
         temperature=0.8,
     )
 
@@ -168,6 +202,10 @@ def generate_all_images(
     client = OpenAI()
     images = prompts_data.get("images", [])
     n_images = len(images)
+
+    if n_images == 0:
+        logger.warning("No images to generate — empty images list")
+        return prompts_data
 
     logger.info("Generating %d images in parallel with DALL-E...", n_images)
 
