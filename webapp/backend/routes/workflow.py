@@ -3,6 +3,7 @@ Workflow routes - API endpoints for pipeline actions.
 """
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
