@@ -346,10 +346,11 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
     historical_data = _format_historical_data(runs_with_stats)
     available_news = _format_available_news(items)
 
-    prompt = prompt_template.format(
-        historical_data=historical_data,
-        available_news=available_news,
-        count=count
+    prompt = (
+        prompt_template
+        .replace("{historical_data}", historical_data)
+        .replace("{available_news}", available_news)
+        .replace("{count}", str(count))
     )
 
     logger.info("=== FINAL LLM NEWS SELECTION PROMPT ===")
