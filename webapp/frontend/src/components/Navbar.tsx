@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AppBar from '@mui/material/AppBar'
 import Toolbar from '@mui/material/Toolbar'
 import Typography from '@mui/material/Typography'
@@ -25,6 +25,7 @@ const navItems = [
 
 export default function Navbar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { logout, isAuthEnabled } = useAuth()
   const { tenants, currentTenant, setCurrentTenant } = useTenant()
   const theme = useTheme()
@@ -62,7 +63,10 @@ export default function Navbar() {
               value={currentTenant?.id ?? ''}
               onChange={(e) => {
                 const selected = tenants.find((t) => t.id === e.target.value)
-                if (selected) setCurrentTenant(selected)
+                if (selected) {
+                  setCurrentTenant(selected)
+                  navigate('/')
+                }
               }}
               variant="standard"
               disableUnderline
