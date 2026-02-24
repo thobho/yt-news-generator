@@ -176,7 +176,7 @@ def render_video(
     logger.info("Rendering video with Remotion...")
     logger.debug("Output: %s, public_dir: %s", temp_output, public_dir)
 
-    subprocess.run(
+    result = subprocess.run(
         [
             "npx",
             "remotion",
@@ -189,9 +189,14 @@ def render_video(
             json.dumps(props),
         ],
         cwd=REMOTION_DIR,
-        check=True,
+        capture_output=True,
+        text=True,
         env=_get_node_env(),
     )
+    if result.returncode != 0:
+        logger.error("Remotion stdout:\n%s", result.stdout[-3000:] if result.stdout else "(empty)")
+        logger.error("Remotion stderr:\n%s", result.stderr[-3000:] if result.stderr else "(empty)")
+        raise subprocess.CalledProcessError(result.returncode, result.args)
 
     # Upload to storage if needed
     if storage is not None:

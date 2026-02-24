@@ -108,8 +108,10 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
         // Use Whisper-aligned timestamps when available, otherwise distribute evenly
         const wordStartMs = wordTimings?.[currentWordIndex]?.start_ms
           ?? (chunkStartMs + currentWordIndex * wordDuration);
-        const wordEndMs = wordTimings?.[currentWordIndex]?.end_ms
+        const rawWordEndMs = wordTimings?.[currentWordIndex]?.end_ms
           ?? (wordStartMs + wordDuration);
+        // Guarantee strict monotonicity — Whisper can return zero-duration words
+        const wordEndMs = Math.max(rawWordEndMs, wordStartMs + 1);
 
         // How far into speaking this word are we? (0 = not started, 1 = fully spoken)
         const wordProgress = interpolate(
