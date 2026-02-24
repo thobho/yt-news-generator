@@ -682,12 +682,21 @@ def upload_to_youtube(run_dir: Path) -> dict:
     return upload_to_youtube_for_run(run_dir.name)
 
 
-def fast_upload_for_run(run_id: str, language: str = "pl", schedule_option: str = "evening") -> dict:
+def fast_upload_for_run(
+    run_id: str,
+    language: str = "pl",
+    schedule_option: str = "evening",
+    on_step=None,
+) -> dict:
     """
     Run all remaining pipeline steps sequentially and upload to YouTube.
 
     Picks up from wherever the run is — skips steps already completed.
     Steps: audio → images → video → yt_metadata → youtube upload.
+
+    Args:
+        on_step: Optional callback(message: str) called before each step that
+                 will actually run. Not called for skipped steps.
     """
     logger.info("Starting fast upload for run: %s (language=%s, schedule=%s)", run_id, language, schedule_option)
     run_storage = get_run_storage(run_id)
@@ -698,21 +707,31 @@ def fast_upload_for_run(run_id: str, language: str = "pl", schedule_option: str 
 
     if not (run_storage.exists(keys["audio"]) and run_storage.exists(keys["timeline"])):
         logger.info("Fast upload: generating audio")
+        if on_step:
+            on_step("Generating audio...")
         generate_audio_for_run(run_id, language=language)
 
     if not run_storage.exists(keys["images_json"]):
         logger.info("Fast upload: generating images")
+        if on_step:
+            on_step("Generating images...")
         generate_images_for_run(run_id)
 
     if not run_storage.exists(keys["video"]):
         logger.info("Fast upload: rendering video")
+        if on_step:
+            on_step("Rendering video...")
         generate_video_for_run(run_id)
 
     if not run_storage.exists(keys["yt_metadata"]):
         logger.info("Fast upload: generating YouTube metadata")
+        if on_step:
+            on_step("Generating YouTube metadata...")
         generate_yt_metadata_for_run(run_id)
 
     logger.info("Fast upload: uploading to YouTube")
+    if on_step:
+        on_step("Uploading to YouTube...")
     return upload_to_youtube_for_run(run_id, schedule_option=schedule_option)
 
 

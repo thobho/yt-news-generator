@@ -451,9 +451,15 @@ async def fast_upload(
     def run_task():
         set_tenant_prefix(_storage_prefix)
         set_credentials_dir(_cred_dir)
+
+        def on_step(msg: str):
+            _tasks[task_id] = TaskStatus(status="running", message=msg)
+
         try:
-            _tasks[task_id] = TaskStatus(status="running", message="Generating audio...")
-            result = pipeline.fast_upload_for_run(run_id, language=_language, schedule_option=schedule_option)
+            _tasks[task_id] = TaskStatus(status="running", message="Checking pipeline state...")
+            result = pipeline.fast_upload_for_run(
+                run_id, language=_language, schedule_option=schedule_option, on_step=on_step
+            )
             _tasks[task_id] = TaskStatus(
                 status="completed",
                 message="Uploaded to YouTube successfully",
