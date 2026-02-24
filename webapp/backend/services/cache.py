@@ -69,7 +69,7 @@ class RunsCache:
         tenant_prefix: pass explicitly from background tasks where ContextVar may not be set.
         """
         if tenant_prefix is None:
-            from storage_config import get_tenant_prefix
+            from ..core.storage_config import get_tenant_prefix
             tenant_prefix = get_tenant_prefix()
         with self._lock:
             self._cache.pop(f"run:{tenant_prefix}:{run_id}", None)
@@ -78,7 +78,7 @@ class RunsCache:
     def invalidate_runs_list(self, tenant_prefix: str = None) -> None:
         """Invalidate just the runs list cache."""
         if tenant_prefix is None:
-            from storage_config import get_tenant_prefix
+            from ..core.storage_config import get_tenant_prefix
             tenant_prefix = get_tenant_prefix()
         with self._lock:
             self._cache.pop(f"runs_list:{tenant_prefix}", None)

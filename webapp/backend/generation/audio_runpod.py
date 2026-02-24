@@ -25,16 +25,16 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from pathlib import Path
 from typing import Union
 
-from generate_audio import (
+from .audio import (
     PAUSE_BETWEEN_SEGMENTS_MS,
     chunk_segment_aligned,
     extract_segments,
 )
-from align_audio import transcribe_with_timestamps, align_text_to_audio
-from logging_config import get_logger
-from storage import StorageBackend
-from storage_config import get_data_storage
-from tts_client import TTSClient
+from .audio_align import transcribe_with_timestamps, align_text_to_audio
+from ..core.logging_config import get_logger
+from ..core.storage import StorageBackend
+from ..core.storage_config import get_data_storage
+from .tts_client import TTSClient
 
 logger = get_logger(__name__)
 

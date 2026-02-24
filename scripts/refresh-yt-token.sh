@@ -33,8 +33,8 @@ echo ""
 # Authenticate and verify
 python3 -c "
 import sys
-sys.path.insert(0, 'src')
-from upload_youtube import authenticate
+sys.path.insert(0, 'webapp/backend')
+from publishing.youtube import authenticate
 from googleapiclient.discovery import build
 
 creds_dir = 'credentials/${TENANT}'

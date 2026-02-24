@@ -18,9 +18,9 @@ from typing import Union
 
 from elevenlabs import ElevenLabs
 
-from align_audio import transcribe_with_timestamps, align_text_to_audio
-from logging_config import get_logger
-from storage import StorageBackend
+from .audio_align import transcribe_with_timestamps, align_text_to_audio
+from ..core.logging_config import get_logger
+from ..core.storage import StorageBackend
 
 logger = get_logger(__name__)
 

@@ -4,17 +4,11 @@ Settings are persisted to a JSON file (local) or S3 (cloud).
 """
 
 import json
-import sys
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel
 
-# Add src to path for storage imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from storage_config import get_config_storage, is_s3_enabled
+from ..core.storage_config import get_config_storage, is_s3_enabled
 
 # Settings key within tenant data storage
 SETTINGS_KEY = "settings.json"
@@ -172,7 +166,7 @@ def get_available_fal_models() -> list[dict]:
 
 def get_available_prompt_versions() -> list[dict]:
     """Get list of available prompt versions with metadata."""
-    from storage_config import get_data_storage
+    from ..core.storage_config import get_data_storage
 
     data_storage = get_data_storage()
     versions = []

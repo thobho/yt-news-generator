@@ -5,32 +5,12 @@ Each step is isolated and can be called independently.
 
 import json
 import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Project paths
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-SRC_DIR = PROJECT_ROOT / "src"
-
-# Storage paths — tenant-aware via storage_config ContextVar
-def _get_output_dir() -> Path:
-    return get_tenant_output_dir()
-
-def _get_data_dir() -> Path:
-    from storage_config import get_tenant_prefix
-    return get_storage_dir() / get_tenant_prefix() / "data"
-
-def _get_seeds_dir() -> Path:
-    from storage_config import get_tenant_prefix
-    return get_storage_dir() / get_tenant_prefix() / "data" / "news-seeds"
-
-# Add src to path for imports
-sys.path.insert(0, str(SRC_DIR))
-
-from logging_config import get_logger
-from storage_config import (
+from ..core.logging_config import get_logger
+from ..core.storage_config import (
     get_credentials_dir,
     get_data_storage,
     get_output_storage,
@@ -40,6 +20,18 @@ from storage_config import (
     is_s3_enabled,
     ensure_storage_dirs,
 )
+
+# Storage paths — tenant-aware via storage_config ContextVar
+def _get_output_dir() -> Path:
+    return get_tenant_output_dir()
+
+def _get_data_dir() -> Path:
+    from ..core.storage_config import get_tenant_prefix
+    return get_storage_dir() / get_tenant_prefix() / "data"
+
+def _get_seeds_dir() -> Path:
+    from ..core.storage_config import get_tenant_prefix
+    return get_storage_dir() / get_tenant_prefix() / "data" / "news-seeds"
 
 logger = get_logger(__name__)
 
@@ -335,8 +327,8 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     Steps: perplexity search -> dialogue generation -> refinement -> polish
     """
     logger.info("Starting dialogue generation for run: %s", run_id)
-    from perplexity_search import run_perplexity_enrichment
-    from generate_dialogue import generate_dialogue as gen_dialogue, refine_dialogue, polish_dialogue
+    from ..news.perplexity import run_perplexity_enrichment
+    from ..generation.dialogue import generate_dialogue as gen_dialogue, refine_dialogue, polish_dialogue
 
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
@@ -440,7 +432,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
         raise FileNotFoundError("Dialogue not found. Generate dialogue first.")
 
     if tts_engine == "chatterbox":
-        from generate_audio_runpod import generate_audio as gen_audio
+        from ..generation.audio_runpod import generate_audio as gen_audio
         gen_audio(
             keys["dialogue"],
             keys["audio"],
@@ -451,7 +443,7 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
             language=language,
         )
     else:
-        from generate_audio import generate_audio as gen_audio
+        from ..generation.audio import generate_audio as gen_audio
         gen_audio(
             keys["dialogue"],
             keys["audio"],
@@ -480,12 +472,12 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     image_engine = settings.image_engine
     logger.info("Starting image generation for run: %s (engine=%s)", run_id, image_engine)
 
-    from generate_images import generate_image_prompts
+    from ..generation.images import generate_image_prompts
 
     if image_engine == "fal":
-        from generate_images_fal import generate_all_images
+        from ..generation.images_fal import generate_all_images
     else:
-        from generate_images import generate_all_images
+        from ..generation.images import generate_all_images
 
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
@@ -553,7 +545,7 @@ def generate_video_for_run(run_id: str) -> str:
     episode_number = settings_service.get_episode_number()
 
     # Build command
-    from storage_config import get_tenant_prefix
+    from ..core.storage_config import get_tenant_prefix
     cmd = [
         sys.executable,
         str(SRC_DIR / "generate_video.py"),
@@ -593,7 +585,7 @@ def generate_video(run_dir: Path) -> Path:
 
 def generate_yt_metadata_for_run(run_id: str, model: str = "gpt-4o") -> str:
     """Generate YouTube metadata."""
-    from generate_yt_metadata import generate_yt_metadata as gen_metadata
+    from ..generation.metadata import generate_yt_metadata as gen_metadata
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -632,7 +624,7 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
         schedule_option: One of "now", "evening", or "auto"
     """
     logger.info("Starting YouTube upload for run: %s (schedule: %s)", run_id, schedule_option)
-    from upload_youtube import upload_to_youtube as yt_upload, parse_yt_metadata
+    from ..publishing.youtube import upload_to_youtube as yt_upload, parse_yt_metadata
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -742,7 +734,7 @@ def fast_upload_for_run(
 def delete_youtube_for_run(run_id: str) -> dict:
     """Delete video from YouTube and remove yt_upload.json."""
     logger.info("Deleting YouTube video for run: %s", run_id)
-    from upload_youtube import delete_from_youtube
+    from ..publishing.youtube import delete_from_youtube
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -814,10 +806,10 @@ def regenerate_single_image_for_run(run_id: str, image_id: str) -> dict:
     output_key = f"{keys['images_dir']}/{image_id}.png"
 
     if image_engine == "fal":
-        from generate_images_fal import generate_image
+        from ..generation.images_fal import generate_image
         generate_image(target_image["prompt"], output_key, storage=run_storage, model=settings.fal_model)
     else:
-        from generate_images import generate_image
+        from ..generation.images import generate_image
         from openai import OpenAI
         client = OpenAI()
         generate_image(client, target_image["prompt"], output_key, storage=run_storage)

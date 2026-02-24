@@ -6,21 +6,15 @@ likes, comments, and shares.
 """
 
 import json
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
-# Add src to path for storage imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from logging_config import get_logger
-from storage_config import get_run_storage, get_project_root, get_credentials_dir
+from ..core.logging_config import get_logger
+from ..core.storage_config import get_run_storage, get_project_root, get_credentials_dir
 
 logger = get_logger(__name__)
 

@@ -29,12 +29,7 @@ async def storage_dep(tenant: TenantConfig = Depends(tenant_dep)) -> TenantConfi
     get_run_storage() etc. within this request will use the correct tenant path.
     Returns the TenantConfig for additional use by route handlers.
     """
-    import sys
-    from pathlib import Path as P
-    PROJECT_ROOT = P(__file__).parent.parent.parent
-    sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-    from storage_config import set_tenant_prefix, set_credentials_dir
+    from .core.storage_config import set_tenant_prefix, set_credentials_dir
     set_tenant_prefix(tenant.storage_prefix)
     set_credentials_dir(tenant.credentials_dir)
     return tenant

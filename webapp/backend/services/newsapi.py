@@ -7,7 +7,7 @@ from datetime import date
 
 import httpx
 
-from logging_config import get_logger
+from ..core.logging_config import get_logger
 
 logger = get_logger(__name__)
 

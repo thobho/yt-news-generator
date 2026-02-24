@@ -5,23 +5,16 @@ Analytics routes for YouTube video statistics.
 import asyncio
 import json
 import re
-import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 
 from ..config.tenant_registry import TenantConfig
+from ..core.logging_config import get_logger
+from ..core.storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, is_s3_enabled
 from ..dependencies import storage_dep
 from ..models import AnalyticsRun, YouTubeStats
-
-# Add src to path for storage imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from logging_config import get_logger
-from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, is_s3_enabled
 
 logger = get_logger(__name__)
 

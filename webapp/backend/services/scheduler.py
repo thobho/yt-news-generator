@@ -7,7 +7,6 @@ One APScheduler job per tenant: generate_pl, generate_us, etc.
 import asyncio
 import json
 import random
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Optional
@@ -16,12 +15,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel
 
-# Add src to path for imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from logging_config import get_logger
-from storage_config import get_config_storage, get_data_storage, set_tenant_prefix, set_credentials_dir
+from ..core.logging_config import get_logger
+from ..core.storage_config import get_config_storage, get_data_storage, set_tenant_prefix, set_credentials_dir
 
 from . import settings as settings_service
 from . import pipeline
@@ -256,7 +251,7 @@ def _format_available_news(items: list[dict]) -> str:
 
 def _get_recent_runs_with_stats(limit: int = 60) -> list[dict]:
     """Get recent runs with their seeds and YouTube stats."""
-    from storage_config import get_run_storage
+    from ..core.storage_config import get_run_storage
 
     runs = pipeline.list_runs()
     keys = pipeline.get_run_keys()

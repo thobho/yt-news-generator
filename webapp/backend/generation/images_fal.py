@@ -13,8 +13,8 @@ from typing import Union
 
 import requests
 
-from logging_config import get_logger
-from storage import StorageBackend
+from ..core.logging_config import get_logger
+from ..core.storage import StorageBackend
 
 logger = get_logger(__name__)
 

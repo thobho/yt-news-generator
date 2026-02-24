@@ -1,8 +1,6 @@
 import asyncio
 import json
-import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,17 +8,12 @@ from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ..config.tenant_registry import TenantConfig
+from ..core.storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, get_tenant_prefix, is_s3_enabled
+from ..core.storage import S3StorageBackend
 from ..dependencies import storage_dep
 from ..models import RunSummary, RunDetail, RunFiles, WorkflowState, YouTubeUpload
 from ..services import pipeline
 from ..services.cache import get_cache
-
-# Add src to path for storage imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from storage_config import get_output_storage, get_run_storage, get_tenant_output_dir, get_tenant_prefix, is_s3_enabled
-from storage import S3StorageBackend
 
 router = APIRouter(tags=["runs"])
 

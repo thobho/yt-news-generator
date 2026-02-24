@@ -14,9 +14,9 @@ from typing import Union
 
 from openai import OpenAI
 
-from logging_config import get_logger
-from storage import StorageBackend
-from storage_config import get_data_storage
+from ..core.logging_config import get_logger
+from ..core.storage import StorageBackend
+from ..core.storage_config import get_data_storage
 
 logger = get_logger(__name__)
 

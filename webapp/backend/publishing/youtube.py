@@ -18,9 +18,9 @@ from typing import Union
 
 from google.auth.transport.requests import Request
 
-from logging_config import get_logger
-from storage import StorageBackend
-from storage_config import get_project_root
+from ..core.logging_config import get_logger
+from ..core.storage import StorageBackend
+from ..core.storage_config import get_project_root
 
 logger = get_logger(__name__)
 from google.oauth2.credentials import Credentials

@@ -24,13 +24,10 @@ from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 
-try:
-    from storage import LocalStorageBackend, S3StorageBackend, StorageBackend
-except ImportError:
-    from .storage import LocalStorageBackend, S3StorageBackend, StorageBackend
+from .storage import LocalStorageBackend, S3StorageBackend, StorageBackend
 
 # Project root for local storage paths
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 
 # Storage directory for local mode
 STORAGE_DIR = PROJECT_ROOT / "storage"

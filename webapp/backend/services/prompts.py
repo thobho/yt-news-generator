@@ -9,18 +9,12 @@ Each type has an active.json file that stores which prompt is currently active.
 """
 
 import json
-import sys
-from pathlib import Path
 from typing import Literal
 from datetime import datetime
 
 from pydantic import BaseModel
 
-# Add src to path for storage imports
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from storage_config import get_data_storage
+from ..core.storage_config import get_data_storage
 
 # Prompt types
 PromptType = Literal["dialogue", "image", "research", "yt-metadata", "news-selection"]

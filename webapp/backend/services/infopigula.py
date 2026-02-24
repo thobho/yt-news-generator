@@ -9,7 +9,7 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from logging_config import get_logger
+from ..core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
