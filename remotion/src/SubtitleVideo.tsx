@@ -127,9 +127,10 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
 
         // Check if this word should be emphasized
         const cleanWord = part.replace(/[^\w\u0080-\uFFFF]/g, '').toLowerCase();
-        const isEmphasized = emphasisLower.some(e =>
-          cleanWord === e.toLowerCase() ||
-          cleanWord.includes(e.toLowerCase())
+        const isEmphasized = cleanWord.length > 2 && emphasisLower.some(e =>
+          cleanWord === e ||
+          cleanWord.includes(e) ||
+          e.split(/\s+/).some(w => w === cleanWord)
         );
 
         if (isEmphasized) {
