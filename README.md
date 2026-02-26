@@ -27,7 +27,8 @@ The following environment variables must be set:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4 dialogue generation and DALL-E images | Yes |
+| `OPENROUTER_API_KEY` | OpenRouter API key for all LLM chat completions (dialogue, image prompts, metadata, news selection) | Yes |
+| `OPENAI_API_KEY` | OpenAI API key for DALL-E image generation and Whisper transcription | Yes |
 | `ELEVENLABS_API_KEY` | ElevenLabs API key for text-to-speech | Yes |
 | `PERPLEXITY_API_KEY` | Perplexity AI API key for news research | Yes |
 | `AUTH_PASSWORD` | Password for dashboard authentication | Yes |
@@ -95,6 +96,7 @@ storage/
 ### 2. Set environment variables
 
 ```bash
+export OPENROUTER_API_KEY="your-key"
 export OPENAI_API_KEY="your-key"
 export ELEVENLABS_API_KEY="your-key"
 export PERPLEXITY_API_KEY="your-key"
@@ -122,6 +124,7 @@ By default the dev script uses `STORAGE_BACKEND=local` so data is read from `sto
 ### Quick Start
 
 ```bash
+export OPENROUTER_API_KEY="your-openrouter-key"
 export OPENAI_API_KEY="your-openai-key"
 export ELEVENLABS_API_KEY="your-elevenlabs-key"
 export PERPLEXITY_API_KEY="your-perplexity-key"
@@ -190,28 +193,18 @@ yt-centric-generator/
 │   └── run.sh                # Production runner
 ├── requirements.txt          # Python dependencies (core)
 ├── credentials/              # SSH keys & OAuth (gitignored)
-├── data/
-│   ├── media/                # Static media assets
-│   └── voices/               # TTS voice references (gitignored)
 ├── storage/                  # Local storage mirror of S3 (gitignored)
 │   ├── data/                 # Prompts, media, settings
 │   └── output/               # Generated runs
 ├── remotion/                 # Video rendering (React/Remotion)
-├── src/                      # Core Python scripts
-│   ├── generate_audio.py     # ElevenLabs TTS
-│   ├── generate_audio_runpod.py # Chatterbox TTS via RunPod
-│   ├── generate_dialogue.py  # GPT-4 dialogue
-│   ├── generate_images.py    # DALL-E images
-│   ├── generate_video.py     # Remotion rendering
-│   ├── perplexity_search.py  # News research
-│   ├── storage.py            # Storage abstraction (Local/S3)
-│   ├── storage_config.py     # Storage factory functions
-│   └── upload_youtube.py     # YouTube upload
 ├── webapp/
 │   ├── backend/              # FastAPI backend
 │   │   ├── main.py
-│   │   ├── routes/
-│   │   ├── services/
+│   │   ├── core/             # Logging, storage abstraction
+│   │   ├── generation/       # Dialogue, images, audio, metadata, video
+│   │   ├── news/             # Perplexity & news source integrations
+│   │   ├── routes/           # API route handlers
+│   │   ├── services/         # Pipeline, scheduler, OpenRouter, settings
 │   │   └── requirements.txt
 │   └── frontend/             # React frontend
 │       ├── src/
@@ -308,7 +301,9 @@ The OAuth2 refresh token has expired. This happens every **7 days** if the Googl
 ## Costs management
 1. https://fal.ai/dashboard/usage-billing/credits
 2. https://console.runpod.io/user/billing
-4. https://platform.openai.com/usage
+2. https://elevenlabs.io/app/developers/usage
+3. https://platform.openai.com/usage
+4. https://openrouter.ai/activity
 5. https://claude.ai/settings/billing
 6. https://accounts.hetzner.com/invoice
 7. https://us-east-1.console.aws.amazon.com/costmanagement/home?region=us-east-1#/home
