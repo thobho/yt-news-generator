@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 
 router = APIRouter()
 
-LOG_DIR = Path(__file__).resolve().parents[3] / "logs"
+LOG_DIR = Path(__file__).resolve().parents[1] / "logs"
 
 
 @router.get("/logs")
