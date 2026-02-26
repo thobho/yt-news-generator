@@ -19,6 +19,8 @@ from typing import Union
 import requests
 
 from ..core.logging_config import get_logger
+from openai import OpenAI
+
 from ..services.openrouter import IMAGE_PROMPTS, get_chat_client, get_openai_client
 from ..core.storage import StorageBackend
 
