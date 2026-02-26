@@ -12,9 +12,8 @@ import sys
 from pathlib import Path
 from typing import Union
 
-from openai import OpenAI
-
 from ..core.logging_config import get_logger
+from ..services.openrouter import DIALOGUE_GENERATE, DIALOGUE_POLISH, DIALOGUE_REFINE, get_chat_client
 from ..core.storage import StorageBackend
 from ..core.storage_config import get_data_storage
 
@@ -123,7 +122,7 @@ TOPIC ID: {news.get('topic_id', 'unknown')}
 def generate_dialogue(
     news: dict,
     prompt_path: Union[Path, str],
-    model: str = "gpt-4o",
+    model: str = DIALOGUE_GENERATE,
     storage: StorageBackend = None,
     temperature: float = 0.7
 ) -> dict:
@@ -140,7 +139,7 @@ def generate_dialogue(
     user_message = build_user_message(news)
     logger.debug("User message for dialogue generation:\n%s", user_message)
     logger.info("Generating dialogue with model=%s, temperature=%.2f", model, temperature)
-    client = OpenAI()
+    client = get_chat_client()
 
     response = client.chat.completions.create(
         model=model,
@@ -185,7 +184,7 @@ def refine_dialogue(
     dialogue: dict,
     news: dict,
     prompt_path: Union[Path, str],
-    model: str = "gpt-4o",
+    model: str = DIALOGUE_REFINE,
     storage: StorageBackend = None,
     temperature: float = 0.5
 ) -> dict:
@@ -213,7 +212,7 @@ def refine_dialogue(
 """
 
     logger.info("Step 2: Refining dialogue (logic/structure) with model=%s, temperature=%.2f", model, temperature)
-    client = OpenAI()
+    client = get_chat_client()
 
     response = client.chat.completions.create(
         model=model,
@@ -243,7 +242,7 @@ def refine_dialogue(
 def polish_dialogue(
     dialogue: dict,
     prompt_path: Union[Path, str],
-    model: str = "gpt-4o",
+    model: str = DIALOGUE_POLISH,
     storage: StorageBackend = None,
     temperature: float = 0.6
 ) -> dict:
@@ -265,7 +264,7 @@ def polish_dialogue(
 """
 
     logger.info("Step 3: Polishing dialogue (language/style) with model=%s, temperature=%.2f", model, temperature)
-    client = OpenAI()
+    client = get_chat_client()
 
     response = client.chat.completions.create(
         model=model,
@@ -302,7 +301,7 @@ def main():
         "-o", "--output", type=Path, help="Output file path (default: stdout)"
     )
     parser.add_argument(
-        "-m", "--model", default="gpt-4o", help="OpenAI model to use (default: gpt-4o)"
+        "-m", "--model", default=DIALOGUE_GENERATE, help=f"Model to use via OpenRouter (default: {DIALOGUE_GENERATE})"
     )
 
     args = parser.parse_args()

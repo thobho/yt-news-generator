@@ -11,9 +11,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from openai import OpenAI
-
 from ..core.logging_config import get_logger
+from ..services.openrouter import get_openai_client
 
 logger = get_logger(__name__)
 
@@ -26,11 +25,11 @@ def is_whisper_available() -> bool:
     return bool(os.environ.get("OPENAI_API_KEY"))
 
 
-def _get_client() -> OpenAI:
-    """Get or create OpenAI client."""
+def _get_client():
+    """Get or create OpenAI client (Whisper requires direct OpenAI, not OpenRouter)."""
     global _client
     if _client is None:
-        _client = OpenAI()
+        _client = get_openai_client()
     return _client
 
 

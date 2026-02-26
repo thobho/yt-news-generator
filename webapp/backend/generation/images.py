@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Union
 
 import requests
-from openai import OpenAI
 
 from ..core.logging_config import get_logger
+from ..services.openrouter import IMAGE_PROMPTS, get_chat_client, get_openai_client
 from ..core.storage import StorageBackend
 
 logger = get_logger(__name__)
@@ -106,7 +106,7 @@ def build_user_message(dialogue_data: dict) -> str:
 def generate_image_prompts(
     dialogue_path: Union[Path, str],
     prompt_path: Union[Path, str],
-    model: str = "gpt-4o",
+    model: str = IMAGE_PROMPTS,
     dialogue_storage: StorageBackend = None,
     prompt_storage: StorageBackend = None
 ) -> dict:
@@ -123,7 +123,7 @@ def generate_image_prompts(
     system_prompt = load_prompt(prompt_path, prompt_storage)
     user_message = build_user_message(dialogue_data)
 
-    client = OpenAI()
+    client = get_chat_client()
 
     response = client.chat.completions.create(
         model=model,
@@ -199,7 +199,7 @@ def generate_all_images(
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    client = OpenAI()
+    client = get_openai_client()
     images = prompts_data.get("images", [])
     n_images = len(images)
 
@@ -256,7 +256,7 @@ def main():
         help="Output directory for images (images.json will also be saved here)"
     )
     parser.add_argument(
-        "-m", "--model", default="gpt-4o", help="OpenAI model to use (default: gpt-4o)"
+        "-m", "--model", default=IMAGE_PROMPTS, help=f"Model to use via OpenRouter (default: {IMAGE_PROMPTS})"
     )
     parser.add_argument(
         "--prompts-only", action="store_true",

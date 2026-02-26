@@ -353,12 +353,12 @@ async def select_news_llm(count: int, items: list[dict]) -> list[dict]:
     logger.info("========================================")
 
     try:
-        import openai
-        logger.info("Calling OpenAI API (model=gpt-4o)...")
+        from .openrouter import NEWS_SELECTION, get_chat_client
+        logger.info("Calling OpenRouter API (model=%s)...", NEWS_SELECTION)
 
-        client = openai.OpenAI()
+        client = get_chat_client()
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=NEWS_SELECTION,
             messages=[{"role": "user", "content": prompt}],
             temperature=temperature,
             response_format={

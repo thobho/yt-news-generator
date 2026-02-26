@@ -12,9 +12,8 @@ import sys
 from pathlib import Path
 from typing import Union
 
-from openai import OpenAI
-
 from ..core.logging_config import get_logger
+from ..services.openrouter import YT_METADATA, get_chat_client
 from ..core.storage import StorageBackend
 from ..core.storage_config import get_data_storage, get_project_root
 
@@ -126,7 +125,7 @@ def format_as_markdown(title: str, description: str) -> str:
 
 def generate_yt_metadata(
     enriched_news_path: Union[Path, str],
-    model: str = "gpt-4o",
+    model: str = YT_METADATA,
     storage: StorageBackend = None,
     prompt_key: str = None
 ) -> str:
@@ -146,7 +145,7 @@ def generate_yt_metadata(
     system_prompt = load_prompt(prompt_key or YT_METADATA_PROMPT_KEY, data_storage)
     user_message = build_user_message(news)
 
-    client = OpenAI()
+    client = get_chat_client()
 
     response = client.chat.completions.create(
         model=model,
@@ -184,7 +183,7 @@ def main():
         "-o", "--output", type=Path, help="Output JSON file (default: stdout)"
     )
     parser.add_argument(
-        "-m", "--model", default="gpt-4o", help="OpenAI model (default: gpt-4o)"
+        "-m", "--model", default=YT_METADATA, help=f"Model to use via OpenRouter (default: {YT_METADATA})"
     )
 
     args = parser.parse_args()

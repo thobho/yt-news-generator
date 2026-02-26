@@ -322,7 +322,7 @@ def get_run_paths(run_dir: Path) -> dict:
     }
 
 
-def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
+def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
     """
     Generate dialogue from seed.
     Steps: perplexity search -> dialogue generation -> refinement -> polish
@@ -330,6 +330,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     logger.info("Starting dialogue generation for run: %s", run_id)
     from ..news.perplexity import run_perplexity_enrichment
     from ..generation.dialogue import generate_dialogue as gen_dialogue, refine_dialogue, polish_dialogue
+    from .openrouter import DIALOGUE_GENERATE, DIALOGUE_POLISH, DIALOGUE_REFINE
 
     run_storage = get_run_storage(run_id)
     data_storage = get_data_storage()
@@ -364,7 +365,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     dialogue_data = gen_dialogue(
         news_data,
         dialogue_prompt_key,
-        model,
+        model or DIALOGUE_GENERATE,
         storage=data_storage,
         temperature=temp1,
     )
@@ -374,7 +375,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         dialogue_data,
         news_data,
         refine_prompt_key,
-        model,
+        model or DIALOGUE_REFINE,
         storage=data_storage,
         temperature=temp2,
     )
@@ -384,7 +385,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
         dialogue_data = polish_dialogue(
             dialogue_data,
             polish_prompt_key,
-            model,
+            model or DIALOGUE_POLISH,
             storage=data_storage,
             temperature=temp3,
         )
@@ -398,7 +399,7 @@ def generate_dialogue_for_run(run_id: str, model: str = "gpt-4o") -> dict:
 
 
 # Legacy wrapper for backward compatibility
-def generate_dialogue(run_dir: Path, model: str = "gpt-4o") -> dict:
+def generate_dialogue(run_dir: Path, model: str = None) -> dict:
     """Generate dialogue from seed (legacy local-only interface)."""
     run_id = run_dir.name
     return generate_dialogue_for_run(run_id, model)
@@ -467,13 +468,14 @@ def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella")
     return generate_audio_for_run(run_dir.name, voice_a, voice_b)
 
 
-def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
+def generate_images_for_run(run_id: str, model: str = None) -> dict:
     """Generate images from dialogue."""
     settings = settings_service.load_settings()
     image_engine = settings.image_engine
     logger.info("Starting image generation for run: %s (engine=%s)", run_id, image_engine)
 
     from ..generation.images import generate_image_prompts
+    from .openrouter import IMAGE_PROMPTS
 
     if image_engine == "fal":
         from ..generation.images_fal import generate_all_images
@@ -503,7 +505,7 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     prompts_data = generate_image_prompts(
         dialogue_path=keys["dialogue"],
         prompt_path=image_prompt_key,
-        model=model,
+        model=model or IMAGE_PROMPTS,
         dialogue_storage=run_storage,
         prompt_storage=data_storage,
     )
@@ -525,7 +527,7 @@ def generate_images_for_run(run_id: str, model: str = "gpt-4o") -> dict:
     return prompts_data
 
 
-def generate_images(run_dir: Path, model: str = "gpt-4o") -> dict:
+def generate_images(run_dir: Path, model: str = None) -> dict:
     """Generate images from dialogue (legacy interface)."""
     return generate_images_for_run(run_dir.name, model)
 
@@ -583,9 +585,10 @@ def generate_video(run_dir: Path) -> Path:
     return run_dir / "video.mp4"
 
 
-def generate_yt_metadata_for_run(run_id: str, model: str = "gpt-4o") -> str:
+def generate_yt_metadata_for_run(run_id: str, model: str = None) -> str:
     """Generate YouTube metadata."""
     from ..generation.metadata import generate_yt_metadata as gen_metadata
+    from .openrouter import YT_METADATA
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -602,7 +605,7 @@ def generate_yt_metadata_for_run(run_id: str, model: str = "gpt-4o") -> str:
 
     metadata = gen_metadata(
         keys["news_data"],
-        model,
+        model or YT_METADATA,
         storage=run_storage,
         prompt_key=yt_prompt_key
     )
@@ -611,7 +614,7 @@ def generate_yt_metadata_for_run(run_id: str, model: str = "gpt-4o") -> str:
     return metadata
 
 
-def generate_yt_metadata(run_dir: Path, model: str = "gpt-4o") -> str:
+def generate_yt_metadata(run_dir: Path, model: str = None) -> str:
     """Generate YouTube metadata (legacy interface)."""
     return generate_yt_metadata_for_run(run_dir.name, model)
 
@@ -810,8 +813,8 @@ def regenerate_single_image_for_run(run_id: str, image_id: str) -> dict:
         generate_image(target_image["prompt"], output_key, storage=run_storage, model=settings.fal_model)
     else:
         from ..generation.images import generate_image
-        from openai import OpenAI
-        client = OpenAI()
+        from .openrouter import get_openai_client
+        client = get_openai_client()
         generate_image(client, target_image["prompt"], output_key, storage=run_storage)
 
     # Update metadata
