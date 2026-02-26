@@ -49,8 +49,8 @@ DIALOGUE_POLISH = "anthropic/claude-opus-4.6"
 # Creative visual reasoning from dialogue text
 IMAGE_PROMPTS = "google/gemini-2.0-flash-001"
 
-# Simple structured output (json_object, not strict schema); free model works
-YT_METADATA = "meta-llama/llama-3.3-70b-instruct:free"
+# Simple structured output (json_object, not strict schema)
+YT_METADATA = "google/gemini-2.0-flash-001"
 
 # Analytical pattern recognition over historical performance data
 NEWS_SELECTION = "google/gemini-2.0-flash-001"
