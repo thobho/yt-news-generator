@@ -8,6 +8,7 @@ Usage:
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Union
@@ -158,7 +159,16 @@ def generate_yt_metadata(
     )
 
     content = response.choices[0].message.content
-    llm_result = json.loads(content)
+    try:
+        llm_result = json.loads(content)
+    except json.JSONDecodeError:
+        # LLMs sometimes emit invalid JSON escape sequences (e.g. \s, \p, \A).
+        # Process \X pairs: keep valid escapes, double the backslash for invalid ones.
+        def _fix_escape(m):
+            c = m.group(1)
+            return m.group(0) if c in '"\\/bfnrtu' else '\\\\' + c
+        fixed = re.sub(r'\\(.)', _fix_escape, content)
+        llm_result = json.loads(fixed)
 
     # Extract parts from LLM response
     title = llm_result.get("title", "")
