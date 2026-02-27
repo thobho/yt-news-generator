@@ -5,11 +5,13 @@ import {
   fetchAllPrompts,
   createSeed,
   generateDialogue,
+  fastUpload,
   pollTaskUntilDone,
   TaskStatus,
   InfoPigulaNewsItem,
   PromptTypeInfo,
   PromptSelections,
+  ScheduleOption,
 } from '../api/client'
 import { useTenant } from '../context/TenantContext'
 
@@ -59,6 +61,7 @@ export default function NewRunPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitStatus, setSubmitStatus] = useState<string | null>(null)
+  const [scheduleOption, setScheduleOption] = useState<ScheduleOption>('evening')
 
   useEffect(() => {
     setNewsItems([])
@@ -178,6 +181,51 @@ export default function NewRunPage() {
       }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to create seed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleFastUpload = async () => {
+    const selected = newsItems.filter((item) => selectedIds.has(item.id))
+    if (selected.length === 0) return
+
+    setIsSubmitting(true)
+    setSubmitError(null)
+    const promptSelections = getPromptSelectionsForSubmit()
+    const total = selected.length
+
+    try {
+      for (let index = 0; index < total; index += 1) {
+        const item = selected[index]
+        const itemSeedText = formatSeedText([item])
+        const itemLabel = item.title || `item ${index + 1}`
+
+        setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
+        const { run_id } = await createSeed(tenantId, itemSeedText, promptSelections)
+
+        setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
+        const { task_id: dialogueTaskId } = await generateDialogue(tenantId, run_id)
+        const dialogueResult = await pollTaskUntilDone(tenantId, dialogueTaskId, (taskStatus: TaskStatus) => {
+          if (taskStatus.message) setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
+        })
+        if (dialogueResult.status === 'error') {
+          throw new Error(dialogueResult.message || 'Dialogue generation failed')
+        }
+
+        setSubmitStatus(`Starting fast upload (${index + 1}/${total})...`)
+        const { task_id: uploadTaskId } = await fastUpload(tenantId, run_id, scheduleOption)
+        const uploadResult = await pollTaskUntilDone(tenantId, uploadTaskId, (taskStatus: TaskStatus) => {
+          if (taskStatus.message) setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
+        })
+        if (uploadResult.status === 'error') {
+          throw new Error(uploadResult.message || 'Fast upload failed')
+        }
+      }
+      setSubmitStatus('Done!')
+      navigate('/')
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Fast upload failed')
     } finally {
       setIsSubmitting(false)
     }
@@ -319,13 +367,43 @@ export default function NewRunPage() {
                   </span>
                 )}
               </div>
-              <button
-                className="primary"
-                onClick={handleSubmit}
-                disabled={!canSubmitBrowse}
-              >
-                {isSubmitting ? 'Creating...' : 'Create Seed'}
-              </button>
+              <div className="selection-actions">
+                <div className="schedule-options">
+                  <label className="schedule-label">Schedule:</label>
+                  <div className="schedule-buttons">
+                    <button
+                      type="button"
+                      className={`schedule-btn ${scheduleOption === 'now' ? 'active' : ''}`}
+                      onClick={() => setScheduleOption('now')}
+                      disabled={isSubmitting}
+                    >
+                      Now
+                    </button>
+                    <button
+                      type="button"
+                      className={`schedule-btn ${scheduleOption === 'evening' ? 'active' : ''}`}
+                      onClick={() => setScheduleOption('evening')}
+                      disabled={isSubmitting}
+                    >
+                      Evening
+                    </button>
+                  </div>
+                </div>
+                <button
+                  className="primary"
+                  onClick={handleSubmit}
+                  disabled={!canSubmitBrowse}
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Seed'}
+                </button>
+                <button
+                  className="primary upload"
+                  onClick={handleFastUpload}
+                  disabled={!canSubmitBrowse}
+                >
+                  {isSubmitting ? 'Running...' : '⚡ Fast YT Upload'}
+                </button>
+              </div>
             </div>
           )}
         </div>
