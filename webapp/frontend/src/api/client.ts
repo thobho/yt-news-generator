@@ -376,7 +376,6 @@ export async function regenerateImage(
 
 export interface Settings {
   prompt_version: string;
-  tts_engine: string;
   image_engine: string;
   fal_model: string;
 }
@@ -388,12 +387,6 @@ export interface PromptVersionInfo {
     main: string;
     refine: string;
   };
-}
-
-export interface TTSEngineInfo {
-  id: string;
-  label: string;
-  description: string;
 }
 
 export interface ImageEngineInfo {
@@ -410,7 +403,6 @@ export interface FalModelInfo {
 
 export interface AvailableSettings {
   prompt_versions: PromptVersionInfo[];
-  tts_engines: TTSEngineInfo[];
   image_engines: ImageEngineInfo[];
   fal_models: FalModelInfo[];
 }

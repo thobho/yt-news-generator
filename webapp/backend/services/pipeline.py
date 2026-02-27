@@ -421,11 +421,10 @@ def update_dialogue(run_dir: Path, dialogue_data: dict) -> dict:
     return update_dialogue_for_run(run_dir.name, dialogue_data)
 
 
-def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "Bella", language: str = "pl") -> dict:
-    """Generate audio from dialogue."""
+def generate_audio_for_run(run_id: str, language: str = "pl") -> dict:
+    """Generate audio from dialogue using Chatterbox TTS."""
     settings = settings_service.load_settings()
-    tts_engine = settings.tts_engine
-    logger.info("Starting audio generation for run: %s (engine=%s, language=%s)", run_id, tts_engine, language)
+    logger.info("Starting audio generation for run: %s (language=%s)", run_id, language)
 
     run_storage = get_run_storage(run_id)
     keys = get_run_keys()
@@ -433,33 +432,19 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
     if not run_storage.exists(keys["dialogue"]):
         raise FileNotFoundError("Dialogue not found. Generate dialogue first.")
 
-    if tts_engine == "chatterbox":
-        from ..generation.audio_runpod import generate_audio as gen_audio
-        speakers = settings.speakers
-        if len(speakers) < 2:
-            raise ValueError("Chatterbox TTS requires at least 2 speakers configured in settings.")
-        cb_voice_a = speakers[0].storage_key
-        cb_voice_b = speakers[1].storage_key
-        gen_audio(
-            keys["dialogue"],
-            keys["audio"],
-            keys["timeline"],
-            voice_a=cb_voice_a,
-            voice_b=cb_voice_b,
-            storage=run_storage,
-            language=language,
-        )
-    else:
-        from ..generation.audio import generate_audio as gen_audio
-        gen_audio(
-            keys["dialogue"],
-            keys["audio"],
-            keys["timeline"],
-            voice_a,
-            voice_b,
-            storage=run_storage,
-            language=language,
-        )
+    from ..generation.audio_runpod import generate_audio as gen_audio
+    speakers = settings.speakers
+    if len(speakers) < 2:
+        raise ValueError("Chatterbox TTS requires at least 2 speakers configured in settings.")
+    gen_audio(
+        keys["dialogue"],
+        keys["audio"],
+        keys["timeline"],
+        voice_a=speakers[0].storage_key,
+        voice_b=speakers[1].storage_key,
+        storage=run_storage,
+        language=language,
+    )
 
     # Return timeline data
     if run_storage.exists(keys["timeline"]):
@@ -468,9 +453,9 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
     return {}
 
 
-def generate_audio(run_dir: Path, voice_a: str = "Adam", voice_b: str = "Bella") -> dict:
+def generate_audio(run_dir: Path) -> dict:
     """Generate audio from dialogue (legacy interface)."""
-    return generate_audio_for_run(run_dir.name, voice_a, voice_b)
+    return generate_audio_for_run(run_dir.name)
 
 
 def generate_images_for_run(run_id: str, model: str = None) -> dict:

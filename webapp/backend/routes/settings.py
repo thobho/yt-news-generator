@@ -35,14 +35,12 @@ SCOPES = [
 
 class SettingsResponse(BaseModel):
     prompt_version: str
-    tts_engine: str
     image_engine: str
     fal_model: str
 
 
 class SettingsUpdateRequest(BaseModel):
     prompt_version: Optional[str] = None
-    tts_engine: Optional[str] = None
     image_engine: Optional[str] = None
     fal_model: Optional[str] = None
 
@@ -51,12 +49,6 @@ class PromptVersionInfo(BaseModel):
     version: str
     label: str
     files: dict[str, str]
-
-
-class TTSEngineInfo(BaseModel):
-    id: str
-    label: str
-    description: str
 
 
 class ImageEngineInfo(BaseModel):
@@ -73,7 +65,6 @@ class FalModelInfo(BaseModel):
 
 class AvailableSettingsResponse(BaseModel):
     prompt_versions: list[PromptVersionInfo]
-    tts_engines: list[TTSEngineInfo]
     image_engines: list[ImageEngineInfo]
     fal_models: list[FalModelInfo]
 
@@ -84,7 +75,6 @@ async def get_settings(_: TenantConfig = Depends(storage_dep)):
     current = settings_service.load_settings()
     return SettingsResponse(
         prompt_version=current.prompt_version,
-        tts_engine=current.tts_engine,
         image_engine=current.image_engine,
         fal_model=current.fal_model,
     )
@@ -103,15 +93,6 @@ async def update_settings(request: SettingsUpdateRequest, _: TenantConfig = Depe
                 detail=f"Invalid prompt version. Available: {available}"
             )
         current.prompt_version = request.prompt_version  # type: ignore
-
-    if request.tts_engine is not None:
-        valid_engines = [e["id"] for e in settings_service.get_available_tts_engines()]
-        if request.tts_engine not in valid_engines:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid TTS engine. Available: {valid_engines}"
-            )
-        current.tts_engine = request.tts_engine  # type: ignore
 
     if request.image_engine is not None:
         valid_engines = [e["id"] for e in settings_service.get_available_image_engines()]
@@ -135,7 +116,6 @@ async def update_settings(request: SettingsUpdateRequest, _: TenantConfig = Depe
 
     return SettingsResponse(
         prompt_version=current.prompt_version,
-        tts_engine=current.tts_engine,
         image_engine=current.image_engine,
         fal_model=current.fal_model,
     )
@@ -145,12 +125,10 @@ async def update_settings(request: SettingsUpdateRequest, _: TenantConfig = Depe
 async def get_available_settings(_: TenantConfig = Depends(storage_dep)):
     """Get available setting options."""
     versions = settings_service.get_available_prompt_versions()
-    tts_engines = settings_service.get_available_tts_engines()
     image_engines = settings_service.get_available_image_engines()
     fal_models = settings_service.get_available_fal_models()
     return AvailableSettingsResponse(
         prompt_versions=[PromptVersionInfo(**v) for v in versions],
-        tts_engines=[TTSEngineInfo(**e) for e in tts_engines],
         image_engines=[ImageEngineInfo(**e) for e in image_engines],
         fal_models=[FalModelInfo(**m) for m in fal_models],
     )
