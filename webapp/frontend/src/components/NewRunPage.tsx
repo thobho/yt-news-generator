@@ -124,65 +124,48 @@ export default function NewRunPage() {
   }
 
   const handleSubmit = async () => {
-    let seedText = ''
     if (activeTab === 'browse') {
       const selected = newsItems.filter((item) => selectedIds.has(item.id))
       if (selected.length === 0) return
-      seedText = formatSeedText(selected)
+
+      const promptSelections = getPromptSelectionsForSubmit()
+      setIsSubmitting(true)
+      setSubmitError(null)
+      try {
+        for (const item of selected) {
+          const { run_id } = await createSeed(tenantId, formatSeedText([item]), promptSelections)
+          await generateDialogue(tenantId, run_id)
+        }
+        navigate('/')
+      } catch (err) {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to create seed')
+        setIsSubmitting(false)
+      }
     } else {
       if (!customText.trim()) return
-      seedText = customText.trim()
-    }
 
-    const promptSelections = getPromptSelectionsForSubmit()
-
-    setIsSubmitting(true)
-    setSubmitError(null)
-    try {
-      if (activeTab === 'browse') {
-        const selected = newsItems.filter((item) => selectedIds.has(item.id))
-        const total = selected.length
-        for (let index = 0; index < total; index += 1) {
-          const item = selected[index]
-          const itemSeedText = formatSeedText([item])
-          const itemLabel = item.title || `item ${index + 1}`
-          setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
-          const { run_id } = await createSeed(tenantId, itemSeedText, promptSelections)
-          setSubmitStatus(`Starting dialogue generation (${index + 1}/${total})...`)
-          const { task_id } = await generateDialogue(tenantId, run_id)
-          setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
-          const result = await pollTaskUntilDone(tenantId, task_id, (taskStatus: TaskStatus) => {
-            if (taskStatus.message) {
-              setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
-            }
-          })
-          if (result.status === 'error') {
-            throw new Error(result.message || 'Dialogue generation failed')
-          }
-        }
-        setSubmitStatus('Done!')
-        navigate('/')
-      } else {
+      const promptSelections = getPromptSelectionsForSubmit()
+      setIsSubmitting(true)
+      setSubmitError(null)
+      setSubmitStatus(null)
+      try {
         setSubmitStatus('Creating seed...')
-        const { run_id } = await createSeed(tenantId, seedText, promptSelections)
+        const { run_id } = await createSeed(tenantId, customText.trim(), promptSelections)
         setSubmitStatus('Starting dialogue generation...')
         const { task_id } = await generateDialogue(tenantId, run_id)
         setSubmitStatus('Generating dialogue (this may take a minute)...')
         const result = await pollTaskUntilDone(tenantId, task_id, (taskStatus: TaskStatus) => {
-          if (taskStatus.message) {
-            setSubmitStatus(taskStatus.message)
-          }
+          if (taskStatus.message) setSubmitStatus(taskStatus.message)
         })
         if (result.status === 'error') {
           throw new Error(result.message || 'Dialogue generation failed')
         }
-        setSubmitStatus('Done!')
         navigate(`/runs/${run_id}`)
+      } catch (err) {
+        setSubmitError(err instanceof Error ? err.message : 'Failed to create seed')
+      } finally {
+        setIsSubmitting(false)
       }
-    } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'Failed to create seed')
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -198,11 +181,10 @@ export default function NewRunPage() {
     try {
       for (let index = 0; index < total; index += 1) {
         const item = selected[index]
-        const itemSeedText = formatSeedText([item])
         const itemLabel = item.title || `item ${index + 1}`
 
         setSubmitStatus(`Creating seed for ${itemLabel} (${index + 1}/${total})...`)
-        const { run_id } = await createSeed(tenantId, itemSeedText, promptSelections)
+        const { run_id } = await createSeed(tenantId, formatSeedText([item]), promptSelections)
 
         setSubmitStatus(`Generating dialogue (${index + 1}/${total})...`)
         const { task_id: dialogueTaskId } = await generateDialogue(tenantId, run_id)
@@ -213,20 +195,12 @@ export default function NewRunPage() {
           throw new Error(dialogueResult.message || 'Dialogue generation failed')
         }
 
-        setSubmitStatus(`Starting fast upload (${index + 1}/${total})...`)
-        const { task_id: uploadTaskId } = await fastUpload(tenantId, run_id, scheduleOption)
-        const uploadResult = await pollTaskUntilDone(tenantId, uploadTaskId, (taskStatus: TaskStatus) => {
-          if (taskStatus.message) setSubmitStatus(`${taskStatus.message} (${index + 1}/${total})`)
-        })
-        if (uploadResult.status === 'error') {
-          throw new Error(uploadResult.message || 'Fast upload failed')
-        }
+        // Kick off fast upload in the background — don't wait for it
+        await fastUpload(tenantId, run_id, scheduleOption)
       }
-      setSubmitStatus('Done!')
       navigate('/')
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Fast upload failed')
-    } finally {
       setIsSubmitting(false)
     }
   }
