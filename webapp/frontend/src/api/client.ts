@@ -462,6 +462,60 @@ export async function startYouTubeOAuth(tenantId: string): Promise<{ auth_url: s
   return response.json();
 }
 
+// Speakers types and functions
+
+export interface Speaker {
+  name: string;
+  storage_key: string;
+}
+
+export async function fetchSpeakers(tenantId: string): Promise<Speaker[]> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/speakers`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch speakers');
+  }
+  return response.json();
+}
+
+export async function uploadSpeaker(tenantId: string, file: File, name?: string): Promise<Speaker[]> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name) formData.append('name', name);
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/speakers`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to upload speaker');
+  }
+  return response.json();
+}
+
+export async function deleteSpeaker(tenantId: string, index: number): Promise<Speaker[]> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/speakers/${index}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to delete speaker');
+  }
+  return response.json();
+}
+
+export async function moveSpeaker(tenantId: string, index: number, direction: 'up' | 'down'): Promise<Speaker[]> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/settings/speakers/${index}/move`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ direction }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to move speaker');
+  }
+  return response.json();
+}
+
 // Running tasks
 
 export interface RunningTaskInfo {

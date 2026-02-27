@@ -38,13 +38,6 @@ from .tts_client import TTSClient
 
 logger = get_logger(__name__)
 
-DEFAULT_VOICE_A = "male"
-DEFAULT_VOICE_B = "female"
-
-VOICE_REFS = {
-    "male": "voices/male.wav",
-    "female": "voices/female.wav",
-}
 
 # Target format for merging – must match between segments and silence
 _MERGE_SAMPLE_RATE = 44100
@@ -152,8 +145,8 @@ def generate_audio(
     dialogue_path: Union[Path, str],
     output: Union[Path, str],
     timeline: Union[Path, str] = None,
-    voice_a: str = DEFAULT_VOICE_A,
-    voice_b: str = DEFAULT_VOICE_B,
+    voice_a: str = None,
+    voice_b: str = None,
     storage: StorageBackend = None,
     language: str = "pl",
 ):
@@ -167,10 +160,12 @@ def generate_audio(
         dialogue_path: Path to dialogue JSON file
         output: Path to output audio file (MP3)
         timeline: Path to output timeline JSON file
-        voice_a: Voice name for first speaker (default "male")
-        voice_b: Voice name for second speaker (default "female")
+        voice_a: Storage key for first speaker voice (required)
+        voice_b: Storage key for second speaker voice (required)
         storage: Optional storage backend
     """
+    if not voice_a or not voice_b:
+        raise ValueError("voice_a and voice_b storage keys are required for Chatterbox TTS.")
     logger.info("Generating audio from dialogue: %s", dialogue_path)
 
     client = TTSClient()
@@ -180,8 +175,7 @@ def generate_audio(
     logger.info("Found %d segments with speakers: %s", len(segments), speakers)
 
     # Build voice map: first speaker -> voice_a, second speaker -> voice_b
-    voice_refs = [VOICE_REFS.get(voice_a), VOICE_REFS.get(voice_b)]
-    voice_map = {s: voice_refs[i % 2] for i, s in enumerate(speakers)}
+    voice_map = {s: [voice_a, voice_b][i % 2] for i, s in enumerate(speakers)}
     logger.debug("Voice mapping: %s", voice_map)
 
     # Voice files live under data/ storage (not run storage)
@@ -202,6 +196,7 @@ def generate_audio(
                 text=text,
                 voice_ref_path=voice_ref,
                 storage=data_storage,
+                language_id=language,
             )
             out_path.write_bytes(result["audio"])
             return idx, out_path, result["duration_ms"], text
@@ -321,8 +316,8 @@ def main():
     p.add_argument("dialogue", type=Path)
     p.add_argument("-o", "--output", type=Path, required=True)
     p.add_argument("-t", "--timeline", type=Path, default=None)
-    p.add_argument("--voice-a", default=DEFAULT_VOICE_A)
-    p.add_argument("--voice-b", default=DEFAULT_VOICE_B)
+    p.add_argument("--voice-a", required=True, help="Storage key for first speaker voice WAV")
+    p.add_argument("--voice-b", required=True, help="Storage key for second speaker voice WAV")
     args = p.parse_args()
 
     generate_audio(

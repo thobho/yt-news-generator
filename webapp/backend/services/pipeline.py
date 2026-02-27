@@ -435,12 +435,17 @@ def generate_audio_for_run(run_id: str, voice_a: str = "Adam", voice_b: str = "B
 
     if tts_engine == "chatterbox":
         from ..generation.audio_runpod import generate_audio as gen_audio
+        speakers = settings.speakers
+        if len(speakers) < 2:
+            raise ValueError("Chatterbox TTS requires at least 2 speakers configured in settings.")
+        cb_voice_a = speakers[0].storage_key
+        cb_voice_b = speakers[1].storage_key
         gen_audio(
             keys["dialogue"],
             keys["audio"],
             keys["timeline"],
-            voice_a="male",
-            voice_b="female",
+            voice_a=cb_voice_a,
+            voice_b=cb_voice_b,
             storage=run_storage,
             language=language,
         )

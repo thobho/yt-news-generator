@@ -4,16 +4,20 @@ Settings routes - API endpoints for global settings.
 
 import json
 import secrets
+import tempfile
+import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 
 from ..config.tenant_registry import TenantConfig
+from ..core.storage_config import get_data_storage
 from ..dependencies import storage_dep, tenant_dep
 from ..services import settings as settings_service
+from ..services.settings import Speaker
 
 router = APIRouter(tags=["settings"])
 
@@ -150,6 +154,129 @@ async def get_available_settings(_: TenantConfig = Depends(storage_dep)):
         image_engines=[ImageEngineInfo(**e) for e in image_engines],
         fal_models=[FalModelInfo(**m) for m in fal_models],
     )
+
+
+class SpeakerResponse(BaseModel):
+    name: str
+    storage_key: str
+
+
+class MoveSpeakerRequest(BaseModel):
+    direction: Literal["up", "down"]
+
+
+@router.get("/speakers", response_model=list[SpeakerResponse])
+async def get_speakers(_: TenantConfig = Depends(storage_dep)):
+    """Get ordered list of speakers."""
+    current = settings_service.load_settings()
+    return [SpeakerResponse(name=s.name, storage_key=s.storage_key) for s in current.speakers]
+
+
+@router.post("/speakers", response_model=list[SpeakerResponse])
+async def upload_speaker(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    _: TenantConfig = Depends(storage_dep),
+):
+    """Upload a voice sample and add it to the speakers list."""
+    # Validate extension
+    filename = file.filename or ""
+    ext = Path(filename).suffix.lower()
+    if ext not in (".wav", ".mp3"):
+        raise HTTPException(status_code=400, detail="Only .wav and .mp3 files are allowed")
+
+    # Default name to filename stem
+    speaker_name = name or Path(filename).stem or "Speaker"
+
+    # Save uploaded file to a temp location
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
+        tmp_in.write(await file.read())
+        tmp_in_path = Path(tmp_in.name)
+
+    # Normalize with ffmpeg: 24kHz, mono, max 30s
+    tmp_out_path = tmp_in_path.parent / (tmp_in_path.stem + "_norm.wav")
+    try:
+        import subprocess
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", str(tmp_in_path),
+                "-ar", "24000",
+                "-ac", "1",
+                "-t", "30",
+                str(tmp_out_path),
+            ],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail=f"ffmpeg normalization failed: {result.stderr.decode()[:200]}"
+            )
+
+        # Generate storage key and upload
+        storage_key = f"voices/{uuid.uuid4().hex[:8]}.wav"
+        data_storage = get_data_storage()
+        data_storage.write_bytes(storage_key, tmp_out_path.read_bytes())
+
+    finally:
+        tmp_in_path.unlink(missing_ok=True)
+        tmp_out_path.unlink(missing_ok=True)
+
+    # Append to speakers list and save
+    current = settings_service.load_settings()
+    current.speakers.append(Speaker(name=speaker_name, storage_key=storage_key))
+    settings_service.save_settings(current)
+
+    return [SpeakerResponse(name=s.name, storage_key=s.storage_key) for s in current.speakers]
+
+
+@router.delete("/speakers/{index}", response_model=list[SpeakerResponse])
+async def delete_speaker(index: int, _: TenantConfig = Depends(storage_dep)):
+    """Remove a speaker by index and delete its voice file."""
+    current = settings_service.load_settings()
+    if index < 0 or index >= len(current.speakers):
+        raise HTTPException(status_code=404, detail="Speaker index out of range")
+
+    speaker = current.speakers[index]
+
+    # Delete voice file from storage
+    try:
+        data_storage = get_data_storage()
+        if data_storage.exists(speaker.storage_key):
+            data_storage.delete(speaker.storage_key)
+    except Exception:
+        pass  # Don't fail if file is already gone
+
+    current.speakers.pop(index)
+    settings_service.save_settings(current)
+
+    return [SpeakerResponse(name=s.name, storage_key=s.storage_key) for s in current.speakers]
+
+
+@router.put("/speakers/{index}/move", response_model=list[SpeakerResponse])
+async def move_speaker(index: int, request: MoveSpeakerRequest, _: TenantConfig = Depends(storage_dep)):
+    """Reorder a speaker up or down in the list."""
+    current = settings_service.load_settings()
+    if index < 0 or index >= len(current.speakers):
+        raise HTTPException(status_code=404, detail="Speaker index out of range")
+
+    if request.direction == "up":
+        if index == 0:
+            raise HTTPException(status_code=400, detail="Speaker is already first")
+        current.speakers[index - 1], current.speakers[index] = (
+            current.speakers[index], current.speakers[index - 1]
+        )
+    else:
+        if index >= len(current.speakers) - 1:
+            raise HTTPException(status_code=400, detail="Speaker is already last")
+        current.speakers[index], current.speakers[index + 1] = (
+            current.speakers[index + 1], current.speakers[index]
+        )
+
+    settings_service.save_settings(current)
+
+    return [SpeakerResponse(name=s.name, storage_key=s.storage_key) for s in current.speakers]
 
 
 @router.get("/youtube-token")

@@ -76,6 +76,12 @@ FAL_MODELS = [
 DEFAULT_EPISODE_NUMBER = 6
 
 
+class Speaker(BaseModel):
+    """A voice speaker for Chatterbox TTS."""
+    name: str           # display name (from filename, editable later)
+    storage_key: str    # e.g. "voices/a1b2c3.wav" in tenant data storage
+
+
 class Settings(BaseModel):
     """Global webapp settings."""
     prompt_version: PromptVersion = "7"
@@ -84,6 +90,7 @@ class Settings(BaseModel):
     image_engine: ImageEngine = "dalle"
     fal_model: str = "fal-ai/flux-2-pro"
     timezone: str = "Europe/Warsaw"
+    speakers: list[Speaker] = []
 
 
 def get_default_settings() -> Settings:

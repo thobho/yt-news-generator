@@ -153,6 +153,7 @@ const AnimatedText: React.FC<AnimatedTextProps> = ({
                 color: hasBeenSpoken ? "#FFD700" : "rgba(255, 255, 255, 0.5)",
                 fontWeight: 900,
                 transform: `scale(${scale})`,
+                padding: "0 0.1em",
                 textShadow: hasBeenSpoken
                   ? `0 0 ${25 + glowIntensity * 20}px rgba(255, 215, 0, ${0.6 + glowIntensity * 0.4}), 0 0 ${10 + glowIntensity * 10}px rgba(255, 215, 0, 0.8)`
                   : "none",

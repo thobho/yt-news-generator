@@ -434,7 +434,8 @@ async def select_news(mode: SelectionMode, count: int, items: list[dict]) -> lis
 async def run_auto_generation_for_news(
     news_item: dict,
     publish_time: str,
-    prompts: Optional[dict] = None
+    prompts: Optional[dict] = None,
+    language: str = "pl",
 ) -> tuple[str, Optional[str]]:
     """Run the full generation pipeline for a single news item."""
     run_id = None
@@ -460,7 +461,7 @@ async def run_auto_generation_for_news(
         await asyncio.to_thread(pipeline.generate_dialogue_for_run, run_id)
 
         logger.info("[%s] Generating audio...", run_id)
-        await asyncio.to_thread(pipeline.generate_audio_for_run, run_id)
+        await asyncio.to_thread(pipeline.generate_audio_for_run, run_id, language=language)
 
         logger.info("[%s] Generating images...", run_id)
         await asyncio.to_thread(pipeline.generate_images_for_run, run_id)
@@ -576,7 +577,8 @@ async def run_auto_generation(tenant: TenantConfig) -> dict:
         run_id, error = await run_auto_generation_for_news(
             news_item,
             config.publish_time,
-            prompts=prompts_dict
+            prompts=prompts_dict,
+            language=tenant.language,
         )
         results.append({"run_id": run_id, "error": error})
         if run_id and run_id != "unknown":
