@@ -18,6 +18,7 @@ Environment variables:
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -83,6 +84,14 @@ def distribute_sources(sources: list, start_ms: int, end_ms: int) -> list[dict]:
     return result
 
 
+def get_source_for_time(source_ranges: list[dict], time_ms: int) -> dict | None:
+    """Get the source that should be displayed at a given time."""
+    for sr in source_ranges:
+        if sr["start_ms"] <= time_ms < sr["end_ms"]:
+            return sr["source"]
+    return None
+
+
 def chunk_segment_aligned(
     aligned_words: list[dict],
     speaker: str,
@@ -123,20 +132,34 @@ def chunk_segment_aligned(
 
         if should_break:
             chunk_text = " ".join(current_words)
-            chunk_source = next(
-                (r["source"] for r in source_ranges if r["start_ms"] <= current_start < r["end_ms"]),
-                source_ranges[0]["source"] if source_ranges else None,
-            )
-            chunks.append({
-                "type": "speech",
+            chunk_data = {
                 "speaker": speaker,
                 "text": chunk_text,
-                "emphasis": emphasis,
-                "source": chunk_source,
                 "start_ms": current_start,
                 "end_ms": word_end,
-                "words": current_word_data,
-            })
+                "chunk": True,
+                "words": list(current_word_data),
+            }
+            if emphasis:
+                chunk_lower = chunk_text.lower()
+                chunk_emphasis = []
+                for phrase in emphasis:
+                    phrase_lower = phrase.lower()
+                    if phrase_lower in chunk_lower:
+                        chunk_emphasis.append(phrase)
+                    else:
+                        for emp_word in phrase_lower.split():
+                            if len(emp_word) > 2 and re.search(
+                                rf"\b{re.escape(emp_word)}\b", chunk_lower
+                            ):
+                                chunk_emphasis.append(emp_word)
+                if chunk_emphasis:
+                    chunk_data["emphasis"] = chunk_emphasis
+            chunk_midpoint = current_start + (word_end - current_start) // 2
+            active_source = get_source_for_time(source_ranges, chunk_midpoint)
+            if active_source:
+                chunk_data["source"] = active_source
+            chunks.append(chunk_data)
             current_words = []
             current_word_data = []
             current_start = None
@@ -144,20 +167,20 @@ def chunk_segment_aligned(
     # Flush remaining words
     if current_words:
         chunk_text = " ".join(current_words)
-        chunk_source = next(
-            (r["source"] for r in source_ranges if r["start_ms"] <= current_start < r["end_ms"]),
-            source_ranges[0]["source"] if source_ranges else None,
-        )
-        chunks.append({
-            "type": "speech",
+        chunk_data = {
             "speaker": speaker,
             "text": chunk_text,
-            "emphasis": emphasis,
-            "source": chunk_source,
             "start_ms": current_start,
             "end_ms": aligned_words[-1]["end_ms"],
-            "words": current_word_data,
-        })
+            "chunk": True,
+            "words": list(current_word_data),
+        }
+        if emphasis:
+            chunk_lower = chunk_text.lower()
+            chunk_emphasis = [p for p in emphasis if p.lower() in chunk_lower]
+            if chunk_emphasis:
+                chunk_data["emphasis"] = chunk_emphasis
+        chunks.append(chunk_data)
 
     return chunks
 
