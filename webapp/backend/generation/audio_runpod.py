@@ -25,11 +25,6 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from pathlib import Path
 from typing import Union
 
-from .audio import (
-    PAUSE_BETWEEN_SEGMENTS_MS,
-    chunk_segment_aligned,
-    extract_segments,
-)
 from .audio_align import transcribe_with_timestamps, align_text_to_audio
 from ..core.logging_config import get_logger
 from ..core.storage import StorageBackend
@@ -37,6 +32,134 @@ from ..core.storage_config import get_data_storage
 from .tts_client import TTSClient
 
 logger = get_logger(__name__)
+
+# ── Dialogue utilities (formerly in audio.py) ───────────────────────────────
+
+PAUSE_BETWEEN_SEGMENTS_MS = 300
+
+MIN_SOURCE_DURATION_MS = 5000
+MIN_CHUNK_WORDS = 3
+MAX_CHUNK_WORDS = 8
+
+
+def extract_segments(data: dict):
+    """Extract (speaker, text, emphasis, sources) tuples and speaker list from dialogue."""
+    segments = []
+    speakers = []
+
+    def track(s):
+        if s not in speakers:
+            speakers.append(s)
+        return s
+
+    for d in data.get("script", []):
+        segments.append((track(d["speaker"]), d["text"], d.get("emphasis", []), d.get("sources", [])))
+    for d in data.get("cooldown", []):
+        segments.append((track(d["speaker"]), d["text"], d.get("emphasis", []), d.get("sources", [])))
+
+    return segments, speakers
+
+
+def distribute_sources(sources: list, start_ms: int, end_ms: int) -> list[dict]:
+    """Distribute sources evenly across a time range."""
+    if not sources:
+        return []
+    duration = end_ms - start_ms
+    if duration <= 0:
+        return []
+    max_sources = duration // MIN_SOURCE_DURATION_MS
+    if max_sources == 0:
+        return [{"source": sources[0], "start_ms": start_ms, "end_ms": end_ms}]
+    usable_sources = sources[:max_sources]
+    time_per_source = duration // len(usable_sources)
+    result = []
+    current_time = start_ms
+    for i, source in enumerate(usable_sources):
+        source_end = current_time + time_per_source
+        if i == len(usable_sources) - 1:
+            source_end = end_ms
+        result.append({"source": source, "start_ms": current_time, "end_ms": source_end})
+        current_time = source_end
+    return result
+
+
+def chunk_segment_aligned(
+    aligned_words: list[dict],
+    speaker: str,
+    emphasis: list[str],
+    sources: list,
+    start_ms: int,
+    end_ms: int,
+) -> list[dict]:
+    """Build subtitle chunks from Whisper word-aligned timestamps."""
+    if not aligned_words:
+        return []
+
+    source_ranges = distribute_sources(sources, start_ms, end_ms)
+    chunks = []
+    current_words = []
+    current_word_data = []
+    current_start = None
+
+    for word_data in aligned_words:
+        word = word_data["word"]
+        word_start = word_data["start_ms"]
+        word_end = word_data["end_ms"]
+
+        if current_start is None:
+            current_start = word_start
+
+        current_words.append(word)
+        current_word_data.append({"word": word, "start_ms": word_start, "end_ms": word_end})
+
+        ends_sentence = word.rstrip()[-1] in ".?!" if word.strip() else False
+        has_comma = "," in word
+        word_count = len(current_words)
+
+        should_break = (
+            word_count >= MAX_CHUNK_WORDS
+            or (word_count >= MIN_CHUNK_WORDS and (ends_sentence or has_comma))
+        )
+
+        if should_break:
+            chunk_text = " ".join(current_words)
+            chunk_source = next(
+                (r["source"] for r in source_ranges if r["start_ms"] <= current_start < r["end_ms"]),
+                source_ranges[0]["source"] if source_ranges else None,
+            )
+            chunks.append({
+                "type": "speech",
+                "speaker": speaker,
+                "text": chunk_text,
+                "emphasis": emphasis,
+                "source": chunk_source,
+                "start_ms": current_start,
+                "end_ms": word_end,
+                "words": current_word_data,
+            })
+            current_words = []
+            current_word_data = []
+            current_start = None
+
+    # Flush remaining words
+    if current_words:
+        chunk_text = " ".join(current_words)
+        chunk_source = next(
+            (r["source"] for r in source_ranges if r["start_ms"] <= current_start < r["end_ms"]),
+            source_ranges[0]["source"] if source_ranges else None,
+        )
+        chunks.append({
+            "type": "speech",
+            "speaker": speaker,
+            "text": chunk_text,
+            "emphasis": emphasis,
+            "source": chunk_source,
+            "start_ms": current_start,
+            "end_ms": aligned_words[-1]["end_ms"],
+            "words": current_word_data,
+        })
+
+    return chunks
 
 
 # Target format for merging – must match between segments and silence
