@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { fetchRuns, deleteRun, fetchAllRunningTasks, RunSummary, AllRunningTasks } from '../api/client'
 import { useTenant } from '../context/TenantContext'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 6
 
 function formatDate(timestamp: string): string {
   const date = new Date(timestamp)
