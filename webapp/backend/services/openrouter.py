@@ -55,6 +55,9 @@ YT_METADATA = "google/gemini-2.0-flash-001"
 # Analytical pattern recognition over historical performance data
 NEWS_SELECTION = "google/gemini-2.0-flash-001"
 
+# Web search with source snippets for news enrichment
+PERPLEXITY_SEARCH = "perplexity/sonar-pro"
+
 
 def get_chat_client() -> OpenAI:
     """Return an OpenAI-compatible client pointed at OpenRouter.

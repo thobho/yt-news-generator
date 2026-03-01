@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Perplexity → normalized Polish news enrichment JSON
+Perplexity (via OpenRouter) → normalized Polish news enrichment JSON
 """
 
 import argparse
@@ -11,12 +11,10 @@ import unicodedata
 from hashlib import sha1
 from pathlib import Path
 from typing import Optional, Union
-from urllib.parse import urlparse
-
-from perplexity import Perplexity
 
 from ..core.logging_config import get_logger
 from ..core.storage import StorageBackend
+from ..services.openrouter import get_chat_client, PERPLEXITY_SEARCH
 
 logger = get_logger(__name__)
 
@@ -82,26 +80,18 @@ def build_polish_query(news_text: str) -> str:
     )
 
 
-def search_news(
-    news_text: str,
-    client: Optional[Perplexity] = None,
-):
+def search_news(news_text: str, client=None):
     if client is None:
-        client = Perplexity()
+        client = get_chat_client()
 
     query = build_polish_query(news_text)
 
-    return client.search.create(
-        query=[query]
+    response = client.chat.completions.create(
+        model=PERPLEXITY_SEARCH,
+        messages=[{"role": "user", "content": query}],
     )
 
-
-def extract_source_name(result) -> str:
-    try:
-        domain = urlparse(result.url).netloc
-        return domain.replace("www.", "")
-    except Exception:
-        return result.title
+    return response
 
 
 def build_enriched_news_json(
@@ -111,14 +101,17 @@ def build_enriched_news_json(
 ) -> dict:
     sources = []
 
-    for r in getattr(search_result, "results", []):
-        snippet = getattr(r, "snippet", "").strip()
+    # Perplexity returns search_results as a non-standard field in model_extra
+    raw_results = (search_result.model_extra or {}).get("search_results", [])
+
+    for r in raw_results:
+        snippet = (r.get("snippet") or "").strip()
         if not snippet:
             continue
 
         sources.append({
-            "name": extract_source_name(r),
-            "url": r.url,
+            "name": r.get("url", "").replace("https://", "").replace("http://", "").split("/")[0].replace("www.", ""),
+            "url": r.get("url", ""),
             "summary": snippet,
         })
 
@@ -141,15 +134,15 @@ def run_perplexity_enrichment(
     *,
     input_path: Union[Path, str],
     output_path: Union[Path, str],
-    client: Optional[Perplexity] = None,
+    client=None,
     storage: StorageBackend = None,
 ):
-    """Run Perplexity enrichment on a news seed.
+    """Run Perplexity enrichment on a news seed via OpenRouter.
 
     Args:
         input_path: Path to input seed file
         output_path: Path to output enriched file
-        client: Optional Perplexity client
+        client: Optional OpenAI-compatible client (defaults to OpenRouter)
         storage: Optional storage backend. If None, uses local filesystem.
     """
     logger.info("Loading news seed from: %s", input_path)
@@ -187,7 +180,7 @@ def run_perplexity_enrichment(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Perplexity → Polish news enrichment JSON"
+        description="Perplexity (via OpenRouter) → Polish news enrichment JSON"
     )
     parser.add_argument("input", type=Path)
     parser.add_argument("-o", "--output", type=Path, required=True)
