@@ -94,26 +94,40 @@ def search_news(news_text: str, client=None):
     return response
 
 
+def _domain_from_url(url: str) -> str:
+    return url.replace("https://", "").replace("http://", "").split("/")[0].replace("www.", "")
+
+
 def build_enriched_news_json(
     *,
     news_text: str,
     search_result,
 ) -> dict:
     sources = []
+    model_extra = search_result.model_extra or {}
 
-    # Perplexity returns search_results as a non-standard field in model_extra
-    raw_results = (search_result.model_extra or {}).get("search_results", [])
+    # Prefer search_results (per-source objects with snippets) when OpenRouter passes them through
+    raw_results = model_extra.get("search_results", [])
+    if raw_results:
+        for r in raw_results:
+            snippet = (r.get("snippet") or "").strip()
+            if not snippet:
+                continue
+            sources.append({
+                "name": _domain_from_url(r.get("url", "")),
+                "url": r.get("url", ""),
+                "summary": snippet,
+            })
 
-    for r in raw_results:
-        snippet = (r.get("snippet") or "").strip()
-        if not snippet:
-            continue
-
-        sources.append({
-            "name": r.get("url", "").replace("https://", "").replace("http://", "").split("/")[0].replace("www.", ""),
-            "url": r.get("url", ""),
-            "summary": snippet,
-        })
+    # Fallback: use citations (flat URL list) — OpenRouter always passes these through
+    if not sources:
+        answer = (search_result.choices[0].message.content or "").strip()
+        for url in model_extra.get("citations", []):
+            sources.append({
+                "name": _domain_from_url(url),
+                "url": url,
+                "summary": answer,
+            })
 
     total = len(sources)
 
