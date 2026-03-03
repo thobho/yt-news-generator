@@ -9,6 +9,7 @@ Usage:
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Union
 
@@ -18,6 +19,22 @@ from ..core.storage import StorageBackend
 from ..core.storage_config import get_data_storage
 
 logger = get_logger(__name__)
+
+_MAX_RETRIES = 3
+
+
+def _chat_with_retry(client, **kwargs) -> object:
+    """Call client.chat.completions.create with retry on empty choices (OpenRouter blip)."""
+    for attempt in range(_MAX_RETRIES):
+        response = client.chat.completions.create(**kwargs)
+        if response.choices:
+            return response
+        logger.warning(
+            "OpenRouter returned empty choices (attempt %d/%d), retrying...",
+            attempt + 1, _MAX_RETRIES,
+        )
+        time.sleep(2 ** attempt)
+    raise RuntimeError(f"OpenRouter returned empty choices after {_MAX_RETRIES} attempts")
 
 # JSON Schema for dialogue output - enforced by OpenAI Structured Outputs
 DIALOGUE_SCHEMA = {
@@ -141,7 +158,8 @@ def generate_dialogue(
     logger.info("Generating dialogue with model=%s, temperature=%.2f", model, temperature)
     client = get_chat_client()
 
-    response = client.chat.completions.create(
+    response = _chat_with_retry(
+        client,
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -214,7 +232,8 @@ def refine_dialogue(
     logger.info("Step 2: Refining dialogue (logic/structure) with model=%s, temperature=%.2f", model, temperature)
     client = get_chat_client()
 
-    response = client.chat.completions.create(
+    response = _chat_with_retry(
+        client,
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -266,7 +285,8 @@ def polish_dialogue(
     logger.info("Step 3: Polishing dialogue (language/style) with model=%s, temperature=%.2f", model, temperature)
     client = get_chat_client()
 
-    response = client.chat.completions.create(
+    response = _chat_with_retry(
+        client,
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},
