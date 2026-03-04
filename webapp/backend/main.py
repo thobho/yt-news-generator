@@ -5,7 +5,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.middleware.base import BaseHTTPMiddleware
 
 from .core.logging_config import get_logger
 
@@ -30,23 +29,6 @@ PUBLIC_PATHS = [
     "/api/tenants",
     "/health",
 ]
-
-
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Middleware to log every request for debugging."""
-    async def dispatch(self, request: Request, call_next):
-        logger.info(f"Incoming request: {request.method} {request.url.path}")
-        try:
-            response = await call_next(request)
-            logger.info(f"Response: {response.status_code} for {request.method} {request.url.path}")
-            return response
-        except Exception as e:
-            logger.error(f"Unhandled error during request {request.method} {request.url.path}: {str(e)}")
-            logger.error(traceback.format_exc())
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Internal Server Error", "error": str(e)}
-            )
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -106,8 +88,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add logging middleware first to catch everything
-app.add_middleware(RequestLoggingMiddleware)
 # Add authentication middleware
 app.add_middleware(AuthMiddleware)
 

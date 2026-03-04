@@ -348,11 +348,13 @@ def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
     save_prompts_snapshot(run_id)
 
     # Step 1: Perplexity search
+    logger.info("[%s] Step 1/4: Perplexity news search...", run_id)
     run_perplexity_enrichment(
         input_path=keys["seed"],
         output_path=keys["news_data"],
         storage=run_storage,
     )
+    logger.info("[%s] Step 1/4: Perplexity search complete", run_id)
 
     # Step 2: Generate dialogue
     news_content = run_storage.read_text(keys["news_data"])
@@ -362,6 +364,7 @@ def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
     dialogue_prompt_key, refine_prompt_key, polish_prompt_key = get_dialogue_prompt_keys(dialogue_prompt_id)
     temp1, temp2, temp3 = get_dialogue_temperatures(dialogue_prompt_id)
 
+    logger.info("[%s] Step 2/4: Generating dialogue (model=%s)...", run_id, model or DIALOGUE_GENERATE)
     dialogue_data = gen_dialogue(
         news_data,
         dialogue_prompt_key,
@@ -369,8 +372,10 @@ def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
         storage=data_storage,
         temperature=temp1,
     )
+    logger.info("[%s] Step 2/4: Dialogue generation complete", run_id)
 
     # Step 3: Refine dialogue (logic/structure)
+    logger.info("[%s] Step 3/4: Refining dialogue (model=%s)...", run_id, model or DIALOGUE_REFINE)
     dialogue_data = refine_dialogue(
         dialogue_data,
         news_data,
@@ -379,9 +384,11 @@ def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
         storage=data_storage,
         temperature=temp2,
     )
+    logger.info("[%s] Step 3/4: Dialogue refinement complete", run_id)
 
     # Step 4: Polish dialogue (language/style) - optional
     if polish_prompt_key:
+        logger.info("[%s] Step 4/4: Polishing dialogue (model=%s)...", run_id, model or DIALOGUE_POLISH)
         dialogue_data = polish_dialogue(
             dialogue_data,
             polish_prompt_key,
@@ -389,12 +396,15 @@ def generate_dialogue_for_run(run_id: str, model: str = None) -> dict:
             storage=data_storage,
             temperature=temp3,
         )
+        logger.info("[%s] Step 4/4: Dialogue polish complete", run_id)
+    else:
+        logger.info("[%s] Step 4/4: Polish skipped (no polish prompt configured)", run_id)
 
     # Save dialogue
     dialogue_json = json.dumps(dialogue_data, ensure_ascii=False, indent=2)
     run_storage.write_text(keys["dialogue"], dialogue_json)
 
-    logger.info("Dialogue generation complete for run: %s", run_id)
+    logger.info("[%s] Dialogue generation complete", run_id)
     return dialogue_data
 
 
