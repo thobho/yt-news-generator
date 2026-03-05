@@ -304,7 +304,7 @@ async def start_youtube_oauth(request: Request, tenant: TenantConfig = Depends(t
 
 
 @router.get("/youtube-token/callback")
-async def youtube_oauth_callback(code: str, state: str, tenant: TenantConfig = Depends(tenant_dep)):
+async def youtube_oauth_callback(request: Request, code: str, state: str, tenant: TenantConfig = Depends(tenant_dep)):
     """Handle OAuth callback from Google."""
     # Verify state
     if state not in _oauth_states:
@@ -319,16 +319,10 @@ async def youtube_oauth_callback(code: str, state: str, tenant: TenantConfig = D
 
     from google_auth_oauthlib.flow import Flow
 
-    # We need to reconstruct the flow - use a placeholder redirect_uri
-    # The actual redirect already happened, we just need to exchange the code
-    client_config = json.loads(client_secrets_path.read_text())
-
-    # Get redirect_uri from client config
-    if "web" in client_config:
-        redirect_uri = client_config["web"].get("redirect_uris", [""])[0]
-    else:
-        # For installed app type, we need to use a custom redirect
-        redirect_uri = f"http://localhost:8000/api/tenants/{tenant.id}/settings/youtube-token/callback"
+    # Reconstruct redirect_uri the same way as start_youtube_oauth
+    host = request.headers.get("host", "localhost:8000")
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    redirect_uri = f"{scheme}://{host}/api/tenants/{tenant.id}/settings/youtube-token/callback"
 
     flow = Flow.from_client_secrets_file(
         str(client_secrets_path),

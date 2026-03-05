@@ -31,6 +31,10 @@ PUBLIC_PATHS = [
     "/health",
 ]
 
+PUBLIC_PATH_SUFFIXES = [
+    "/settings/youtube-token/callback",  # hit by Google unauthenticated
+]
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware to protect API routes with session authentication."""
@@ -44,6 +48,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Skip auth for public paths
         if path in PUBLIC_PATHS:
+            return await call_next(request)
+
+        # Skip auth for public path suffixes (e.g. OAuth callbacks hit by Google)
+        if any(path.endswith(suffix) for suffix in PUBLIC_PATH_SUFFIXES):
             return await call_next(request)
 
         # Skip auth if authentication is disabled
