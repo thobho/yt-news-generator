@@ -44,11 +44,7 @@ jobs:
           printf '%s' '${{ secrets.ENV_PRODUCTION }}' > /tmp/deploy-credentials/env.production
           printf '%s' '${{ secrets.YT_CLIENT_SECRETS_PL }}' > /tmp/deploy-credentials/pl/client_secrets.json
           printf '%s' '${{ secrets.YT_CLIENT_SECRETS_US }}' > /tmp/deploy-credentials/us/client_secrets.json
-          # Only write token files if the secrets are non-empty (avoids overwriting valid tokens on VPS)
-          YT_TOKEN_PL='${{ secrets.YT_TOKEN_PL }}'
-          YT_TOKEN_US='${{ secrets.YT_TOKEN_US }}'
-          [ -n "$YT_TOKEN_PL" ] && printf '%s' "$YT_TOKEN_PL" > /tmp/deploy-credentials/pl/token.json
-          [ -n "$YT_TOKEN_US" ] && printf '%s' "$YT_TOKEN_US" > /tmp/deploy-credentials/us/token.json
+          # token.json is NOT deployed from CI - it is managed on the VPS via the "Refresh Token" button in the UI
 
       - name: Sync project files to VPS
         run: |
@@ -77,18 +73,10 @@ jobs:
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             /tmp/deploy-credentials/pl/client_secrets.json \
             deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/pl/
-          [ -f /tmp/deploy-credentials/pl/token.json ] && \
-            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              /tmp/deploy-credentials/pl/token.json \
-              deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/pl/ || true
 
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             /tmp/deploy-credentials/us/client_secrets.json \
             deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/us/
-          [ -f /tmp/deploy-credentials/us/token.json ] && \
-            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-              /tmp/deploy-credentials/us/token.json \
-              deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/credentials/us/ || true
 
       - name: Install dependencies and restart
         run: |
