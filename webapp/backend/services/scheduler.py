@@ -624,7 +624,7 @@ async def _run_tenant_pipeline(tenant: TenantConfig) -> None:
 # Scheduler management
 # ---------------------------------------------------------------------------
 
-def _schedule_tenant_job(tenant: TenantConfig, config: SchedulerConfig, timezone: str) -> None:
+def _schedule_tenant_job(tenant: TenantConfig, config: SchedulerConfig) -> None:
     """Schedule (or reschedule) the cron job for a specific tenant."""
     global _scheduler
     if _scheduler is None:
@@ -644,19 +644,20 @@ def _schedule_tenant_job(tenant: TenantConfig, config: SchedulerConfig, timezone
         logger.error("Invalid generation_time '%s' for tenant %s", config.generation_time, tenant.id)
         return
 
-    trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone)
+    trigger = CronTrigger(hour=hour, minute=minute, timezone=tenant.timezone)
     _scheduler.add_job(
         _run_tenant_pipeline,
         trigger=trigger,
         id=job_id,
         name=f"Daily generation ({tenant.id})",
         replace_existing=True,
+        misfire_grace_time=3600,
         args=[tenant],
     )
 
     job = _scheduler.get_job(job_id)
     next_run = str(job.next_run_time) if job and job.next_run_time else None
-    logger.info("Scheduled job %s at %s %s (next: %s)", job_id, config.generation_time, timezone, next_run)
+    logger.info("Scheduled job %s at %s %s (next: %s)", job_id, config.generation_time, tenant.timezone, next_run)
 
 
 def init_scheduler(tenants: list[TenantConfig]) -> None:
@@ -672,9 +673,8 @@ def init_scheduler(tenants: list[TenantConfig]) -> None:
     for tenant in tenants:
         _set_tenant_context(tenant)
         config = _load_config()
-        tenant_settings = settings_service.load_settings()
         if config.enabled:
-            _schedule_tenant_job(tenant, config, tenant_settings.timezone)
+            _schedule_tenant_job(tenant, config)
         else:
             logger.info("Scheduler disabled for tenant %s — skipping job", tenant.id)
 
@@ -718,8 +718,7 @@ def enable_tenant_scheduler(tenant: TenantConfig) -> SchedulerConfig:
     config = _load_config()
     config.enabled = True
     _save_config(config)
-    tenant_settings = settings_service.load_settings()
-    _schedule_tenant_job(tenant, config, tenant_settings.timezone)
+    _schedule_tenant_job(tenant, config)
     return config
 
 
@@ -758,8 +757,7 @@ def update_tenant_scheduler_config(tenant: TenantConfig, updates: dict) -> Sched
             ]
 
     _save_config(config)
-    tenant_settings = settings_service.load_settings()
-    _schedule_tenant_job(tenant, config, tenant_settings.timezone)
+    _schedule_tenant_job(tenant, config)
     return config
 
 

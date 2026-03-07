@@ -18,6 +18,7 @@ from ..core.storage_config import (
     get_run_storage,
     get_storage_dir,
     get_tenant_output_dir,
+    get_tenant_prefix,
     is_s3_enabled,
     ensure_storage_dirs,
 )
@@ -644,8 +645,11 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
     # Get current episode number (before upload, for logging)
     current_episode = settings_service.get_episode_number()
 
-    # Read tenant timezone for evening schedule
-    settings = settings_service.load_settings()
+    # Resolve tenant timezone from tenant registry (authoritative source)
+    from ..config.tenant_registry import load_tenants as _load_tenants
+    prefix = get_tenant_prefix()
+    _tenant = next((t for t in _load_tenants() if t.storage_prefix == prefix), None)
+    timezone_str = _tenant.timezone if _tenant else "Europe/Warsaw"
 
     # Do the upload
     video_id, publish_at = yt_upload(
@@ -653,7 +657,7 @@ def upload_to_youtube_for_run(run_id: str, schedule_option: str = "auto") -> dic
         storage=run_storage,
         schedule_option=schedule_option,
         credentials_dir=get_credentials_dir(),
-        timezone_str=settings.timezone,
+        timezone_str=timezone_str,
     )
 
     # Increment episode counter after successful upload
