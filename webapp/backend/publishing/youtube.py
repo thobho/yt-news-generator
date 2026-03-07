@@ -102,7 +102,11 @@ def authenticate(credentials_dir: str = "credentials/pl") -> Credentials:
     creds = None
 
     if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        try:
+            creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        except ValueError as e:
+            logger.warning("token.json is corrupt or invalid, ignoring: %s", e)
+            creds = None
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
