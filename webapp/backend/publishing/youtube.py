@@ -110,8 +110,16 @@ def authenticate(credentials_dir: str = "credentials/pl") -> Credentials:
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            logger.debug("Refreshing expired credentials")
-            creds.refresh(Request())
+            from google.auth.exceptions import RefreshError
+            try:
+                logger.debug("Refreshing expired credentials")
+                creds.refresh(Request())
+            except RefreshError as e:
+                raise RuntimeError(
+                    f"YouTube token is revoked or expired (invalid_grant). "
+                    f"Please re-authenticate via Settings → YouTube Token in the web UI "
+                    f"for this tenant. Error: {e}"
+                ) from e
         else:
             if not client_secrets_path.exists():
                 logger.error(

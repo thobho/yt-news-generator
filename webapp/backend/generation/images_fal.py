@@ -7,6 +7,7 @@ but calls the fal.ai API for image creation.
 
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Union
@@ -41,21 +42,28 @@ def generate_image(
 
     api_url = f"https://fal.run/{model}"
 
-    response = requests.post(
-        api_url,
-        headers={
-            "Authorization": f"Key {token}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "prompt": prompt,
-            "image_size": {"width": 1024, "height": 1792},
-            "num_images": 1,
-            "output_format": "png",
-        },
-        timeout=300,
-    )
-    response.raise_for_status()
+    for attempt in range(3):
+        response = requests.post(
+            api_url,
+            headers={
+                "Authorization": f"Key {token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "prompt": prompt,
+                "image_size": {"width": 1024, "height": 1792},
+                "num_images": 1,
+                "output_format": "png",
+            },
+            timeout=300,
+        )
+        if response.status_code in (429, 500, 502, 503, 504) and attempt < 2:
+            wait = 2 ** attempt
+            logger.warning("fal.ai returned %d, retrying in %ds (attempt %d/3)...", response.status_code, wait, attempt + 1)
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        break
 
     data = response.json()
     image_url = data["images"][0]["url"]
