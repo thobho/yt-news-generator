@@ -180,25 +180,15 @@ class RunsListResponse(BaseModel):
 
 @router.get("")
 async def list_runs(limit: int = 20, offset: int = 0, tenant: TenantConfig = Depends(storage_dep)) -> RunsListResponse:
-    """List runs with pagination support."""
-    cache = get_cache()
-    tenant_prefix = get_tenant_prefix()
-    runs_list_key = f"runs_list:{tenant_prefix}"
+    """List runs with pagination support.
 
-    # Check cache first
-    cached = cache.get(runs_list_key)
-    if cached is not None:
-        # Apply pagination to cached result
-        total = len(cached)
-        paginated_runs = cached[offset:offset + limit]
-        has_more = offset + limit < total
-        return RunsListResponse(runs=paginated_runs, total=total, has_more=has_more)
-
+    Only fetches metadata (titles, auto_generated) for the requested page
+    to avoid reading every run from S3 on each request.
+    """
     output_storage = get_output_storage()
-    runs = []
 
     if is_s3_enabled():
-        # List ALL keys once (single S3 call)
+        # List ALL keys once (single S3 call) to discover runs
         all_keys = await asyncio.to_thread(output_storage.list_keys, "")
 
         # Group keys by run_id
@@ -212,61 +202,60 @@ async def list_runs(limit: int = 20, offset: int = 0, tenant: TenantConfig = Dep
                 if len(parts) > 1:
                     run_keys_map[run_id].add(parts[1])
 
-        # Identify runs that need metadata fetched
-        runs_with_seed = [
-            run_id for run_id, keys in run_keys_map.items()
-            if "seed.json" in keys
-        ]
-        runs_needing_titles = [
-            run_id for run_id, keys in run_keys_map.items()
-            if "yt_metadata.md" in keys or "dialogue.json" in keys
-        ]
+        # Sort run IDs by timestamp descending (newest first) — no metadata needed
+        all_run_ids = sorted(
+            [rid for rid in run_keys_map if parse_run_timestamp(rid)],
+            key=lambda rid: parse_run_timestamp(rid),
+            reverse=True,
+        )
+        total = len(all_run_ids)
 
-        # Fetch all titles and auto_generated flags in parallel
+        # Slice to requested page BEFORE fetching any metadata
+        page_run_ids = all_run_ids[offset:offset + limit]
+
+        # Only fetch metadata for runs on this page
+        runs_with_seed = [rid for rid in page_run_ids if "seed.json" in run_keys_map[rid]]
+        runs_needing_titles = [rid for rid in page_run_ids if "yt_metadata.md" in run_keys_map[rid] or "dialogue.json" in run_keys_map[rid]]
+
         titles, auto_flags = await asyncio.gather(
-            asyncio.gather(*[
-                asyncio.to_thread(get_run_title_for_run, run_id)
-                for run_id in runs_needing_titles
-            ]),
-            asyncio.gather(*[
-                asyncio.to_thread(get_auto_generated_for_run, run_id)
-                for run_id in runs_with_seed
-            ])
+            asyncio.gather(*[asyncio.to_thread(get_run_title_for_run, rid) for rid in runs_needing_titles]) if runs_needing_titles else asyncio.sleep(0, result=[]),
+            asyncio.gather(*[asyncio.to_thread(get_auto_generated_for_run, rid) for rid in runs_with_seed]) if runs_with_seed else asyncio.sleep(0, result=[]),
         )
         title_map = dict(zip(runs_needing_titles, titles))
         auto_map = dict(zip(runs_with_seed, auto_flags))
 
-        # Build summaries using cached keys and pre-fetched metadata
-        for run_id, run_keys in run_keys_map.items():
-            title = title_map.get(run_id)
-            auto_generated = auto_map.get(run_id, False)
-            run_summary = _build_run_summary_from_keys(run_id, run_keys, title=title, auto_generated=auto_generated)
+        runs = []
+        for run_id in page_run_ids:
+            run_summary = _build_run_summary_from_keys(
+                run_id, run_keys_map[run_id],
+                title=title_map.get(run_id),
+                auto_generated=auto_map.get(run_id, False),
+            )
             if run_summary:
                 runs.append(run_summary)
     else:
         # Local filesystem mode
         if not _get_output_dir().exists():
-            return []
+            return RunsListResponse(runs=[], total=0, has_more=False)
 
-        # Collect valid run directories
-        run_entries = [
-            entry for entry in _get_output_dir().iterdir()
-            if entry.is_dir() and entry.name.startswith("run_") and parse_run_timestamp(entry.name)
-        ]
+        # Collect and sort run directories by timestamp descending
+        run_entries = sorted(
+            [e for e in _get_output_dir().iterdir() if e.is_dir() and e.name.startswith("run_") and parse_run_timestamp(e.name)],
+            key=lambda e: parse_run_timestamp(e.name),
+            reverse=True,
+        )
+        total = len(run_entries)
 
-        # Fetch all titles and auto_generated flags in parallel
+        # Slice to requested page BEFORE reading any file contents
+        page_entries = run_entries[offset:offset + limit]
+
         titles, auto_flags = await asyncio.gather(
-            asyncio.gather(*[
-                asyncio.to_thread(get_run_title_for_run, entry.name)
-                for entry in run_entries
-            ]),
-            asyncio.gather(*[
-                asyncio.to_thread(get_auto_generated_for_run, entry.name)
-                for entry in run_entries
-            ])
+            asyncio.gather(*[asyncio.to_thread(get_run_title_for_run, e.name) for e in page_entries]) if page_entries else asyncio.sleep(0, result=[]),
+            asyncio.gather(*[asyncio.to_thread(get_auto_generated_for_run, e.name) for e in page_entries]) if page_entries else asyncio.sleep(0, result=[]),
         )
 
-        for entry, title, auto_generated in zip(run_entries, titles, auto_flags):
+        runs = []
+        for entry, title, auto_generated in zip(page_entries, titles, auto_flags):
             timestamp = parse_run_timestamp(entry.name)
             run_storage = get_run_storage(entry.name)
             run_summary = RunSummary(
@@ -283,18 +272,8 @@ async def list_runs(limit: int = 20, offset: int = 0, tenant: TenantConfig = Dep
             )
             runs.append(run_summary)
 
-    # Sort by timestamp, newest first
-    runs.sort(key=lambda r: r.timestamp, reverse=True)
-
-    # Cache the full result
-    cache.set(runs_list_key, runs)
-
-    # Apply pagination
-    total = len(runs)
-    paginated_runs = runs[offset:offset + limit]
     has_more = offset + limit < total
-
-    return RunsListResponse(runs=paginated_runs, total=total, has_more=has_more)
+    return RunsListResponse(runs=runs, total=total, has_more=has_more)
 
 
 def _read_json_file(run_storage, key: str) -> Optional[dict]:
