@@ -55,6 +55,9 @@ YT_METADATA = "google/gemini-2.0-flash-001"
 # Analytical pattern recognition over historical performance data
 NEWS_SELECTION = "google/gemini-2.0-flash-001"
 
+# Deep analytical review of prompt performance over long context
+PROMPT_REVIEW = "google/gemini-2.5-pro"
+
 # Web search with source snippets for news enrichment
 PERPLEXITY_SEARCH = "perplexity/sonar-pro"
 

@@ -933,6 +933,34 @@ export async function triggerSchedulerRun(tenantId: string): Promise<{ status: s
   return response.json();
 }
 
+// Prompt Review types and functions
+
+export interface PromptAnalysis {
+  prompt_type: string;
+  current_prompt_id: string;
+  assessment: string;
+  suggested_changes: string[];
+  suggested_prompt: string;
+}
+
+export interface PromptReviewReport {
+  summary: string;
+  prompt_analyses: PromptAnalysis[];
+  topic_insights: string;
+  experiment_ideas: string[];
+}
+
+export async function generatePromptReview(tenantId: string): Promise<PromptReviewReport> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompt-review/generate`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to generate prompt review');
+  }
+  return response.json();
+}
+
 // Logs
 
 export interface LogsResponse {

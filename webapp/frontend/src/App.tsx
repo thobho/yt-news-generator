@@ -13,6 +13,7 @@ import AnalyticsPage from './components/AnalyticsPage'
 import SchedulerPage from './pages/SchedulerPage'
 import PromptEditorPage from './pages/PromptEditorPage'
 import LogsPage from './pages/LogsPage'
+import PromptReviewPage from './pages/PromptReviewPage'
 import Login from './components/Login'
 
 const theme = createTheme({
@@ -61,6 +62,7 @@ function AppContent() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/scheduler" element={<SchedulerPage />} />
           <Route path="/logs" element={<LogsPage />} />
+          <Route path="/prompt-review" element={<PromptReviewPage />} />
         </Routes>
       </Box>
     </Box>

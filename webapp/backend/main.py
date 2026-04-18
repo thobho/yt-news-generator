@@ -12,7 +12,7 @@ from .core.logging_config import get_logger
 logger = get_logger(__name__)
 
 from .config.tenant_registry import load_tenants
-from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler, tenants, logs
+from .routes import runs, workflow, settings, auth, prompts, infopigula, analytics, scheduler, tenants, logs, prompt_review
 from .services import auth as auth_service
 from .services import scheduler as scheduler_service
 
@@ -116,6 +116,7 @@ app.include_router(prompts.router, prefix=f"{_TENANT}/prompts")
 app.include_router(infopigula.router, prefix=_TENANT)
 app.include_router(analytics.router, prefix=f"{_TENANT}/analytics")
 app.include_router(scheduler.router, prefix=f"{_TENANT}/scheduler")
+app.include_router(prompt_review.router, prefix=f"{_TENANT}/prompt-review")
 
 
 @app.on_event("startup")
