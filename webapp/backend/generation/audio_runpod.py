@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 from pathlib import Path
 from typing import Union
 
-from .audio_align import transcribe_with_timestamps, align_text_to_audio
+from .audio_align import mfa_forced_align
 from ..core.logging_config import get_logger
 from ..core.storage import StorageBackend
 from ..core.storage_config import get_data_storage
@@ -100,7 +100,7 @@ def chunk_segment_aligned(
     start_ms: int,
     end_ms: int,
 ) -> list[dict]:
-    """Build subtitle chunks from Whisper word-aligned timestamps."""
+    """Build subtitle chunks from word-aligned timestamps."""
     if not aligned_words:
         return []
 
@@ -367,18 +367,17 @@ def generate_audio(
                 segment_texts[idx] = text
                 logger.debug("Generated segment %d/%d (%.1fs)", idx + 1, n_segments, duration_ms / 1000)
 
-        # Run Whisper alignment (can also be parallelized but API cost is per-minute)
+        # Run MFA forced alignment
         alignments = []
         if timeline is not None:
-            logger.info("Running Whisper alignment on %d segments", n_segments)
+            logger.info("Running MFA alignment on %d segments", n_segments)
             for i, (audio_file, text) in enumerate(zip(audio_files, segment_texts)):
                 try:
-                    whisper_words = transcribe_with_timestamps(audio_file, language=language)
-                    aligned = align_text_to_audio(text, whisper_words, start_offset_ms=0)
+                    aligned = mfa_forced_align(audio_file, text, language=language)
                     alignments.append(aligned)
                     logger.debug("Aligned %d words for segment %d", len(aligned), i + 1)
                 except Exception as e:
-                    logger.warning("Whisper alignment failed for segment %d: %s", i + 1, e)
+                    logger.warning("MFA alignment failed for segment %d: %s", i + 1, e)
                     alignments.append(None)
         else:
             alignments = [None] * n_segments
@@ -420,7 +419,7 @@ def generate_audio(
                     aligned_offset, speaker, emphasis, sources, t, t + dur
                 )
                 timeline_segments.extend(chunks)
-                logger.debug("Whisper aligned segment %d (%d chunks)", i + 1, len(chunks))
+                logger.debug("MFA aligned segment %d (%d chunks)", i + 1, len(chunks))
             else:
                 logger.warning("No alignment for segment %d, skipping chunks", i + 1)
 
