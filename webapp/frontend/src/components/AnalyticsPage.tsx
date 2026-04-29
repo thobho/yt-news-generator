@@ -15,9 +15,32 @@ import Tooltip from '@mui/material/Tooltip'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import Alert from '@mui/material/Alert'
+import Card from '@mui/material/Card'
+import CardContent from '@mui/material/CardContent'
+import Accordion from '@mui/material/Accordion'
+import AccordionSummary from '@mui/material/AccordionSummary'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
+import Chip from '@mui/material/Chip'
+import Divider from '@mui/material/Divider'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
-import { fetchAnalyticsRuns, refreshRunStats, refreshAllStats, AnalyticsRun } from '../api/client'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import {
+  fetchAnalyticsRuns,
+  refreshRunStats,
+  refreshAllStats,
+  AnalyticsRun,
+  generateNewsSelectionReview,
+  applyNewsSelectionSuggestion,
+  NewsSelectionReviewReport,
+} from '../api/client'
 import { useTenant } from '../context/TenantContext'
 
 type Order = 'asc' | 'desc'
@@ -121,6 +144,14 @@ export default function AnalyticsPage() {
   const [order, setOrder] = useState<Order>('desc')
   const [orderBy, setOrderBy] = useState<OrderBy>('publish_at')
 
+  // News Selection Review state
+  const [nsReport, setNsReport] = useState<NewsSelectionReviewReport | null>(null)
+  const [nsLoading, setNsLoading] = useState(false)
+  const [nsError, setNsError] = useState<string | null>(null)
+  const [nsApplying, setNsApplying] = useState(false)
+  const [nsAppliedId, setNsAppliedId] = useState<string | null>(null)
+  const [nsConfirmOpen, setNsConfirmOpen] = useState(false)
+
   const loadRuns = async () => {
     try {
       setLoading(true)
@@ -172,6 +203,34 @@ export default function AnalyticsPage() {
     const isAsc = orderBy === property && order === 'asc'
     setOrder(isAsc ? 'desc' : 'asc')
     setOrderBy(property)
+  }
+
+  const handleGenerateNsReview = async () => {
+    setNsLoading(true)
+    setNsError(null)
+    setNsAppliedId(null)
+    try {
+      const data = await generateNewsSelectionReview(tenantId)
+      setNsReport(data)
+    } catch (err) {
+      setNsError(err instanceof Error ? err.message : 'Failed to generate news selection review')
+    } finally {
+      setNsLoading(false)
+    }
+  }
+
+  const handleApplyNsSuggestion = async () => {
+    if (!nsReport) return
+    setNsConfirmOpen(false)
+    setNsApplying(true)
+    try {
+      const result = await applyNewsSelectionSuggestion(tenantId, nsReport.suggested_prompt)
+      setNsAppliedId(result.prompt_id)
+    } catch (err) {
+      setNsError(err instanceof Error ? err.message : 'Failed to apply suggestion')
+    } finally {
+      setNsApplying(false)
+    }
   }
 
   const sortedRuns = [...runs].sort(getComparator(order, orderBy))
@@ -290,6 +349,220 @@ export default function AnalyticsPage() {
           Stats are cached. Click refresh to get the latest data from YouTube.
         </Typography>
       )}
+
+      {/* News Selection Prompt Optimizer */}
+      <Divider sx={{ my: 4 }} />
+
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5">News Selection Prompt Optimizer</Typography>
+        <Button
+          variant="contained"
+          onClick={handleGenerateNsReview}
+          disabled={nsLoading}
+          startIcon={nsLoading ? <CircularProgress size={18} /> : <AutoFixHighIcon />}
+        >
+          {nsLoading ? 'Analyzing...' : 'Optimize News Selection'}
+        </Button>
+      </Box>
+
+      {nsError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setNsError(null)}>
+          {nsError}
+        </Alert>
+      )}
+
+      {!nsReport && !nsLoading && !nsError && (
+        <Card>
+          <CardContent>
+            <Typography variant="body1" color="text.secondary">
+              Click "Optimize News Selection" to analyze topic and category performance across recent
+              videos and get LLM-powered suggestions for improving the news-selection prompt.
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Requires at least 5 runs with YouTube stats and seed data.
+            </Typography>
+          </CardContent>
+        </Card>
+      )}
+
+      {nsLoading && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 6, gap: 2 }}>
+          <CircularProgress size={48} />
+          <Typography color="text.secondary">
+            Analyzing topic performance and generating suggestions...
+          </Typography>
+        </Box>
+      )}
+
+      {nsReport && !nsLoading && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {/* Summary */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>Summary</Typography>
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                {nsReport.summary}
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Topic Performance Table */}
+          {nsReport.topic_performance.length > 0 && (
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">Topic Performance by Category</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Category</TableCell>
+                        <TableCell align="right">Runs</TableCell>
+                        <TableCell align="right">Avg Score</TableCell>
+                        <TableCell align="right">Avg Views</TableCell>
+                        <TableCell align="right">Avg Retention</TableCell>
+                        <TableCell>Insight</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {nsReport.topic_performance.map((tp) => (
+                        <TableRow key={tp.category} hover>
+                          <TableCell>{tp.category}</TableCell>
+                          <TableCell align="right">{tp.run_count}</TableCell>
+                          <TableCell align="right">{tp.avg_score.toFixed(0)}</TableCell>
+                          <TableCell align="right">{tp.avg_views.toFixed(0)}</TableCell>
+                          <TableCell align="right">{tp.avg_retention.toFixed(1)}%</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ maxWidth: 300 }}>
+                              {tp.insight}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </AccordionDetails>
+            </Accordion>
+          )}
+
+          {/* Current Prompt Assessment */}
+          {nsReport.current_prompt_assessment && (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>Current Prompt Assessment</Typography>
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                  {nsReport.current_prompt_assessment}
+                </Typography>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Suggested Changes */}
+          {nsReport.suggested_changes.length > 0 && (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>Suggested Changes</Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {nsReport.suggested_changes.map((change, i) => (
+                    <Typography component="li" variant="body1" key={i} sx={{ mb: 0.5 }}>
+                      {change}
+                    </Typography>
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Suggested Prompt */}
+          {nsReport.suggested_prompt && (
+            <Accordion variant="outlined">
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">Suggested Prompt</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box
+                  component="pre"
+                  sx={{
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    bgcolor: 'grey.50',
+                    p: 2,
+                    borderRadius: 1,
+                    fontSize: '0.8rem',
+                    maxHeight: 400,
+                    overflow: 'auto',
+                    border: '1px solid',
+                    borderColor: 'grey.200',
+                  }}
+                >
+                  {nsReport.suggested_prompt}
+                </Box>
+
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  {nsAppliedId ? (
+                    <Chip
+                      icon={<CheckCircleIcon />}
+                      label={`Applied as ${nsAppliedId}`}
+                      color="success"
+                      variant="outlined"
+                    />
+                  ) : (
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => setNsConfirmOpen(true)}
+                      disabled={nsApplying}
+                      startIcon={
+                        nsApplying
+                          ? <CircularProgress size={16} />
+                          : <AutoFixHighIcon />
+                      }
+                    >
+                      {nsApplying ? 'Applying...' : 'Apply Suggestion'}
+                    </Button>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          )}
+
+          {/* Experiment Ideas */}
+          {nsReport.experiment_ideas.length > 0 && (
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>Experiment Ideas</Typography>
+                <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                  {nsReport.experiment_ideas.map((idea, i) => (
+                    <Typography component="li" variant="body1" key={i} sx={{ mb: 1 }}>
+                      {idea}
+                    </Typography>
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+        </Box>
+      )}
+
+      {/* Confirmation dialog */}
+      <Dialog open={nsConfirmOpen} onClose={() => setNsConfirmOpen(false)}>
+        <DialogTitle>Apply News Selection Suggestion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will create a new news-selection prompt version from the suggestion and set it as
+            the active prompt. Future scheduled and manual runs will use this new prompt for topic
+            selection.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNsConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleApplyNsSuggestion}>
+            Apply
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

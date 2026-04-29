@@ -983,6 +983,58 @@ export async function applySuggestion(
   return response.json();
 }
 
+// News Selection Review types and functions
+
+export interface TopicPerformance {
+  category: string;
+  run_count: number;
+  avg_score: number;
+  avg_views: number;
+  avg_retention: number;
+  insight: string;
+}
+
+export interface NewsSelectionReviewReport {
+  summary: string;
+  topic_performance: TopicPerformance[];
+  current_prompt_assessment: string;
+  suggested_changes: string[];
+  suggested_prompt: string;
+  experiment_ideas: string[];
+}
+
+export async function generateNewsSelectionReview(tenantId: string): Promise<NewsSelectionReviewReport> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/news-selection-review/generate`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to generate news selection review');
+  }
+  return response.json();
+}
+
+export interface ApplyNewsSelectionResponse {
+  prompt_id: string;
+  prompt_type: string;
+}
+
+export async function applyNewsSelectionSuggestion(
+  tenantId: string,
+  suggestedPrompt: string
+): Promise<ApplyNewsSelectionResponse> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/news-selection-review/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ suggested_prompt: suggestedPrompt }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to apply news selection suggestion');
+  }
+  return response.json();
+}
+
 // Logs
 
 export interface LogsResponse {
