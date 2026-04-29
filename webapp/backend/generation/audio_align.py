@@ -9,6 +9,7 @@ MFA runs as a CLI subprocess (same pattern as ffmpeg).  TextGrid output is
 parsed with the ``praatio`` library.
 """
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -106,7 +107,49 @@ def _ensure_mfa_models(language: str) -> tuple[str, str]:
     return acoustic, dictionary
 
 
-# ── Forced alignment ─────────────────────────────────────────────────────────
+# ── Post-processing ──────────────────────────────────────────────────────────
+
+_STRIP_RE = re.compile(r"[^\w\u0080-\uFFFF]", re.UNICODE)
+
+
+def _clean(word: str) -> str:
+    """Lowercase and strip punctuation — mirrors MFA normalisation."""
+    return _STRIP_RE.sub("", word).lower()
+
+
+def _restore_original_text(
+    mfa_words: list[dict], original_text: str
+) -> list[dict]:
+    """Replace MFA word labels with the original tokens (capitalisation + punctuation).
+
+    Walks both sequences in order; skips unmatched original tokens so that
+    OOV words or MFA-inserted entries keep their MFA form without breaking
+    the mapping for subsequent words.
+    """
+    original_tokens = original_text.split()
+    orig_idx = 0
+    result = []
+
+    for w in mfa_words:
+        mfa_clean = _clean(w["word"])
+        matched = False
+        for j in range(orig_idx, len(original_tokens)):
+            if _clean(original_tokens[j]) == mfa_clean:
+                result.append({
+                    "word": original_tokens[j],
+                    "start_ms": w["start_ms"],
+                    "end_ms": w["end_ms"],
+                })
+                orig_idx = j + 1
+                matched = True
+                break
+        if not matched:
+            result.append(w)
+
+    return result
+
+
+# ── Forced alignment ────────────────────────────────────────────────────────
 
 
 def mfa_forced_align(
@@ -194,6 +237,12 @@ def mfa_forced_align(
                 "start_ms": int(round(interval.start * 1000)),
                 "end_ms": int(round(interval.end * 1000)),
             })
+
+    # Restore original capitalisation & punctuation from the source text.
+    # MFA strips punctuation and lowercases words in the TextGrid output,
+    # so we walk both lists in order and replace MFA labels with the
+    # original tokens when the stripped forms match.
+    words = _restore_original_text(words, text)
 
     logger.debug("MFA aligned %d words from %s", len(words), audio_path.name)
     return words
