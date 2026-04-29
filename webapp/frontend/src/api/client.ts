@@ -961,6 +961,28 @@ export async function generatePromptReview(tenantId: string): Promise<PromptRevi
   return response.json();
 }
 
+export interface ApplySuggestionResponse {
+  prompt_id: string;
+  prompt_type: string;
+}
+
+export async function applySuggestion(
+  tenantId: string,
+  promptType: string,
+  suggestedPrompt: string
+): Promise<ApplySuggestionResponse> {
+  const response = await fetch(`${API_BASE}/tenants/${tenantId}/prompt-review/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt_type: promptType, suggested_prompt: suggestedPrompt }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || 'Failed to apply suggestion');
+  }
+  return response.json();
+}
+
 // Logs
 
 export interface LogsResponse {

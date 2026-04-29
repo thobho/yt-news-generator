@@ -10,10 +10,17 @@ import Chip from '@mui/material/Chip'
 import Accordion from '@mui/material/Accordion'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
+import Dialog from '@mui/material/Dialog'
+import DialogTitle from '@mui/material/DialogTitle'
+import DialogContent from '@mui/material/DialogContent'
+import DialogContentText from '@mui/material/DialogContentText'
+import DialogActions from '@mui/material/DialogActions'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import {
   generatePromptReview,
+  applySuggestion,
   PromptReviewReport,
 } from '../api/client'
 import { useTenant } from '../context/TenantContext'
@@ -32,10 +39,27 @@ export default function PromptReviewPage() {
   const [report, setReport] = useState<PromptReviewReport | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [applyingType, setApplyingType] = useState<string | null>(null)
+  const [appliedTypes, setAppliedTypes] = useState<Record<string, string>>({}) // prompt_type -> new prompt_id
+  const [confirmType, setConfirmType] = useState<string | null>(null)
+
+  const handleApply = async (promptType: string, suggestedPrompt: string) => {
+    setConfirmType(null)
+    setApplyingType(promptType)
+    try {
+      const result = await applySuggestion(tenantId, promptType, suggestedPrompt)
+      setAppliedTypes(prev => ({ ...prev, [promptType]: result.prompt_id }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply suggestion')
+    } finally {
+      setApplyingType(null)
+    }
+  }
 
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
+    setAppliedTypes({})
     try {
       const data = await generatePromptReview(tenantId)
       setReport(data)
@@ -168,6 +192,32 @@ export default function PromptReviewPage() {
                       >
                         {analysis.suggested_prompt}
                       </Box>
+
+                      {/* Apply Suggestion button */}
+                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {appliedTypes[analysis.prompt_type] ? (
+                          <Chip
+                            icon={<CheckCircleIcon />}
+                            label={`Applied as ${appliedTypes[analysis.prompt_type]}`}
+                            color="success"
+                            variant="outlined"
+                          />
+                        ) : (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => setConfirmType(analysis.prompt_type)}
+                            disabled={applyingType === analysis.prompt_type}
+                            startIcon={
+                              applyingType === analysis.prompt_type
+                                ? <CircularProgress size={16} />
+                                : <AutoFixHighIcon />
+                            }
+                          >
+                            {applyingType === analysis.prompt_type ? 'Applying...' : 'Apply Suggestion'}
+                          </Button>
+                        )}
+                      </Box>
                     </AccordionDetails>
                   </Accordion>
                 </Box>
@@ -200,6 +250,32 @@ export default function PromptReviewPage() {
           </Card>
         </Box>
       )}
+
+      {/* Confirmation dialog */}
+      <Dialog open={!!confirmType} onClose={() => setConfirmType(null)}>
+        <DialogTitle>Apply Suggestion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will create a new prompt version from the suggestion and set it as the active prompt
+            for <strong>{confirmType ? (PROMPT_TYPE_LABELS[confirmType] || confirmType) : ''}</strong>.
+            Future runs (scheduled and manual) will use this new prompt.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmType(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              const analysis = report?.prompt_analyses.find(a => a.prompt_type === confirmType)
+              if (analysis && confirmType) {
+                handleApply(confirmType, analysis.suggested_prompt)
+              }
+            }}
+          >
+            Apply
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }
