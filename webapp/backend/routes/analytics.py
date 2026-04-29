@@ -80,12 +80,26 @@ def _is_older_than_48_hours(publish_at: Optional[str]) -> bool:
         return True
 
 
+def _is_within_days(run_id: str, days: int) -> bool:
+    """Check if a run's timestamp is within the last N days. Returns False for unparseable IDs."""
+    ts = parse_run_timestamp(run_id)
+    if ts is None:
+        return False
+    cutoff = datetime.now() - timedelta(days=days)
+    return ts >= cutoff
+
+
 async def _build_analytics_run(run_id: str) -> Optional[AnalyticsRun]:
     """Build AnalyticsRun from run storage."""
     run_storage = get_run_storage(run_id)
 
-    # Check for YT upload
-    yt_upload = await asyncio.to_thread(_read_json_file, run_storage, "yt_upload.json")
+    # Read all 3 files in parallel
+    yt_upload, title, yt_stats = await asyncio.gather(
+        asyncio.to_thread(_read_json_file, run_storage, "yt_upload.json"),
+        asyncio.to_thread(_get_run_title, run_storage),
+        asyncio.to_thread(_read_json_file, run_storage, "yt_stats.json"),
+    )
+
     if not yt_upload:
         return None
 
@@ -102,12 +116,6 @@ async def _build_analytics_run(run_id: str) -> Optional[AnalyticsRun]:
     timestamp = parse_run_timestamp(run_id)
     if not timestamp:
         return None
-
-    # Get title
-    title = await asyncio.to_thread(_get_run_title, run_storage)
-
-    # Get cached stats if available
-    yt_stats = await asyncio.to_thread(_read_json_file, run_storage, "yt_stats.json")
 
     stats = None
     stats_fetched_at = None
@@ -138,8 +146,12 @@ async def _build_analytics_run(run_id: str) -> Optional[AnalyticsRun]:
 
 
 @router.get("/runs", response_model=list[AnalyticsRun])
-async def list_analytics_runs(_: TenantConfig = Depends(storage_dep)):
-    """List runs with YouTube uploads older than 48 hours, with cached stats."""
+async def list_analytics_runs(days: int = 30, _: TenantConfig = Depends(storage_dep)):
+    """List runs with YouTube uploads older than 48 hours, with cached stats.
+
+    Args:
+        days: Only include runs from the last N days (default 30).
+    """
     output_storage = get_output_storage()
     runs = []
 
@@ -147,12 +159,13 @@ async def list_analytics_runs(_: TenantConfig = Depends(storage_dep)):
         # List all keys once
         all_keys = await asyncio.to_thread(output_storage.list_keys, "")
 
-        # Find runs with yt_upload.json
+        # Find runs with yt_upload.json, pre-filtered by age
         run_ids_with_yt = set()
         for key in all_keys:
             parts = key.split("/", 1)
             if len(parts) > 1 and parts[0].startswith("run_") and parts[1] == "yt_upload.json":
-                run_ids_with_yt.add(parts[0])
+                if _is_within_days(parts[0], days):
+                    run_ids_with_yt.add(parts[0])
 
         # Build analytics runs in parallel
         analytics_runs = await asyncio.gather(*[
@@ -168,6 +181,7 @@ async def list_analytics_runs(_: TenantConfig = Depends(storage_dep)):
         run_entries = [
             entry for entry in output_dir.iterdir()
             if entry.is_dir() and entry.name.startswith("run_")
+            and _is_within_days(entry.name, days)
         ]
 
         # Build analytics runs in parallel
@@ -207,7 +221,7 @@ async def refresh_run_stats(run_id: str, _: TenantConfig = Depends(storage_dep))
     return result
 
 
-async def _refresh_all_stats():
+async def _refresh_all_stats(days: int = 30):
     """Background task to refresh stats for all eligible runs."""
     from ..services.youtube_analytics import get_or_fetch_stats
 
@@ -219,26 +233,32 @@ async def _refresh_all_stats():
         for key in all_keys:
             parts = key.split("/", 1)
             if len(parts) > 1 and parts[0].startswith("run_") and parts[1] == "yt_upload.json":
-                run_ids_with_yt.add(parts[0])
+                if _is_within_days(parts[0], days):
+                    run_ids_with_yt.add(parts[0])
     else:
         output_dir = get_tenant_output_dir()
         run_ids_with_yt = set()
         if output_dir.exists():
             for entry in output_dir.iterdir():
-                if entry.is_dir() and entry.name.startswith("run_"):
+                if entry.is_dir() and entry.name.startswith("run_") and _is_within_days(entry.name, days):
                     run_storage = get_run_storage(entry.name)
                     if run_storage.exists("yt_upload.json"):
                         run_ids_with_yt.add(entry.name)
 
-    for run_id in run_ids_with_yt:
+    sem = asyncio.Semaphore(5)
+
+    async def _refresh_one(run_id: str):
         run_storage = get_run_storage(run_id)
-        yt_upload = _read_json_file(run_storage, "yt_upload.json")
+        yt_upload = await asyncio.to_thread(_read_json_file, run_storage, "yt_upload.json")
         if yt_upload and _is_older_than_48_hours(yt_upload.get("publish_at")):
-            try:
-                get_or_fetch_stats(run_id, force=True)
-                logger.info("Refreshed stats for run %s", run_id)
-            except Exception as e:
-                logger.error("Failed to refresh stats for run %s: %s", run_id, e)
+            async with sem:
+                try:
+                    await asyncio.to_thread(get_or_fetch_stats, run_id, True)
+                    logger.info("Refreshed stats for run %s", run_id)
+                except Exception as e:
+                    logger.error("Failed to refresh stats for run %s: %s", run_id, e)
+
+    await asyncio.gather(*[_refresh_one(run_id) for run_id in run_ids_with_yt])
 
 
 @router.post("/refresh-all")
