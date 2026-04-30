@@ -118,18 +118,47 @@ jobs:
 
           # Restart webapp
           source .env
+          # Diagnostic: who owns port 8000 (needs sudo to see other users' procs)
+          echo "--- port 8000 owner before kill ---"
+          sudo ss -tlnp 2>/dev/null | grep ':8000 ' || echo "(nothing on 8000)"
+          sudo lsof -i :8000 -sTCP:LISTEN 2>/dev/null || true
+          # Detect a systemd unit that may be auto-respawning uvicorn
+          SYSTEMD_UNIT=$(sudo systemctl list-units --type=service --no-legend --plain 2>/dev/null \
+            | awk '{print $1}' | xargs -I{} sh -c 'sudo systemctl show -p MainPID,FragmentPath {} 2>/dev/null | grep -q uvicorn && echo {}' 2>/dev/null | head -1 || true)
+          if [ -n "$SYSTEMD_UNIT" ]; then
+            echo "Detected systemd unit serving uvicorn: $SYSTEMD_UNIT — restarting via systemctl"
+            sudo systemctl restart "$SYSTEMD_UNIT"
+            sleep 3
+            if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
+              echo "Webapp restarted successfully via $SYSTEMD_UNIT"
+              echo "--- port 8000 owner after restart ---"
+              sudo ss -tlnp 2>/dev/null | grep ':8000 '
+              exit 0
+            fi
+            echo "ERROR: $SYSTEMD_UNIT restarted but nothing bound to 8000"
+            sudo journalctl -u "$SYSTEMD_UNIT" -n 40 --no-pager || true
+            exit 1
+          fi
+
+          # No systemd unit — use nohup-style restart
           pkill -f 'uvicorn webapp.backend.main:app' 2>/dev/null || true
           for i in 1 2 3 4 5; do
             pgrep -f 'uvicorn webapp.backend.main:app' > /dev/null || break
             sleep 1
           done
-          # Force-kill anything still alive
           pkill -9 -f 'uvicorn webapp.backend.main:app' 2>/dev/null || true
           sleep 1
-          # Hard-fail if port 8000 is still held by something else
-          if ss -tlnp | grep -q ':8000 '; then
+          # Force-free port 8000 if still held (covers root-owned procs)
+          if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
+            echo "Port 8000 still held — forcing free via fuser"
+            sudo fuser -k -TERM 8000/tcp 2>/dev/null || true
+            sleep 2
+            sudo fuser -k -KILL 8000/tcp 2>/dev/null || true
+            sleep 1
+          fi
+          if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
             echo "ERROR: port 8000 still in use after kill"
-            ss -tlnp | grep ':8000 '
+            sudo ss -tlnp | grep ':8000 '
             exit 1
           fi
 
