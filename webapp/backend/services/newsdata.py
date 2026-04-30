@@ -13,8 +13,7 @@ logger = get_logger(__name__)
 
 API_BASE = "https://newsdata.io/api/1/latest"
 
-CATEGORIES = ["politics", "business", "world", "domestic"]
-
+CATEGORIES = ["entertainment", "technology", "science", "health"]
 
 def _get_api_key() -> str:
     key = os.environ.get("NEWS_IO_API_KEY", "")
