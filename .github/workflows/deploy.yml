@@ -57,6 +57,7 @@ jobs:
             --exclude '*.pem' \
             --exclude 'output' \
             --exclude 'storage' \
+            --exclude 'logs' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             ./ deploy@${{ secrets.HOST }}:/home/deploy/yt-news-generator/
 
