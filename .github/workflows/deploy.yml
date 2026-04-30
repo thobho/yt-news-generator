@@ -150,17 +150,27 @@ jobs:
           sleep 1
           # Force-free port 8000 if still held (covers root-owned procs)
           if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
-            echo "Port 8000 still held — forcing free via fuser"
+            echo "Port 8000 still held — sending SIGTERM via fuser, allowing graceful drain"
             sudo fuser -k -TERM 8000/tcp 2>/dev/null || true
-            sleep 2
-            sudo fuser -k -KILL 8000/tcp 2>/dev/null || true
-            sleep 1
+            # Wait up to 30s for graceful shutdown (background pipeline tasks may be running)
+            for i in $(seq 1 30); do
+              sudo ss -tlnp 2>/dev/null | grep -q ':8000 ' || break
+              sleep 1
+            done
+            if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
+              echo "Process still alive after 30s — escalating to SIGKILL"
+              sudo fuser -k -KILL 8000/tcp 2>/dev/null || true
+              sleep 2
+            fi
           fi
           if sudo ss -tlnp 2>/dev/null | grep -q ':8000 '; then
             echo "ERROR: port 8000 still in use after kill"
             sudo ss -tlnp | grep ':8000 '
             exit 1
           fi
+
+          # Clear any stale log file (may be owned by previous root-owned process)
+          sudo rm -f /tmp/webapp.log
 
           nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
           NEW_PID=$!
