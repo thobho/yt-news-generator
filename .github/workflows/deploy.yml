@@ -118,24 +118,44 @@ jobs:
 
           # Restart webapp
           source .env
-          pkill -f uvicorn 2>/dev/null || true
-          sleep 2
-          # Ensure port 8000 is free before restarting
+          pkill -f 'uvicorn webapp.backend.main:app' 2>/dev/null || true
           for i in 1 2 3 4 5; do
-            ss -tlnp | grep -q ':8000 ' || break
-            echo "Waiting for port 8000 to be released..."
-            sleep 2
+            pgrep -f 'uvicorn webapp.backend.main:app' > /dev/null || break
+            sleep 1
           done
-          nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
-          sleep 2
-
-          if pgrep -f uvicorn > /dev/null; then
-            echo "Webapp restarted successfully!"
-          else
-            echo "ERROR: Webapp failed to start"
-            tail -20 /tmp/webapp.log
+          # Force-kill anything still alive
+          pkill -9 -f 'uvicorn webapp.backend.main:app' 2>/dev/null || true
+          sleep 1
+          # Hard-fail if port 8000 is still held by something else
+          if ss -tlnp | grep -q ':8000 '; then
+            echo "ERROR: port 8000 still in use after kill"
+            ss -tlnp | grep ':8000 '
             exit 1
           fi
+
+          nohup python -m uvicorn webapp.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/webapp.log 2>&1 &
+          NEW_PID=$!
+          # Wait up to 15s for the new process to bind to 8000
+          for i in $(seq 1 15); do
+            if ss -tlnp 2>/dev/null | grep -q ":8000 .*pid=$NEW_PID"; then
+              break
+            fi
+            if ! kill -0 "$NEW_PID" 2>/dev/null; then
+              echo "ERROR: uvicorn (pid $NEW_PID) exited during startup"
+              tail -40 /tmp/webapp.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Healthcheck: confirm the NEW pid is serving 8000
+          if ! ss -tlnp 2>/dev/null | grep -q ":8000 .*pid=$NEW_PID"; then
+            echo "ERROR: new uvicorn (pid $NEW_PID) did not bind to port 8000"
+            ss -tlnp | grep ':8000 ' || echo "(nothing on 8000)"
+            tail -40 /tmp/webapp.log
+            exit 1
+          fi
+          echo "Webapp restarted successfully (pid $NEW_PID)"
           REMOTE_SCRIPT
 
       - name: Cleanup
