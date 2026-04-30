@@ -440,8 +440,10 @@ async def run_auto_generation_for_news(
     """Run the full generation pipeline for a single news item."""
     run_id = None
     try:
+        provider = news_item.get("_provider", "infopigula")
         source_info = {
-            "infopigula_id": news_item.get("id"),
+            "provider": provider,
+            "item_id": news_item.get("id"),
             "category": news_item.get("category"),
             "rating": news_item.get("rating"),
             "title": news_item.get("title"),

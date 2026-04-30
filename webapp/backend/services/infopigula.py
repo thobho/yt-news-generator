@@ -127,6 +127,7 @@ async def fetch_news_from_infopigula() -> dict:
                     "name": source.get("name", ""),
                     "url": source.get("url", ""),
                 },
+                "_provider": "infopigula",
             })
 
     return {

@@ -148,6 +148,9 @@ export interface ImagesMetadata {
 }
 
 export interface SourceInfo {
+  provider?: string;
+  item_id?: string;
+  /** @deprecated use item_id */
   infopigula_id?: string;
   category?: string;
   rating?: number;

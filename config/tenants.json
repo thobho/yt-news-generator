@@ -3,7 +3,7 @@
     "id": "pl",
     "display_name": "BalancedNews",
     "language": "pl",
-    "news_source": "infopigula",
+    "news_source": "infopigula+newsdata",
     "storage_prefix": "tenants/pl",
     "credentials_dir": "credentials/pl",
     "timezone": "Europe/Warsaw"
